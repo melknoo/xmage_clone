@@ -73,6 +73,18 @@ tasks.register<JavaExec>("humanSpike") {
     doFirst { runDir.asFile.mkdirs() }
 }
 
+// Regressionstest: Bot bestimmt per Effekt (Odric & Co.) die Blocker eines anderen Spielers
+tasks.register<JavaExec>("blockerSpike") {
+    group = "magelite"
+    description = "Headless-Spike: Odric-Bot greift an und bestimmt die Blocker (ChooseBlockersEffect)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.magelite.spike.BlockerSpike")
+    jvmArgs = jvmArgsCommon
+    workingDir = runDir.asFile
+    args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
+    doFirst { runDir.asFile.mkdirs() }
+}
+
 tasks.test {
     useJUnitPlatform()
     workingDir = runDir.asFile
