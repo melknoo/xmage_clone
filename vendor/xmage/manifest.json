@@ -1,0 +1,50 @@
+{
+  "source": "mage-full_1.4.60-dev_2026-07-11_16-06",
+  "importedAt": "2026-10-01T16:54:41.3365457+02:00",
+  "buildTime": "2026-07-11T16:01:09Z",
+  "coreJar": {
+    "sha256": "74361120352BAEAF002306CF406650131710765C23F9A53C060A6F3777AB40CB",
+    "name": "mage-1.4.60.jar"
+  },
+  "setsJar": {
+    "sha256": "C0DF3F637070C838FF9AC747FA199ECA41916936F5BFF303B05638921A62DD3E",
+    "name": "mage-sets-1.4.60.jar"
+  },
+  "jars": [
+    "commons-beanutils-1.9.4.jar",
+    "commons-codec-1.19.0.jar",
+    "commons-collections-3.2.2.jar",
+    "commons-compress-1.28.0.jar",
+    "commons-io-2.20.0.jar",
+    "commons-lang3-3.18.0.jar",
+    "error_prone_annotations-2.36.0.jar",
+    "failureaccess-1.0.3.jar",
+    "gson-2.13.2.jar",
+    "guava-33.4.8-jre.jar",
+    "h2-1.4.197.jar",
+    "istack-commons-runtime-4.0.1.jar",
+    "j2objc-annotations-3.0.0.jar",
+    "javax.activation-api-1.2.0.jar",
+    "jsoup-1.21.2.jar",
+    "jspecify-1.0.0.jar",
+    "listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar",
+    "mage-1.4.60.jar",
+    "mage-common-1.4.60.jar",
+    "mage-game-commanderfreeforall-1.4.60.jar",
+    "mage-player-ai-1.4.60.jar",
+    "mage-player-ai-mcts-1.4.60.jar",
+    "mage-sets-1.4.60.jar",
+    "ormlite-core-5.7.jar",
+    "ormlite-jdbc-5.7.jar",
+    "protobuf-java-3.25.8.jar",
+    "reload4j-1.2.22.jar",
+    "slf4j-api-2.0.17.jar",
+    "slf4j-reload4j-2.0.17.jar",
+    "trove-1.0.2.jar",
+    "txw2-3.0.2.jar",
+    "unbescape-1.1.6.RELEASE.jar",
+    "mage-deck-constructed-1.4.60.jar",
+    "mage-player-ai-ma-1.4.60.jar",
+    "mage-player-human-1.4.60.jar"
+  ]
+}

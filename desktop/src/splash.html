@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>MageLite</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+        background: radial-gradient(circle at 50% 50%, #121827 0%, #07090f 70%);
+        color: #c3c9da; font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      h1 { margin: 0; font-family: Georgia, serif; letter-spacing: 0.3em; color: #ffd98a; font-size: 44px; font-weight: 700; }
+      .spin { width: 26px; height: 26px; border: 3px solid #f5b84a; border-top-color: transparent; border-radius: 50%; animation: s 0.9s linear infinite; }
+      @keyframes s { to { transform: rotate(360deg); } }
+      p { margin: 0; font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <h1>MAGELITE</h1>
+    <div class="spin"></div>
+    <p>Engine startet – Kartendatenbank wird geladen …</p>
+    <p style="opacity:.6;font-size:12px">Beim allerersten Start wird die Datenbank aufgebaut (ca. 1–2 Minuten).</p>
+  </body>
+</html>

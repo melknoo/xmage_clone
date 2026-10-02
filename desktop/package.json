@@ -1,0 +1,17 @@
+{
+  "name": "magelite",
+  "productName": "MageLite",
+  "version": "0.1.0",
+  "description": "Commander-Goldfish gegen 3 Bots (XMage-Engine)",
+  "main": "src/main.cjs",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env MAGELITE_UI_DEV=1 electron .",
+    "shot": "electron tools/shot.cjs"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "electron": "^44.5.1"
+  }
+}
