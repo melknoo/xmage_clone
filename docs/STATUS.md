@@ -13,7 +13,7 @@ Stand: 2026-10-02. Bitte nach jeder größeren Änderung aktualisieren.
 | P2 | Alle Prompt-Arten, Hotkeys, Kampfpfeile, Auto-Passen, Tempo, Electron-Shell | ✅ fertig, siehe offene Punkte |
 | P3 | Deck-Import (Text, Archidekt, Moxfield), Deck-Bibliothek, Scryfall-Bilder | ✅ fertig (Moxfield nur teilweise, s. u.) |
 | P4 | Statistik, Held/XP/Titel, Deck-Meisterschaft, Spielende-Screen | ✅ fertig |
-| P5 | Installer, gebündelte Java-Laufzeit, Startoptimierung, Feinschliff | ⏳ offen |
+| P5 | Installer, gebündelte Java-Laufzeit, Startoptimierung, Feinschliff | 🟡 Installer gebaut (`scripts\package.ps1`), auf Windows noch nicht verifiziert; Rest offen |
 
 Zusätzlich umgesetzt (nicht im Plan): **Auto-Mana** (`AutoPayer`): automatisches Bezahlen mit passenden Quellen,
 Fallback auf manuelles Klicken.
@@ -53,13 +53,11 @@ Fallback auf manuelles Klicken.
 
 0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,
    Zugang per Einladungscode, ein Konto pro Freund. Plan mit Etappen und Prüfschritten: `docs/ONLINE-PLAN.md`.
-1. **Installer / Verteilung (P5)**
-   - `electron-builder` (portable EXE oder NSIS) mit `extraResources`: `engine/lib`, `ui/dist`, `vendor/xmage`
-     (ohne DB), plus per `jlink` erzeugte Java-Laufzeit. Module laut jdeps mindestens: `java.base`, `java.desktop`,
-     `java.sql`, `java.naming`, `java.net.http`, `jdk.crypto.ec`. Vor Abschluss mit `java --list-modules` gegenprüfen,
-     Jetty/Javalin evtl. zusätzlich `java.management` (wird jetzt sicher gebraucht: `GameHost` misst CPU per
-     `ThreadMXBean`).
-   - `desktop/src/engine.cjs` kennt die Pfade für die gepackte App bereits (`process.resourcesPath`).
+1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe + jlink-JRE, Details
+   `docs/DEVELOPMENT.md` §7) ist umgesetzt, aber **noch nie auf Windows gelaufen** (entstanden unter Linux ohne
+   JDK/PowerShell; nur das Ressourcen-Layout per `electron-builder --linux dir` geprüft). Zu prüfen: Skript läuft
+   durch, Installation, Start ohne installiertes Java, erster DB-Aufbau, Spiel, Scryfall-Bilder (TLS),
+   Deinstallation. Offen: App-Icon (`desktop/build/icon.ico`), Code-Signatur.
 2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `HumanSettings`), Auto-Passen, Auto-Mana,
    Lautstärke, Bild-Cache leeren.
 3. **Bedien-Komfort**

@@ -3,15 +3,64 @@
   "productName": "MageLite",
   "version": "0.1.0",
   "description": "Commander-Goldfish gegen 3 Bots (XMage-Engine)",
+  "author": "MageLite",
   "main": "src/main.cjs",
   "private": true,
   "scripts": {
     "start": "electron .",
     "dev": "cross-env MAGELITE_UI_DEV=1 electron .",
-    "shot": "electron tools/shot.cjs"
+    "shot": "electron tools/shot.cjs",
+    "dist": "electron-builder --win nsis"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
-    "electron": "^44.5.1"
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "dev.magelite.app",
+    "productName": "MageLite",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../engine/build/install/magelite-engine/lib",
+        "to": "engine/lib"
+      },
+      {
+        "from": "../ui/dist",
+        "to": "ui"
+      },
+      {
+        "from": "../vendor/xmage",
+        "to": "xmage",
+        "filter": [
+          "**/*",
+          "!db/**",
+          "!tools-lib/**"
+        ]
+      },
+      {
+        "from": "out/jre",
+        "to": "jre"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MageLite",
+      "artifactName": "MageLite-Setup-${version}.exe"
+    }
   }
 }

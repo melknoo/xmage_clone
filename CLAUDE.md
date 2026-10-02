@@ -36,6 +36,7 @@ Begründungen: `docs/DECISIONS.md`.
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # alles bauen (UI, Engine, Electron-Deps)
 MageLite.cmd                                                 # App starten
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 # Windows-Installer (braucht JDK 17+)
 
 cd engine; .\gradlew.bat run        # Dev-Engine: Port 7317, kein Token, Daten in engine\run
 cd ui; npm run dev                  # Vite-UI: http://localhost:5173/?port=7317

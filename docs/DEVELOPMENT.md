@@ -125,7 +125,22 @@ Die echte App einmal starten und nach X ms abfotografieren (beendet sich danach)
 - PowerShell-/CMD-Skripte ASCII-only, Zeilenenden CRLF (regelt `.gitattributes`).
 - `vendor/xmage/lib` nur über `scripts\import-xmage.ps1` aktualisieren; danach Spikes und Tests laufen lassen.
 
-## 7. Release (noch offen, siehe STATUS.md)
+## 7. Release: Windows-Installer
 
-Geplant: `electron-builder` + `jlink`-JRE unter `resources/jre`. `engine.cjs` sucht Java bereits dort und erwartet
-in der gepackten App `resources/engine/lib`, `resources/ui` und `resources/xmage`.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1   # -> desktop\dist\MageLite-Setup-<version>.exe
+```
+
+- Braucht zum Bauen ein **JDK 17+** (wegen `jlink`/`jdeps`, ein JRE reicht nicht) und Node.js. Auf dem Ziel-PC
+  muss nichts installiert sein.
+- Ablauf: `build.ps1` → Module per `jdeps` + feste Extraliste (`$extraModules` im Skript) → `jlink` nach
+  `desktop\out\jre` → `electron-builder` (Konfiguration im `build`-Block von `desktop/package.json`).
+- Gepackte App: `resources/{engine/lib, ui, xmage, jre}`; `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst.
+  Die Karten-DB wird nicht mitgeliefert, sondern beim ersten Start in `%APPDATA%\MageLite\engine\db` gebaut.
+- Installer: NSIS, pro Nutzer (kein Admin), Zielordner wählbar, Desktop-/Startmenü-Verknüpfung.
+- EXE ist **nicht signiert** → SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“.
+- Fehlt der Laufzeit ein Modul: `NoClassDefFoundError`/`ClassNotFoundException` in `%APPDATA%\MageLite\desktop.log`
+  → Modul in `$extraModules` ergänzen.
+- Bricht `electron-builder` beim Entpacken von `winCodeSign` mit „Cannot create symbolic link“ ab: Windows-
+  Entwicklermodus einschalten oder das Skript einmal als Administrator ausführen.
+- Version: `version` in `desktop/package.json`.

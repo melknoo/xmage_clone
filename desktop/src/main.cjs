@@ -100,7 +100,9 @@ function autoShot() {
 
 function fail(e) {
   log(`FEHLER: ${e.stack || e}`)
-  dialog.showErrorBox('MageLite', `Die Engine konnte nicht gestartet werden:\n\n${e.message}\n\nLog: ${logFile()}\n\nIst Java 17+ installiert?`)
+  // Die gepackte App bringt ihre eigene Java-Laufzeit mit
+  const hint = app.isPackaged ? '' : '\n\nIst Java 17+ installiert?'
+  dialog.showErrorBox('MageLite', `Die Engine konnte nicht gestartet werden:\n\n${e.message}\n\nLog: ${logFile()}${hint}`)
 }
 
 // Moxfield & Co. blocken Server-Requests -> Abruf ueber Chromium-Netzwerkstack
