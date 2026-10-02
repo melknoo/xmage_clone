@@ -1,3 +1,6 @@
+> **Hinweis:** Das ist die ursprüngliche Analyse und Planung (vor der Umsetzung), inklusive vieler verifizierter
+> XMage-Details. Die tatsächliche Implementierung beschreibt `docs/CODEMAP.md`, den Stand `docs/STATUS.md`.
+
 # MageLite implementation plan
 
 ## 0. Findings from reading the XMage source

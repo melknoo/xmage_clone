@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { wsUrl } from '../api/client'
 import type { Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, ServerMessage, Tempo, UUID } from '../api/types'
 import { sounds } from '../lib/sounds'
+import { useNav } from './nav'
 
 export interface Toast {
   id: number
@@ -128,10 +129,18 @@ export const useGame = create<GameStore>((set, get) => {
         console.error('Nachricht fehlerhaft', e)
       }
     }
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       if (socket !== ws) return
       set({ conn: 'closed' })
       window.clearInterval(pingTimer)
+      if (ev.code === 4404) {
+        // Spiel existiert nicht mehr (z.B. Engine neu gestartet) -> zurueck ins Menue
+        socket = null
+        set({ gameId: null, hello: null, state: null, prompt: null, gameOver: null, thinking: null })
+        useNav.getState().go('home')
+        pushToast('info', [{ text: 'Das Spiel ist nicht mehr vorhanden (Engine wurde neu gestartet).' }])
+        return
+      }
       if (get().gameId === gameId && !get().gameOver) {
         reconnectTimer = window.setTimeout(() => open(gameId), 1500)
       }

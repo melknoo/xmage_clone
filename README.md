@@ -82,6 +82,19 @@ Leuchtend türkis = spielbar, pulsierend gold = wählbares Ziel, grün = gewähl
 
 ## Entwicklung
 
+Zum Weiterentwickeln nach einem Klon:
+
+| Datei | Inhalt |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | Kurzkontext, feste Entscheidungen, harte Regeln (auch für Claude Code) |
+| [`docs/STATUS.md`](docs/STATUS.md) | Stand, Messwerte, offene Punkte, bekannte Probleme |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Einrichten, Dev-Schleife, Tests, Debugging, typische Erweiterungen |
+| [`docs/CODEMAP.md`](docs/CODEMAP.md) | Wo welcher Code liegt, Protokoll, REST, DB-Schema |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Entscheidungen und Begründungen |
+| [`docs/architecture.md`](docs/architecture.md) | ursprüngliche Analyse mit XMage-Details |
+
+Kurzfassung:
+
 ```powershell
 cd engine; .\gradlew.bat run          # Engine im Dev-Modus auf Port 7317 (ohne Token), Arbeitsordner engine\run
 cd ui;     npm run dev                # UI auf http://localhost:5173/?port=7317

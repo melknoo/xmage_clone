@@ -1,0 +1,17 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "timeout": 200000,
+  "steps": [
+    { "waitFor": "#root div", "timeout": 60000 },
+    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
+    { "wait": 6000 },
+    { "jsFile": "autoplay.js" },
+    { "wait": 30000 },
+    { "js": "(() => { const s = window.__ml.game.getState().state; return s && ('Zug ' + s.turn + ' ' + s.step) })()" },
+    { "shot": "../../engine/run/shot-1.png" },
+    { "wait": 30000 },
+    { "shot": "../../engine/run/shot-2.png" },
+    { "wait": 30000 },
+    { "shot": "../../engine/run/shot-3.png" }
+  ]
+}
