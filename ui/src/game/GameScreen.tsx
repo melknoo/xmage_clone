@@ -146,11 +146,11 @@ function TopBar() {
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 px-1">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <div className="font-display text-sm font-bold tracking-widest text-gold-300">MAGELITE</div>
         <PhaseBar state={state} />
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <div className="flex items-center gap-0.5 rounded-lg bg-ink-900/70 p-0.5 ring-1 ring-white/10" title="Bot-Tempo">
           {TEMPOS.map((t) => (
             <button key={t.key} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${tempo === t.key ? 'bg-arcane-500 text-ink-950' : 'text-ink-300 hover:text-ink-100'}`} onClick={() => setTempo(t.key)}>

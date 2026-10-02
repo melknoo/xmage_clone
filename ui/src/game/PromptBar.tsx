@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import { useGame } from '../store/game'
 import { Rich } from '../lib/mana'
+import { ActivityLine } from './ActivityIndicator'
 import type { Interaction } from './interaction'
 import { SKIPS, usePromptButtons } from './promptActions'
 
@@ -35,16 +36,20 @@ export function PromptBar({ inter }: { inter: Interaction }) {
             )}
           </motion.div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-ink-300">
-            {busy ? (
-              <span className="animate-pulse">…</span>
-            ) : (
-              <>
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-arcane-400" />
-                {thinking || waitingFor ? <span>Warte auf {waitingFor ?? 'Bot'} …</span> : <span>Gegner sind am Zug …</span>}
-              </>
-            )}
-          </div>
+          <ActivityLine
+            fallback={
+              <div className="flex items-center gap-2 text-sm text-ink-300">
+                {busy ? (
+                  <span className="animate-pulse">…</span>
+                ) : (
+                  <>
+                    <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-arcane-400" />
+                    {thinking || waitingFor ? <span>Warte auf {waitingFor ?? 'Bot'} …</span> : <span>Gegner sind am Zug …</span>}
+                  </>
+                )}
+              </div>
+            }
+          />
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">

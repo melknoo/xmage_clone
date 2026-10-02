@@ -272,6 +272,16 @@ export interface GameOver {
   error?: string
 }
 
+/** Herzschlag der Engine (1/s): was gerade passiert, CPU-Last in % eines Kerns (-1 = unbekannt). */
+export interface Activity {
+  t: 'activity'
+  mode: 'you' | 'bot' | 'engine' | 'idle' | 'stuck'
+  who?: string
+  cpu: number
+  idleMs: number
+  recovered: number
+}
+
 export type ServerMessage =
   | GameState
   | Prompt
@@ -280,6 +290,7 @@ export type ServerMessage =
   | { t: 'promptClosed'; id: number }
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'status'; thinking?: UUID; autoPassed?: boolean; waitingFor?: string }
+  | Activity
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }
   | { t: 'pong' }

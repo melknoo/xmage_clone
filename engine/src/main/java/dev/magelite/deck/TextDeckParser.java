@@ -47,6 +47,7 @@ public final class TextDeckParser {
             List<Resolved> main,
             List<Resolved> commanders,
             List<String> unknown,
+            List<String> unfinished,
             boolean needsCommander,
             List<String> candidates,
             int cardCount
@@ -173,6 +174,7 @@ public final class TextDeckParser {
         Map<String, Resolved> side = new LinkedHashMap<>();
         Map<String, Resolved> guess = new LinkedHashMap<>();
         List<String> unknown = new ArrayList<>();
+        List<String> unfinished = new ArrayList<>();
 
         for (Entry e : entries) {
             if (e.section() == Section.IGNORE) {
@@ -180,7 +182,9 @@ public final class TextDeckParser {
             }
             CardInfo info = resolve(e.name(), e.set(), e.number());
             if (info == null) {
-                unknown.add(e.count() + " " + e.name());
+                String n = e.name();
+                boolean wip = XmageUnfinished.contains(n) || (n.contains("/") && XmageUnfinished.contains(frontFace(n)));
+                (wip ? unfinished : unknown).add(e.count() + " " + n);
                 continue;
             }
             Map<String, Resolved> target = switch (e.section()) {
@@ -243,7 +247,7 @@ public final class TextDeckParser {
         int count = main.values().stream().mapToInt(Resolved::count).sum() + cmd.values().stream().mapToInt(Resolved::count).sum();
         String name = deckName != null && !deckName.isBlank() ? deckName.strip()
                 : cmd.isEmpty() ? "Neues Deck" : cmd.keySet().iterator().next().split(",")[0];
-        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), unknown, needsCommander, candidates, count);
+        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), unknown, unfinished, needsCommander, candidates, count);
     }
 
     private static Resolved findByName(Map<String, Resolved> map, String name) {

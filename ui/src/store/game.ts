@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { wsUrl } from '../api/client'
-import type { Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, ServerMessage, Tempo, UUID } from '../api/types'
+import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, ServerMessage, Tempo, UUID } from '../api/types'
 import { sounds } from '../lib/sounds'
 import { useNav } from './nav'
 
@@ -19,6 +19,9 @@ interface GameStore {
   answeredPromptId: number | null
   log: LogEntry[]
   thinking: UUID | null
+  /** letzter Herzschlag der Engine */
+  activity: Activity | null
+  activityAt: number
   waitingFor: string | null
   toasts: Toast[]
   gameOver: GameOver | null
@@ -89,6 +92,9 @@ export const useGame = create<GameStore>((set, get) => {
         set({ log: log.length > LOG_MAX ? log.slice(log.length - LOG_MAX) : log })
         break
       }
+      case 'activity':
+        set({ activity: msg, activityAt: Date.now() })
+        break
       case 'status':
         set({ thinking: msg.thinking ?? null, waitingFor: msg.waitingFor ?? null })
         break
@@ -96,7 +102,7 @@ export const useGame = create<GameStore>((set, get) => {
         pushToast(msg.level, msg.rich)
         break
       case 'gameOver':
-        set({ gameOver: msg, prompt: null, thinking: null })
+        set({ gameOver: msg, prompt: null, thinking: null, activity: null })
         sounds.play(msg.placements.find((p) => p.human)?.place === 1 ? 'win' : 'lose')
         break
       case 'error':
@@ -156,6 +162,8 @@ export const useGame = create<GameStore>((set, get) => {
     answeredPromptId: null,
     log: [],
     thinking: null,
+    activity: null,
+    activityAt: 0,
     waitingFor: null,
     toasts: [],
     gameOver: null,
@@ -165,7 +173,7 @@ export const useGame = create<GameStore>((set, get) => {
 
     connect: (gameId) => {
       get().disconnect()
-      set({ gameId, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null })
+      set({ gameId, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null })
       open(gameId)
     },
     disconnect: () => {
@@ -203,7 +211,7 @@ export const useGame = create<GameStore>((set, get) => {
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null })
+      set({ gameId: null, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null })
     },
   }
 })

@@ -101,7 +101,13 @@ public final class HumanSpike {
         AtomicLong bytes = new AtomicLong();
         AtomicLong states = new AtomicLong();
         java.io.PrintWriter dump = dumpJson == null ? null : new java.io.PrintWriter(Files.newBufferedWriter(Path.of(dumpJson)));
+        java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
         host.attach(msg -> {
+            if (msg instanceof Messages.Activity a) {
+                // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
+                recovered.set(a.recovered());
+                return;
+            }
             lastMsgAt.set(System.currentTimeMillis());
             if (msg instanceof StateDto) {
                 states.incrementAndGet();
@@ -168,6 +174,9 @@ public final class HumanSpike {
         }
         out("  Aktionen: Laender=%d Zauber/Faehigkeiten=%d Angriffe=%d Mana-Klicks=%d Passes=%d",
                 driver.lands, driver.casts, driver.attacks, driver.manaClicks, driver.passes);
+        if (recovered.get() > 0) {
+            out("  Verlorene Antworten neu zugestellt (XMage-Race): %d", recovered.get());
+        }
         out("  Sitzordnung (UI): %s", turnOrder.seats);
         out("  Zugfolge: %s", turnOrder.sequence);
         if (turnOrder.errors > 0) {

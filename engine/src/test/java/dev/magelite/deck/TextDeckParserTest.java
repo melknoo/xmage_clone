@@ -114,6 +114,19 @@ class TextDeckParserTest {
     }
 
     @Test
+    void unfinishedInXmage() {
+        String text = """
+                1 Lluwen, Exchange Student // Pest Friend
+                1 Eccentric Pestfinder // Turn Stones
+                1 Totally Fake Card Name
+                1 Sol Ring
+                """;
+        TextDeckParser.Result r = TextDeckParser.parse(text, null, null);
+        assertEquals(List.of("1 Lluwen, Exchange Student // Pest Friend", "1 Eccentric Pestfinder // Turn Stones"), r.unfinished());
+        assertEquals(List.of("1 Totally Fake Card Name"), r.unknown());
+    }
+
+    @Test
     void dckRoundTrip() {
         String text = "1 [C21:263] Sol Ring\nSB: 1 [ELD:303] Kenrith, the Returned King\n";
         TextDeckParser.Result r = TextDeckParser.parse(text, "Test", null);

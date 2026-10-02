@@ -28,7 +28,7 @@ Electron (desktop/src/main.cjs)
 | `api/HttpServer` | Javalin: Routen, Token-Check, `POST /api/games`, WebSocket-Handling, Module |
 | `api/Outbox` | sendet pro WS-Verbindung auf eigenem Thread; aufeinanderfolgende States werden zusammengefasst |
 | `api/Json` | gemeinsamer Jackson-`ObjectMapper` |
-| `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook |
+| `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität) |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
 | `game/AutoPayer` | Planer fürs automatische Bezahlen von Manakosten |
 | `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, Denkzeit, Pausen, Hooks) |
@@ -65,7 +65,9 @@ Electron (desktop/src/main.cjs)
    - Bei einem Prioritäts-Prompt ohne Aktion wird automatisch gepasst.
    - Sonst geht `PromptDto` mit neuer `id` an den Client.
 3. Der Client schickt `{t:"respond", id, uuid|bool|int|str|mana}`. `GameHost.respond` prüft die `id`, sendet
-   `promptClosed` und führt `setResponse*` auf dem CALL-Thread aus.
+   `promptClosed` und führt `setResponse*` auf dem CALL-Thread aus – erst, wenn der Spiel-Thread wirklich in
+   `HumanPlayer.waitForResponse` → `wait()` steckt (XMage-Race, sonst geht `notifyAll()` verloren). Der Wachhund
+   stellt eine Antwort erneut zu, wenn XMage danach ohne neue Frage weiter wartet.
 4. XMage läuft weiter; die nächsten `UPDATE`-Events erzeugen gedrosselte States (max. alle 60 ms, Rest per
    `flushStateIfDirty`).
 
@@ -81,6 +83,7 @@ Server → Client:
 | `promptClosed` | `id` |
 | `log` | `entries[]` mit `turn`, `kind` (INFO/STATUS), `rich` |
 | `status` | `thinking` (Bot-id), `waitingFor` |
+| `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/engine/idle/stuck), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
 | `toast` | `level`, `rich` |
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
 | `error`, `pong` | |
@@ -139,6 +142,7 @@ first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: 
 | `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen |
 | `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
 | `game/Side.tsx` | Kartenvorschau, Spielverlauf, Toasts |
+| `game/ActivityIndicator.tsx` | Anzeige in der TopBar: arbeitet die Engine wirklich (Modus + CPU aus `activity`), Warnung bei Stillstand/ohne Verbindung |
 | `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ |
 | `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, `upright` für die Vorschau, Marken, P/T, Glow) |
 | `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar |

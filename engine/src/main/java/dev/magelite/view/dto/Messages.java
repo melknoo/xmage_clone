@@ -48,6 +48,18 @@ public final class Messages {
         }
     }
 
+    /**
+     * Herzschlag (1/s): was die Engine gerade tut. {@code mode}: you | bot | engine | idle | stuck.
+     * {@code cpu}: CPU-Last der Engine-Threads in % eines Kerns; {@code idleMs}: Zeit seit der letzten Spielaenderung;
+     * {@code recovered}: Zahl automatisch neu zugestellter Antworten (XMage-Race).
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record Activity(String t, String mode, String who, int cpu, long idleMs, int recovered) {
+        public Activity(String mode, String who, int cpu, long idleMs, int recovered) {
+            this("activity", mode, who, cpu, idleMs, recovered);
+        }
+    }
+
     public record Toast(String t, String level, List<Map<String, Object>> rich) {
         public Toast(String level, List<Map<String, Object>> rich) {
             this("toast", level, rich);

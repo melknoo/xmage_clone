@@ -24,7 +24,7 @@ Fallback auf manuelles Klicken.
 - 4-Bot-Spiele (Tempo Blitz): 3/3 ohne Fehler, Ø ca. 5 s pro Spielerzug, einzelne Züge bis ca. 50 s bei vollen Boards,
   Heap-Spitze ca. 2 GB (`-Xmx3g`).
 - `humanSpike`: insgesamt 9 Spiele, 0 Fehler, 0 Hänger. Mit Auto-Mana kam **kein** Mana-Prompt mehr beim Spieler an.
-- `TextDeckParserTest`: 7/7 (MTGA, Archidekt-Kategorien, Leerzeilen-Commander, Kandidaten, DFC, .dck-Roundtrip).
+- `TextDeckParserTest`: 8/8 (MTGA, Archidekt-Kategorien, Leerzeilen-Commander, Kandidaten, DFC, .dck-Roundtrip, XMage-unfertig).
 - Archidekt-Import live: OK (100 Karten, legal erkannt).
 - End-to-End: Spiel mit importiertem Deck bis zum natürlichen Ende → XP, Meisterschaft, Kartenstatistik gespeichert.
 - Frischer Klon: `scripts\build.ps1` läuft durch, App startet und baut die DB selbst auf.
@@ -33,6 +33,8 @@ Fallback auf manuelles Klicken.
   andersherum ab); Vorschau getappter Karten war gedreht; Ziele von Zaubern/Fähigkeiten auf dem Stapel wurden nicht
   angezeigt (jetzt Chips + Zielpfeil, `targetRefs`); Fähigkeiten auf dem Stapel hatten keinen Namen; Dialoge sind
   minimierbar (Tab). `humanSpike` prüft seitdem Zugfolge = Sitzordnung: 9/9 Spiele korrekt.
+- 2026-10-02 neu: Aktivitätsanzeige in der Prompt-Leiste (Herzschlag `activity` 1/s mit Modus + gemessener CPU-Last):
+  „X rechnet …“ mit drehendem Zahnrad nur bei echter Rechenlast, Warnung bei Stillstand (> 15 s) oder ohne Verbindung.
 
 ## Offene Punkte (priorisiert)
 
@@ -42,7 +44,8 @@ Fallback auf manuelles Klicken.
    - `electron-builder` (portable EXE oder NSIS) mit `extraResources`: `engine/lib`, `ui/dist`, `vendor/xmage`
      (ohne DB), plus per `jlink` erzeugte Java-Laufzeit. Module laut jdeps mindestens: `java.base`, `java.desktop`,
      `java.sql`, `java.naming`, `java.net.http`, `jdk.crypto.ec`. Vor Abschluss mit `java --list-modules` gegenprüfen,
-     Jetty/Javalin evtl. zusätzlich `java.management`.
+     Jetty/Javalin evtl. zusätzlich `java.management` (wird jetzt sicher gebraucht: `GameHost` misst CPU per
+     `ThreadMXBean`).
    - `desktop/src/engine.cjs` kennt die Pfade für die gepackte App bereits (`process.resourcesPath`).
 2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `HumanSettings`), Auto-Passen, Auto-Mana,
    Lautstärke, Bild-Cache leeren.
@@ -72,14 +75,23 @@ Fallback auf manuelles Klicken.
 - Statistik: Spalte `game_card_stats.cast` zählt auch gespielte Länder (Anzeige „gespielt“).
 - Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
 - Es läuft immer nur **ein** Spiel; ein neues Spiel beendet das laufende (`GameRegistry`).
-- **Hänger durch verlorene Antwort (XMage-Race):** `HumanPlayer.waitForResponse` setzt `responseOpenedForAnswer = true`
-  *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau dazwischen, geht `notifyAll()` verloren
-  und das Spiel wartet ewig (Thread-Dump: GAME in `waitForResponse`, CALL untätig). `humanSpike` am 2026-10-02:
-  3 STALLs in 9 Spielen, gehäuft in Spielen mit vielen sofortigen Antworten (Mana-Pool-Rückfrage in Schleife).
-  Betrifft potenziell auch Auto-Passen. Idee: in `GameHost.dispatch` vor `setResponse*` kurz warten, bis der
-  Spiel-Thread `WAITING` ist (mit Timeout).
+- **Hänger durch verlorene Antwort (XMage-Race) – umgangen 2026-10-02:** `HumanPlayer.waitForResponse` setzt
+  `responseOpenedForAnswer = true` *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau
+  dazwischen, geht `notifyAll()` verloren und das Spiel wartet ewig. Vorher: 3 STALLs in 9 `humanSpike`-Spielen.
+  Jetzt antwortet `GameHost.apply` erst, wenn der Spiel-Thread wirklich in `waitForResponse` → `wait()` steckt;
+  zusätzlich stellt der Wachhund eine Antwort erneut zu, wenn XMage danach ohne neue Frage weiter wartet
+  (Log-Warnung „Antwort ging verloren“, Zähler `activity.recovered`). Danach: 6/6 Spiele ohne STALL, 0 Neuzustellungen.
+- **KI-Endlosrekursion beim Blocken:** `ComputerPlayer6.declareBlockers` → `replaceEvent` → `ChooseBlockersEffect`
+  → `Combat.selectBlockers` → derselbe Bot → … → `StackOverflowError`, Spiel bricht ab („Spiel abgebrochen“).
+  Tritt bei Karten auf, mit denen ein Spieler die Blocker eines anderen bestimmt. 1× in 6 `humanSpike`-Spielen
+  (2026-10-02). Idee: Rekursionssperre in `MageLiteBot.selectBlockers`.
 - `desktop/tools/shot.cjs`: Das versteckte Fenster zeichnet manchmal verzögert – bei verdächtigen Bildern
   nochmal mit längerer Wartezeit aufnehmen.
+- **Neue Karten fehlen (Stand 2026-10-02):** XMage nimmt Karten aus der `unfinished`-Liste eines Sets nicht in die DB
+  auf (z. B. Prepare-Karten aus Secrets of Strixhaven/SOC). Neue Sets wie Reality Fracture (FRA) sind gar nicht
+  enthalten. Der Import zeigt beide Fälle getrennt an (`XmageUnfinished`). Auch 1.4.61V1 sperrt diese Karten noch;
+  erst `master` hat sie freigeschaltet. Sobald ein Release (≥ 1.4.62) erscheint: `scripts\import-xmage.ps1 -XmageDir …`,
+  danach `build.ps1` (die DB wird beim ersten Start neu aufgebaut).
 
 ## Ideen (nicht beauftragt)
 

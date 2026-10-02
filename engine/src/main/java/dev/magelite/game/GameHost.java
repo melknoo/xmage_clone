@@ -30,8 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -51,6 +54,13 @@ public final class GameHost {
     private static final Logger LOG = Logger.getLogger(GameHost.class);
     private static final long STATE_MIN_INTERVAL_MS = 60;
     private static final int LOG_KEEP = 400;
+    /** Max. Wartezeit, bis der Spiel-Thread wirklich auf eine Antwort wartet (sonst wie bisher antworten). */
+    private static final long AWAIT_WAITING_MS = 3000;
+    /** Spiel haengt nach einer Antwort weiter in waitForResponse, ohne neue Frage -> Antwort erneut zustellen. */
+    private static final long RECOVER_AFTER_MS = 2500;
+    private static final int RECOVER_MAX_PER_ANSWER = 3;
+    /** Ohne Spielaenderung und ohne CPU-Last so lange -> "stuck" melden. */
+    private static final long STUCK_AFTER_MS = 15000;
 
     /** F-Tasten und Einstellungen, die der Client senden darf (kein Undo/Rollback/Cheat). */
     private static final Set<PlayerAction> ALLOWED_ACTIONS = EnumSet.of(
@@ -129,6 +139,12 @@ public final class GameHost {
         return t;
     });
 
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "magelite-watchdog");
+        t.setDaemon(true);
+        return t;
+    });
+
     private final AtomicLong stateSeq = new AtomicLong();
     private final AtomicLong promptSeq = new AtomicLong();
     private final Deque<Messages.LogEntry> logTail = new ArrayDeque<>();
@@ -154,8 +170,19 @@ public final class GameHost {
     private String autoPayLastMsg;
     private long lastStateAt;
     private boolean stateDirty;
-    private Thread gameThread;
+    private volatile Thread gameThread;
     private long startedAt;
+    // Wachhund / Aktivitaet
+    private volatile long lastProgressAt = System.currentTimeMillis();
+    private volatile long lastHumanQueryAt;
+    private volatile Player lastAppliedTarget;
+    private volatile Response lastApplied;
+    private volatile long lastAppliedAt;
+    private int recoverAttempts;
+    private volatile int recovered;
+    private long lastCpuNs = -1;
+    private long lastCpuAt;
+    private int ticks;
 
     private GameHost(GameSetup setup) throws GameException {
         this.setup = setup;
@@ -291,6 +318,7 @@ public final class GameHost {
         startedAt = System.currentTimeMillis();
         gameThread = new Thread(this::runGame, ThreadUtils.THREAD_PREFIX_GAME + " " + game.getId());
         gameThread.start();
+        watchdog.scheduleWithFixedDelay(this::watchdogTick, 500, 500, TimeUnit.MILLISECONDS);
     }
 
     private void runGame() {
@@ -337,6 +365,7 @@ public final class GameHost {
                 LOG.warn("cleanUp: " + e);
             }
             callExecutor.shutdown();
+            watchdog.shutdownNow();
         }
     }
 
@@ -375,21 +404,7 @@ public final class GameHost {
         }
         openPrompt = null;
         emit(new Messages.PromptClosed(promptId));
-        dispatch(target -> {
-            if (r.uuid() != null) {
-                target.setResponseUUID(r.uuid());
-            } else if (r.bool() != null) {
-                target.setResponseBoolean(r.bool());
-            } else if (r.integer() != null) {
-                target.setResponseInteger(r.integer());
-            } else if (r.string() != null) {
-                target.setResponseString(r.string());
-            } else if (r.manaType() != null) {
-                target.setResponseManaType(r.manaPlayerId() == null ? humanId : r.manaPlayerId(), r.manaType());
-            } else {
-                target.setResponseBoolean(false);
-            }
-        });
+        dispatch(target -> apply(target, r));
         return true;
     }
 
@@ -504,6 +519,7 @@ public final class GameHost {
                 emit(new Messages.Toast("info", RichText.parse(event.getMessage())));
                 return;
             }
+            lastHumanQueryAt = System.currentTimeMillis();
             thinking = null;
             PromptDto prompt = PromptMapper.map(game, event, humanId);
             if (prompt == null) {
@@ -544,7 +560,17 @@ public final class GameHost {
         dispatch(target -> apply(target, r));
     }
 
+    /** Setzt die Antwort (nur CALL-Thread). Wartet vorher, bis XMage wirklich auf sie wartet. */
     private void apply(Player target, Response r) {
+        awaitHumanWaiting();
+        setResponse(target, r);
+        lastAppliedTarget = target;
+        lastApplied = r;
+        lastAppliedAt = System.currentTimeMillis();
+        recoverAttempts = 0;
+    }
+
+    private void setResponse(Player target, Response r) {
         if (r.uuid() != null) {
             target.setResponseUUID(r.uuid());
         } else if (r.bool() != null) {
@@ -728,11 +754,140 @@ public final class GameHost {
     }
 
     private void emit(Object msg) {
+        if (msg instanceof StateDto || msg instanceof PromptDto || msg instanceof Messages.Log) {
+            lastProgressAt = System.currentTimeMillis();
+        }
         try {
             sink.send(msg);
         } catch (Throwable e) {
             LOG.warn("Senden fehlgeschlagen: " + e);
         }
+    }
+
+    // ------------------------------------------------------------------ Wachhund (XMage-Race, Aktivitaet)
+
+    private static final ThreadMXBean THREADS = ManagementFactory.getThreadMXBean();
+
+    /**
+     * XMage-Race umgehen: {@code HumanPlayer.waitForResponse} setzt {@code responseOpenedForAnswer = true} bevor es in
+     * {@code response.wait()} geht. Kommt die Antwort dazwischen, verpufft {@code notifyAll()} und das Spiel wartet
+     * ewig. Darum erst antworten, wenn der Spiel-Thread wirklich wartet (oder nach Timeout wie bisher).
+     */
+    private void awaitHumanWaiting() {
+        Thread t = gameThread;
+        if (t == null || t == Thread.currentThread()) {
+            return;
+        }
+        long deadline = System.currentTimeMillis() + AWAIT_WAITING_MS;
+        while (t.isAlive() && System.currentTimeMillis() < deadline) {
+            if (inWaitForResponse(t)) {
+                return;
+            }
+            try {
+                Thread.sleep(1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /** Spiel-Thread steckt in {@code HumanPlayer.waitForResponse} -> {@code Object.wait()}. */
+    private static boolean inWaitForResponse(Thread t) {
+        if (t.getState() != Thread.State.WAITING) {
+            return false;
+        }
+        for (StackTraceElement e : t.getStackTrace()) {
+            if ("waitForResponse".equals(e.getMethodName()) && e.getClassName().startsWith("mage.player.human.")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void watchdogTick() {
+        try {
+            Thread t = gameThread;
+            if (t == null || !t.isAlive()) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            boolean waiting = inWaitForResponse(t);
+            if (waiting && looksLost(now)) {
+                callExecutor.execute(this::recoverLostResponse);
+            }
+            if (++ticks % 2 == 0) {
+                emit(activity(t, waiting, now));
+            }
+        } catch (Throwable e) {
+            LOG.warn("Wachhund: " + e);
+        }
+    }
+
+    /** Antwort gesetzt, seitdem keine neue Frage, kein Fortschritt, aber XMage wartet noch -> Antwort verloren. */
+    private boolean looksLost(long now) {
+        return lastApplied != null && openPrompt == null && lastAppliedAt > lastHumanQueryAt
+                && now - lastAppliedAt > RECOVER_AFTER_MS && now - lastProgressAt > RECOVER_AFTER_MS;
+    }
+
+    /** CALL-Thread: letzte Antwort erneut zustellen (weckt den wartenden Spiel-Thread). */
+    private void recoverLostResponse() {
+        Thread t = gameThread;
+        Player target = lastAppliedTarget;
+        Response r = lastApplied;
+        if (t == null || target == null || r == null || recoverAttempts >= RECOVER_MAX_PER_ANSWER
+                || !looksLost(System.currentTimeMillis()) || !inWaitForResponse(t)) {
+            return;
+        }
+        recoverAttempts++;
+        recovered++;
+        LOG.warn("Antwort ging verloren (XMage-Race) - stelle erneut zu: " + r);
+        setResponse(target, r);
+        lastAppliedAt = System.currentTimeMillis();
+    }
+
+    private Messages.Activity activity(Thread t, boolean waiting, long now) {
+        int cpu = cpuPercent(now);
+        long idle = now - lastProgressAt;
+        UUID th = thinking;
+        String mode;
+        String who = null;
+        if (waiting && openPrompt != null) {
+            mode = "you";
+        } else if (th != null) {
+            mode = "bot";
+            Player p = game.getPlayer(th);
+            who = p == null ? null : p.getName();
+        } else if (t.getState() == Thread.State.RUNNABLE || cpu >= 15) {
+            mode = "engine";
+        } else {
+            mode = "idle";
+        }
+        if (!"you".equals(mode) && idle > STUCK_AFTER_MS && cpu >= 0 && cpu < 5) {
+            mode = "stuck";
+        }
+        return new Messages.Activity(mode, who, cpu, idle, recovered);
+    }
+
+    /** CPU-Last aller Engine-Threads seit dem letzten Aufruf in % eines Kerns; -1 wenn nicht messbar. */
+    private int cpuPercent(long now) {
+        if (!THREADS.isThreadCpuTimeSupported() || !THREADS.isThreadCpuTimeEnabled()) {
+            return -1;
+        }
+        long sum = 0;
+        for (long tid : THREADS.getAllThreadIds()) {
+            long c = THREADS.getThreadCpuTime(tid);
+            if (c > 0) {
+                sum += c;
+            }
+        }
+        int pct = 0;
+        if (lastCpuNs >= 0 && now > lastCpuAt) {
+            pct = (int) Math.max(0, (sum - lastCpuNs) / 1e4 / (now - lastCpuAt));
+        }
+        lastCpuNs = sum;
+        lastCpuAt = now;
+        return pct;
     }
 
     // ------------------------------------------------------------------ Spielende

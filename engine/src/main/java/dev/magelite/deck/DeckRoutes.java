@@ -81,6 +81,7 @@ public final class DeckRoutes implements HttpServer.Module {
         out.put("commanders", r.commanders());
         out.put("cardCount", r.cardCount());
         out.put("unknown", r.unknown());
+        out.put("unfinished", r.unfinished());
         out.put("needsCommander", r.needsCommander());
         out.put("candidates", r.candidates());
         List<Map<String, Object>> cards = new ArrayList<>();

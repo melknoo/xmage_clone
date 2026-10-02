@@ -10,6 +10,7 @@ interface Preview {
   commanders: { name: string; set: string; number: string; count: number }[]
   cardCount: number
   unknown: string[]
+  unfinished: string[]
   needsCommander: boolean
   candidates: string[]
   cards: { name: string; set: string; num: string; count: number }[]
@@ -314,7 +315,7 @@ function ImportDialog({ initial, onClose, onSaved }: { initial: { id?: number; t
               <div className="flex flex-wrap gap-2 text-xs">
                 <span className={`rounded-md px-2 py-1 ring-1 ${preview.cardCount === 100 ? 'bg-arcane-500/15 text-arcane-400 ring-arcane-400/30' : 'bg-gold-400/10 text-gold-300 ring-gold-400/30'}`}>{preview.cardCount} Karten</span>
                 {preview.commanders.length > 0 && (preview.valid ? <span className="rounded-md bg-arcane-500/15 px-2 py-1 text-arcane-400 ring-1 ring-arcane-400/30">Commander-legal ✓</span> : <span className="rounded-md bg-blood-500/15 px-2 py-1 text-blood-400 ring-1 ring-blood-400/30">nicht legal</span>)}
-                {preview.unknown.length > 0 && <span className="rounded-md bg-blood-500/15 px-2 py-1 text-blood-400 ring-1 ring-blood-400/30">{preview.unknown.length} unbekannt</span>}
+                {preview.unknown.length + preview.unfinished.length > 0 && <span className="rounded-md bg-blood-500/15 px-2 py-1 text-blood-400 ring-1 ring-blood-400/30">{preview.unknown.length + preview.unfinished.length} fehlen</span>}
               </div>
               {preview.needsCommander && (
                 <div className="rounded-xl bg-gold-400/10 p-3 ring-1 ring-gold-400/30">
@@ -340,12 +341,24 @@ function ImportDialog({ initial, onClose, onSaved }: { initial: { id?: number; t
                   </div>
                 </div>
               )}
-              {preview.unknown.length > 0 && (
+              {preview.unknown.length + preview.unfinished.length > 0 && (
                 <div className="max-h-28 overflow-auto rounded-lg bg-blood-500/10 p-2 text-xs text-blood-400 ring-1 ring-blood-400/20 scrollbar-thin">
-                  <div className="mb-1 font-semibold">Nicht gefunden (werden ignoriert):</div>
-                  {preview.unknown.map((u) => (
-                    <div key={u}>{u}</div>
-                  ))}
+                  {preview.unfinished.length > 0 && (
+                    <div className="mb-1">
+                      <div className="mb-1 font-semibold">In XMage noch nicht spielbar (werden ignoriert):</div>
+                      {preview.unfinished.map((u) => (
+                        <div key={u}>{u}</div>
+                      ))}
+                    </div>
+                  )}
+                  {preview.unknown.length > 0 && (
+                    <div>
+                      <div className="mb-1 font-semibold">Unbekannt – evtl. neuer als XMage oder Tippfehler (werden ignoriert):</div>
+                      {preview.unknown.map((u) => (
+                        <div key={u}>{u}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
               {preview.validation && <div className="max-h-28 overflow-auto rounded-lg bg-ink-950/50 p-2 text-xs text-ink-300 ring-1 ring-white/10 scrollbar-thin">{preview.validation}</div>}
