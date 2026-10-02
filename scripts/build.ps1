@@ -15,7 +15,8 @@ function Require([string]$cmd, [string]$hint) {
 Write-Host '== Voraussetzungen'
 Require 'java' 'Java 17 oder neuer installieren, z.B.: winget install EclipseAdoptium.Temurin.21.JDK'
 Require 'npm' 'Node.js installieren, z.B.: winget install OpenJS.NodeJS.LTS'
-$javaVersion = (& java -version 2>&1 | Select-Object -First 1).ToString()
+# java -version schreibt nach stderr; ueber cmd umleiten, sonst bricht PowerShell 5.1 ab
+$javaVersion = [string](cmd /c "java -version 2>&1" | Select-Object -First 1)
 Write-Host "Java: $javaVersion"
 if ($javaVersion -match 'version "(1\.)?(\d+)') {
     if ([int]$Matches[2] -lt 17) {
