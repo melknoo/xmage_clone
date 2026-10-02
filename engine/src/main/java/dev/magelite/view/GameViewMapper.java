@@ -68,6 +68,12 @@ public final class GameViewMapper {
 
     public static StateDto map(Game game, UUID myId, long seq, boolean withPlayable, UUID thinkingPlayerId,
                                Map<UUID, String> deckNames) {
+        return map(game, myId, seq, withPlayable, null, thinkingPlayerId, deckNames);
+    }
+
+    /** @param precomputed schon berechnete spielbare Objekte (spart die zweite Berechnung), sonst null */
+    public static StateDto map(Game game, UUID myId, long seq, boolean withPlayable, Playable precomputed,
+                               UUID thinkingPlayerId, Map<UUID, String> deckNames) {
         GameView gv = new GameView(game.getState(), game, myId, null);
         Player me = game.getPlayer(myId);
 
@@ -98,7 +104,7 @@ public final class GameViewMapper {
             views.put(pv.getPlayerId(), pv);
         }
         CommanderPlaysCountWatcher playsWatcher = game.getState().getWatcher(CommanderPlaysCountWatcher.class);
-        Playable pl = withPlayable && me != null ? playable(game, me) : null;
+        Playable pl = precomputed != null ? precomputed : withPlayable && me != null ? playable(game, me) : null;
 
         List<UUID> order = seatOrder(game, myId);
         List<PlayerDto> players = new ArrayList<>();

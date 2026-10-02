@@ -1,6 +1,8 @@
 package dev.magelite.game;
 
 import mage.abilities.Ability;
+import mage.abilities.ActivatedAbility;
+import mage.abilities.mana.ManaAbility;
 import mage.constants.RangeOfInfluence;
 import mage.game.Game;
 import mage.game.permanent.Permanent;
@@ -10,8 +12,10 @@ import mage.player.ai.util.CombatUtil;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -21,6 +25,11 @@ import java.util.UUID;
  * rechnet in Main/Kampf-Schritten JEDES Spielers eine Minimax-Suche; bei 4 Spielern sind das bis zu
  * 3 Suchen pro Prioritaetsrunde. Mit fastOpponentTurns passt der Bot in fremden Zuegen, solange der
  * Stack leer ist (auf Zauber im Stack reagiert er weiterhin, Blocken laeuft separat ueber selectBlockers).
+ * <p>
+ * Zweiter grosser Gewinn: {@code fastStack} (Blitz/Normal). Nach JEDEM aufgeloesten Stapelobjekt bekommt jeder Bot
+ * wieder Prioritaet, und die Suche simuliert den ganzen Stapel - bei 100 Landfall-Triggern lief sie jedes Mal ins
+ * Zeitlimit (3 Bots x Denkzeit pro Trigger). Darum: ohne Nicht-Mana-Aktion sofort passen (Ergebnis identisch), und
+ * auf ein Stapelobjekt, auf das der Bot schon gepasst hat, gleich wieder passen ({@link StackSig}).
  */
 public class MageLiteBot extends ComputerPlayerControllableProxy {
 
@@ -30,6 +39,13 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
     private transient BotHooks hooks;
     /** Sperre gegen erneuten Eintritt in selectBlockers (siehe chooseBlockersByEffect). */
     private transient boolean selectingBlockers;
+    /** Signaturen der Stapelobjekte, auf die schon gepasst wurde; gilt fuer {@link #passedSigsKey} (Zug/Schritt) */
+    private transient Set<String> passedSigs;
+    private transient String passedSigsKey;
+    /** passt gerade ohne nachzudenken (GameHost zeigt dann kein "denkt ...") - nur auf dem Spiel-Thread gelesen */
+    private transient boolean quickPassing;
+    /** in diesem priority()-Aufruf wirklich etwas getan (Nicht-Mana-Faehigkeit, Zauber, Land) */
+    private transient boolean acted;
 
     public MageLiteBot(String name, RangeOfInfluence range, TempoSettings tempo) {
         super(name, range, tempo.preset().skill);
@@ -67,18 +83,87 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
                 && isGameUnderControl()
                 && !getId().equals(game.getActivePlayerId())
                 && game.getStack().isEmpty()) {
-            game.getState().setPriorityPlayerId(getId());
-            game.firePriorityEvent(getId());
             actionCache.clear();
-            pass(game);
-            return false;
+            return quickPass(game);
         }
 
-        boolean acted = super.priority(game);
+        String sig = null;
+        if (tempo.fastStack() && isGameUnderControl()) {
+            Set<String> passed = passedSigs(game);
+            sig = StackSig.top(game);
+            if (sig != null && passed.contains(sig)) {
+                return quickPass(game);
+            }
+            if (!hasNonManaAction(game)) {
+                if (sig != null) {
+                    passed.add(sig);
+                }
+                return quickPass(game);
+            }
+        }
+
+        acted = false;
+        boolean result = super.priority(game);
         if (acted) {
             afterAction(game, tempo.actionDelayMs());
+        } else if (sig != null) {
+            passedSigs(game).add(sig);
         }
-        return acted;
+        return result;
+    }
+
+    /** Passt ohne Suche (wie ComputerPlayer7 bei UPKEEP/DRAW). */
+    private boolean quickPass(Game game) {
+        quickPassing = true;
+        try {
+            game.getState().setPriorityPlayerId(getId());
+            game.firePriorityEvent(getId());
+            pass(game);
+        } finally {
+            quickPassing = false;
+        }
+        return false;
+    }
+
+    /** Merkliste fuer den aktuellen Stapel; leer, sobald der Stapel leer ist oder Zug/Schritt wechselt. */
+    private Set<String> passedSigs(Game game) {
+        String key = game.getTurnNum() + "/" + game.getTurnStepType();
+        if (passedSigs == null) {
+            passedSigs = new HashSet<>();
+        }
+        if (game.getStack().isEmpty() || !key.equals(passedSigsKey)) {
+            passedSigs.clear();
+            passedSigsKey = key;
+        }
+        return passedSigs;
+    }
+
+    /** Kann der Bot gerade irgendetwas ausser Mana-Faehigkeiten tun? Im Zweifel ja (dann wird normal gerechnet). */
+    private boolean hasNonManaAction(Game game) {
+        try {
+            for (ActivatedAbility a : getPlayable(game, true)) {
+                if (!(a instanceof ManaAbility)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (RuntimeException e) {
+            LOG.warn(getName() + ": Spielbarkeit nicht pruefbar - rechne normal: " + e);
+            return true;
+        }
+    }
+
+    public boolean isQuickPassing() {
+        return quickPassing;
+    }
+
+    @Override
+    public boolean activateAbility(ActivatedAbility ability, Game game) {
+        boolean ok = super.activateAbility(ability, game);
+        if (ok && !game.isSimulation() && !(ability instanceof ManaAbility)) {
+            acted = true;
+        }
+        return ok;
     }
 
     @Override

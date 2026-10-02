@@ -37,6 +37,8 @@ interface GameStore {
   tempo: Tempo
   objects: Map<UUID, Card>
   reveals: Reveal[]
+  /** Mehrfach-Angriff/-Block: per Shift+Klick markierte eigene Kreaturen */
+  marked: Set<UUID>
 
   connect: (gameId: UUID) => void
   disconnect: () => void
@@ -52,6 +54,11 @@ interface GameStore {
   setHover: (c: Card | null) => void
   dismissToast: (id: number) => void
   dismissReveal: (key: string) => void
+  /** markiert alle ids bzw. hebt die Markierung auf, wenn schon alle markiert sind */
+  toggleMarks: (ids: UUID[]) => void
+  clearMarks: () => void
+  /** alle Markierten greifen target an (Spieler/Planeswalker) bzw. blocken den Angreifer target */
+  combatMany: (target: UUID) => void
   reset: () => void
 }
 
@@ -119,10 +126,15 @@ export const useGame = create<GameStore>((set, get) => {
         for (const r of fresh) window.setTimeout(() => get().dismissReveal(r.key), REVEAL_MS)
         break
       }
-      case 'prompt':
-        set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null })
+      case 'prompt': {
+        // Markierungen gelten nur im Angriffs-/Blockmodus und nur fuer noch waehlbare Kreaturen
+        const keep = msg.kind === 'SELECT' && msg.mode === 'attackers' ? msg.possibleAttackers : msg.kind === 'SELECT' && msg.mode === 'blockers' ? msg.possibleBlockers : undefined
+        const marked = get().marked
+        const nextMarked = marked.size && keep ? new Set([...marked].filter((id) => keep.includes(id))) : marked.size ? new Set<UUID>() : marked
+        set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null, marked: nextMarked })
         if (msg.kind !== 'SELECT' || msg.mode !== 'priority') sounds.play('prompt')
         break
+      }
       case 'promptClosed':
         if (get().prompt?.id === msg.id) set({ prompt: null })
         break
@@ -210,11 +222,12 @@ export const useGame = create<GameStore>((set, get) => {
     tempo: 'NORMAL',
     objects: new Map(),
     reveals: [],
+    marked: new Set(),
 
     connect: (gameId) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map() })
+      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set() })
       open(gameId)
     },
     disconnect: () => {
@@ -257,9 +270,28 @@ export const useGame = create<GameStore>((set, get) => {
     setHover: (c) => set({ hover: c }),
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
     dismissReveal: (key) => set({ reveals: get().reveals.filter((r) => r.key !== key) }),
+    toggleMarks: (ids) => {
+      const marked = new Set(get().marked)
+      const all = ids.every((id) => marked.has(id))
+      for (const id of ids) {
+        if (all) marked.delete(id)
+        else marked.add(id)
+      }
+      set({ marked })
+    },
+    clearMarks: () => {
+      if (get().marked.size) set({ marked: new Set() })
+    },
+    combatMany: (target) => {
+      const p = get().prompt
+      const ids = [...get().marked]
+      if (!p || ids.length === 0 || get().answeredPromptId === p.id) return
+      set({ answeredPromptId: p.id, marked: new Set() })
+      send({ t: 'combat', ids, target })
+    },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [] })
+      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set() })
     },
   }
 })

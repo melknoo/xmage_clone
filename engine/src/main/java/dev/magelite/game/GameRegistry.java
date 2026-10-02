@@ -24,7 +24,13 @@ public final class GameRegistry {
         this.rewardHook = hook;
     }
 
-    public synchronized GameHost start(GameSetup setup, java.util.function.Consumer<GameHost> onFinished) throws Exception {
+    public GameHost start(GameSetup setup, java.util.function.Consumer<GameHost> onFinished) throws Exception {
+        return start(setup, onFinished, null);
+    }
+
+    /** @param beforeStart laeuft nach dem Aufbau, vor {@code game.start()} (z.B. Test-Szenario), darf null sein */
+    public synchronized GameHost start(GameSetup setup, java.util.function.Consumer<GameHost> onFinished,
+                                       java.util.function.Consumer<GameHost> beforeStart) throws Exception {
         // altes Spiel beenden (es gibt nur einen Tisch)
         for (GameHost old : games.values()) {
             if (old.isRunning()) {
@@ -38,6 +44,9 @@ public final class GameRegistry {
         host.setRewardHook(rewardHook);
         games.put(host.getId(), host);
         current = host;
+        if (beforeStart != null) {
+            beforeStart.accept(host);
+        }
         host.start();
         return host;
     }

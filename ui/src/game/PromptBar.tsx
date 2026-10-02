@@ -18,6 +18,8 @@ export function PromptBar({ inter }: { inter: Interaction }) {
   const objects = useGame((s) => s.objects)
   const answered = useGame((s) => s.answeredPromptId)
   const raw = useGame((s) => s.prompt)
+  const clearMarks = useGame((s) => s.clearMarks)
+  const marks = inter.marked.size
 
   const priority = p?.kind === 'SELECT' && p.mode === 'priority'
   const busy = raw && answered === raw.id
@@ -28,7 +30,16 @@ export function PromptBar({ inter }: { inter: Interaction }) {
         {p ? (
           <motion.div key={p.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="text-sm leading-snug text-ink-100">
             <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-gold-400 align-middle" />
-            <Rich segs={p.message} onObject={(id) => setHover(objects.get(id) ?? null)} />
+            {marks > 0 ? (
+              <span className="font-semibold text-arcane-400">
+                {marks} markiert – {inter.mode === 'attack' ? 'Gegner oder Planeswalker anklicken: alle greifen ihn an' : 'Angreifer anklicken: alle blocken ihn'}
+              </span>
+            ) : (
+              <Rich segs={p.message} onObject={(id) => setHover(objects.get(id) ?? null)} />
+            )}
+            {marks === 0 && (inter.mode === 'attack' || inter.mode === 'block') && (
+              <span className="ml-2 text-xs text-ink-400">Shift+Klick: mehrere markieren</span>
+            )}
             {p.secondMessage && (
               <div className="text-xs text-ink-300">
                 <Rich segs={p.secondMessage} />
@@ -60,6 +71,12 @@ export function PromptBar({ inter }: { inter: Interaction }) {
               <span className="kbd">{s.hotkey}</span>
             </button>
           ))}
+        {marks > 0 && (
+          <button className="btn-ghost !px-2.5 !py-1.5 !text-xs" onClick={clearMarks} title="Markierung aufheben (Esc)">
+            Markierung aufheben
+            <span className="kbd">Esc</span>
+          </button>
+        )}
         {buttons.map((b) => (
           <button key={b.label} className={`${BTN[b.kind]} min-w-[110px]`} onClick={b.run}>
             {b.label}

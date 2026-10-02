@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type MouseEvent } from 'react'
 import type { Highlight } from '../components/CardView'
 import type { Card, GameState, Prompt, UUID } from '../api/types'
 import { useGame } from '../store/game'
@@ -10,7 +10,13 @@ export interface Interaction {
   mode: Mode
   highlight: (id: UUID) => Highlight
   canClick: (id: UUID) => boolean
-  click: (id: UUID) => void
+  /**
+   * Klick auf ein Objekt. Im Angriffs-/Blockmodus markiert Shift+Klick die Kreatur (bzw. mit {@code group} den ganzen
+   * Stapel gleicher Karten); sind Kreaturen markiert, waehlt ein Klick auf ein Ziel den Mehrfach-Angriff/-Block.
+   */
+  click: (id: UUID, e?: MouseEvent, group?: UUID[]) => void
+  /** per Shift+Klick markierte Kreaturen (Mehrfach-Angriff/-Block) */
+  marked: Set<UUID>
   /** Spieler ist waehlbares Ziel (z.B. Angriffsziel, Zauberziel) */
   playerTargetable: (id: UUID) => boolean
   /** Karten-Auswahl ueber Modal (Bibliothek, Friedhof, Exil, aufgedeckte Karten ...) */
@@ -41,6 +47,9 @@ export function useInteraction(): Interaction {
   const state = useGame((s) => s.state)
   const objects = useGame((s) => s.objects)
   const answer = useGame((s) => s.answer)
+  const marked = useGame((s) => s.marked)
+  const toggleMarks = useGame((s) => s.toggleMarks)
+  const combatMany = useGame((s) => s.combatMany)
 
   return useMemo(() => {
     const active = prompt && answered !== prompt.id ? prompt : null
@@ -98,7 +107,28 @@ export function useInteraction(): Interaction {
       }
     }
 
+    // Mehrfach-Angriff/-Block: markierbar sind waehlbare Kreaturen, die noch nicht angreifen/blocken
+    const combatMode = mode === 'attack' || mode === 'block'
+    const possible = new Set(mode === 'attack' ? active?.possibleAttackers ?? [] : mode === 'block' ? active?.possibleBlockers ?? [] : [])
+    const markable = (id: UUID) => possible.has(id) && !attacking.has(id) && !blocking.has(id)
+    const marks = combatMode ? marked : new Set<UUID>()
+    // Ziele fuer die Markierten: Gegner und deren Planeswalker/Kaempfe (Angriff) bzw. angreifende Kreaturen (Block)
+    const markTargets = new Set<UUID>()
+    if (marks.size > 0 && state) {
+      if (mode === 'attack') {
+        for (const p of state.players) {
+          if (p.me || p.lost) continue
+          markTargets.add(p.id)
+          for (const c of p.battlefield) if (c.types?.includes('PLANESWALKER') || c.types?.includes('BATTLE')) markTargets.add(c.id)
+        }
+      } else {
+        attacking.forEach((a) => markTargets.add(a))
+      }
+    }
+
     const highlight = (id: UUID): Highlight => {
+      if (marks.has(id)) return 'chosen'
+      if (markTargets.has(id)) return 'target'
       if (attacking.has(id) && mode !== 'target') return 'attacking'
       if (blocking.has(id) && mode !== 'target') return 'blocking'
       if (!clickable.has(id)) return chosen.has(id) ? 'chosen' : 'none'
@@ -121,13 +151,23 @@ export function useInteraction(): Interaction {
       prompt: active,
       mode,
       highlight,
-      canClick: (id: UUID) => clickable.has(id),
-      click: (id: UUID) => {
+      canClick: (id: UUID) => clickable.has(id) || markTargets.has(id),
+      click: (id: UUID, e?: MouseEvent, group?: UUID[]) => {
+        if (combatMode && e?.shiftKey) {
+          const ids = (group ?? [id]).filter(markable)
+          if (ids.length) toggleMarks(ids)
+          return
+        }
+        if (markTargets.has(id)) {
+          combatMany(id)
+          return
+        }
         if (clickable.has(id)) answer({ uuid: id })
       },
-      playerTargetable: (id: UUID) => (mode === 'target' || mode === 'attack') && clickable.has(id),
+      playerTargetable: (id: UUID) => ((mode === 'target' || mode === 'attack') && clickable.has(id)) || markTargets.has(id),
       needsCardModal,
       modalCards,
+      marked: marks,
     }
-  }, [prompt, answered, state, objects, answer])
+  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany])
 }

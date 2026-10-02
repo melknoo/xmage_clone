@@ -1,6 +1,6 @@
 import { useLayoutEffect, useState } from 'react'
 import type { CombatGroup } from '../api/types'
-import { center, curve } from './overlayGeometry'
+import { center, curve, objCenter, type Point } from './overlayGeometry'
 
 interface Line {
   key: string
@@ -17,14 +17,22 @@ export function CombatOverlay({ combat, seq }: { combat: CombatGroup[]; seq: num
   useLayoutEffect(() => {
     const compute = () => {
       const out: Line[] = []
+      // zusammengefasste Karten (×N) teilen sich einen Mittelpunkt -> jeden Pfeil nur einmal zeichnen
+      const seen = new Set<string>()
+      const push = (key: string, a: Point, b: Point, kind: Line['kind']) => {
+        const k = `${kind}${Math.round(a.x)},${Math.round(a.y)}>${Math.round(b.x)},${Math.round(b.y)}`
+        if (seen.has(k)) return
+        seen.add(k)
+        out.push({ key, x1: a.x, y1: a.y, x2: b.x, y2: b.y, kind })
+      }
       for (const g of combat) {
-        const def = center(`[data-player="${g.defenderId}"] [data-life]`) ?? center(`[data-player="${g.defenderId}"]`) ?? center(`[data-obj="${g.defenderId}"]`)
+        const def = center(`[data-player="${g.defenderId}"] [data-life]`) ?? center(`[data-player="${g.defenderId}"]`) ?? objCenter(g.defenderId)
         for (const a of g.attackers) {
-          const from = center(`[data-obj="${a}"]`)
-          if (from && def) out.push({ key: `a${a}`, x1: from.x, y1: from.y, x2: def.x, y2: def.y, kind: 'attack' })
+          const from = objCenter(a)
+          if (from && def) push(`a${a}`, from, def, 'attack')
           for (const b of g.blockers) {
-            const bl = center(`[data-obj="${b}"]`)
-            if (bl && from) out.push({ key: `b${b}${a}`, x1: bl.x, y1: bl.y, x2: from.x, y2: from.y, kind: 'block' })
+            const bl = objCenter(b)
+            if (bl && from) push(`b${b}${a}`, bl, from, 'block')
           }
         }
       }

@@ -9,6 +9,7 @@ import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.game.GameSetup;
 import dev.magelite.game.TempoSettings;
+import dev.magelite.spike.Scenarios;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
@@ -182,8 +183,14 @@ public final class HttpServer {
         }
         TempoSettings.Preset tempo = TempoSettings.Preset.valueOf(body.path("tempo").asText("NORMAL").toUpperCase(Locale.ROOT));
         String name = body.path("playerName").asText("Du");
+        // Test-Situationen (z.B. lange Trigger-Ketten) nur in der Dev-Engine, nie im Release
+        String scenario = body.hasNonNull("scenario") ? body.get("scenario").asText() : null;
+        if (scenario != null && (config.token() != null || !Scenarios.exists(scenario))) {
+            throw new IllegalArgumentException("Szenario nicht erlaubt: " + scenario);
+        }
 
-        GameHost host = games.start(new GameSetup(name, humanDeck, bots, tempo, humanDeckId), onGameFinished);
+        GameHost host = games.start(new GameSetup(name, humanDeck, bots, tempo, humanDeckId), onGameFinished,
+                scenario == null ? null : h -> Scenarios.apply(scenario, h.getGame(), h.getHumanId()));
         onGameStarted.started(host, humanDeckId);
         ctx.json(Map.of("gameId", host.getId()));
     }
@@ -241,6 +248,14 @@ public final class HttpServer {
                 case "tempo" -> host.setTempo(TempoSettings.Preset.valueOf(m.path("preset").asText("NORMAL").toUpperCase(Locale.ROOT)));
                 case "autoPass" -> host.setAutoPass(m.path("on").asBoolean(true));
                 case "autoPay" -> host.autoPayNow();
+                case "combat" -> {
+                    List<UUID> ids = new ArrayList<>();
+                    m.path("ids").forEach(n -> ids.add(UUID.fromString(n.asText())));
+                    UUID target = m.hasNonNull("target") ? UUID.fromString(m.get("target").asText()) : null;
+                    if (!host.combat(ids, target)) {
+                        LOG.info("Mehrfach-Kampf abgelehnt (kein passender Prompt)");
+                    }
+                }
                 case "settings" -> {
                     if (m.has("autoPay")) {
                         host.setAutoPayDefault(m.get("autoPay").asBoolean(true));

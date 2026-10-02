@@ -14,6 +14,26 @@ const ZONES: Record<string, string> = {
   COMMAND: 'Kommandozone',
 }
 
+/** Gleiche Faehigkeiten (Name, Text, Controller, ohne Ziele), z.B. 100 Landfall-Trigger - werden zusammengefasst. */
+function sameAbility(a: Card, b: Card): boolean {
+  return (
+    a.kind === 'ability' &&
+    b.kind === 'ability' &&
+    a.name === b.name &&
+    a.controllerId === b.controllerId &&
+    (a.rules?.[0] ?? '') === (b.rules?.[0] ?? '') &&
+    !a.targetRefs?.length &&
+    !b.targetRefs?.length
+  )
+}
+
+interface StackRow {
+  card: Card
+  count: number
+  /** Position des ersten Objekts (1 = oberstes) */
+  pos: number
+}
+
 export function StackPanel({
   stack,
   players,
@@ -41,6 +61,15 @@ export function StackPanel({
     return p ? { name: p.me ? 'Du' : p.name, me: p.me } : null
   }
   const activeId = stack.some((c) => c.id === focusId) ? focusId : top?.id
+  // gleiche Objekte direkt unter dem obersten zaehlen, den Rest zu Zeilen mit ×N zusammenfassen
+  let topCount = top ? 1 : 0
+  while (top && topCount < stack.length && sameAbility(top, stack[topCount])) topCount++
+  const rows: StackRow[] = []
+  for (let i = topCount; i < stack.length; i++) {
+    const last = rows[rows.length - 1]
+    if (last && sameAbility(last.card, stack[i])) last.count++
+    else rows.push({ card: stack[i], count: 1, pos: i + 1 })
+  }
 
   return (
     <AnimatePresence>
@@ -100,10 +129,13 @@ export function StackPanel({
                     <RulesText text={top.rules[0]} />
                   </div>
                 )}
+                {topCount > 1 && (
+                  <div className="mt-1 inline-block rounded bg-gold-400/20 px-1.5 text-[11px] font-semibold text-gold-300">+{topCount - 1} gleiche darunter</div>
+                )}
               </div>
             </motion.div>
             {/* darunter liegende Objekte kompakt */}
-            {stack.slice(1).map((c, i) => (
+            {rows.map(({ card: c, count, pos }) => (
               <motion.div
                 key={c.id}
                 data-stack={c.id}
@@ -113,10 +145,13 @@ export function StackPanel({
                 className={`flex items-start gap-2 rounded-xl bg-ink-950/50 p-1.5 ${c.id === activeId ? 'ring-1 ring-gold-400/40' : ''}`}
                 onMouseEnter={() => onFocus?.(c.id)}
               >
-                <span className="w-4 shrink-0 pt-0.5 text-center text-[11px] font-bold tabular-nums text-ink-400">{i + 2}</span>
+                <span className="w-4 shrink-0 pt-0.5 text-center text-[11px] font-bold tabular-nums text-ink-400">{pos}</span>
                 <CardView card={c} size="sm" anchor={false} highlight={inter.highlight(c.id)} onHover={onHover} onClick={() => inter.click(c.id)} />
                 <div className="min-w-0 flex-1 text-[11px] leading-snug">
-                  <div className="truncate font-semibold text-ink-100">{c.name}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-semibold text-ink-100">{c.name}</span>
+                    {count > 1 && <span className="shrink-0 rounded bg-gold-400/20 px-1 font-bold text-gold-300">×{count}</span>}
+                  </div>
                   <Origin c={c} who={who(c.controllerId)} />
                   {c.targetRefs && c.targetRefs.length > 0 && <TargetChips refs={c.targetRefs} onHover={onHover} />}
                   {c.kind === 'ability' && c.rules?.[0] && (

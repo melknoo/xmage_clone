@@ -25,13 +25,16 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -164,6 +167,16 @@ public final class GameHost {
     private volatile Consumer<GameHost> onFinished;
     private volatile java.util.function.BiFunction<GameHost, Messages.GameOver, Object> rewardHook;
     private volatile boolean humanConceded;
+    /**
+     * Stapelobjekte, auf die ich schon gepasst habe ({@link StackSig}); gleiche danach automatisch passen.
+     * Wird geleert, sobald der Stapel leer ist, und mit F3.
+     */
+    private final Set<String> passedSigs = ConcurrentHashMap.newKeySet();
+    /** Signatur des obersten Stapelobjekts zum offenen Prioritaets-Prompt {@link #promptSigId} */
+    private volatile String promptSig;
+    private volatile long promptSigId;
+    /** laufender Mehrfach-Angriff/-Block (Game-Thread, gestartet vom WS-Thread) */
+    private volatile CombatMacro macro;
     // Auto-Bezahlen (Game-Thread)
     private volatile boolean autoPayDefault = true;
     private boolean autoPayActive;
@@ -409,9 +422,63 @@ public final class GameHost {
         if (p == null || p.id != promptId || !openPrompt.compareAndSet(p, null)) {
             return false;
         }
+        macro = null;
+        String sig = promptSig;
+        if (sig != null && promptSigId == promptId && Boolean.FALSE.equals(r.bool())) {
+            // gepasst -> gleiche Stapelobjekte laufen ab jetzt automatisch durch
+            passedSigs.add(sig);
+        }
         emit(new Messages.PromptClosed(promptId));
         dispatch(target -> apply(target, r));
         return true;
+    }
+
+    /**
+     * Mehrfach-Angriff/-Block: {@code ids} greifen {@code target} an (Angriffs-Prompt) bzw. blocken den Angreifer
+     * {@code target} (Block-Prompt). Die Folge-Prompts beantwortet {@link #continueMacro}.
+     */
+    public boolean combat(List<UUID> ids, UUID target) {
+        PromptDto p = openPrompt.get();
+        if (p == null) {
+            return false;
+        }
+        boolean attack = "attackers".equals(p.mode);
+        if (!"SELECT".equals(p.kind) || target == null || ids == null || (!attack && !"blockers".equals(p.mode))) {
+            emit(p); // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen
+            return false;
+        }
+        List<UUID> possible = attack ? p.possibleAttackers : p.possibleBlockers;
+        Set<UUID> busy = inCombat(lastState, attack);
+        Deque<UUID> queue = new ArrayDeque<>();
+        for (UUID id : new LinkedHashSet<>(ids)) {
+            if (possible != null && possible.contains(id) && !busy.contains(id)) {
+                queue.add(id);
+            }
+        }
+        UUID first = queue.poll();
+        if (first == null || !openPrompt.compareAndSet(p, null)) {
+            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
+            if (openPrompt.get() == p) {
+                emit(p);
+            }
+            return false;
+        }
+        CombatMacro m = new CombatMacro(p.mode, queue, target);
+        m.current = first;
+        macro = m;
+        emit(new Messages.PromptClosed(p.id));
+        dispatch(t -> apply(t, Response.ofUuid(first)));
+        return true;
+    }
+
+    private static Set<UUID> inCombat(StateDto s, boolean attackers) {
+        Set<UUID> out = new HashSet<>();
+        if (s != null && s.combat != null) {
+            for (var g : s.combat) {
+                out.addAll(attackers ? g.attackers() : g.blockers());
+            }
+        }
+        return out;
     }
 
     public boolean action(String actionName, Object data) {
@@ -423,6 +490,9 @@ public final class GameHost {
         }
         if (!ALLOWED_ACTIONS.contains(action)) {
             return false;
+        }
+        if (action == PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS) {
+            passedSigs.clear();
         }
         boolean closesPrompt = action.name().startsWith("PASS_PRIORITY_UNTIL") || action == PlayerAction.CONCEDE;
         PromptDto p = openPrompt.get();
@@ -510,6 +580,9 @@ public final class GameHost {
             }
             UUID controller = player.getTurnControlledBy();
             if (!humanId.equals(controller)) {
+                if (player instanceof MageLiteBot bot && bot.isQuickPassing()) {
+                    return; // passt ohne nachzudenken: kein "denkt", kein State
+                }
                 // Bots feuern SELECT bei jeder Prioritaet -> "denkt"-Signal (nur wenn der Bot wirklich rechnet)
                 boolean realThink = player.getId().equals(game.getActivePlayerId()) || !game.getStack().isEmpty()
                         || !tempo.fastOpponentTurns();
@@ -531,28 +604,104 @@ public final class GameHost {
                 return;
             }
 
+            CombatMacro m = macro;
+            if (m != null && continueMacro(m, prompt)) {
+                return;
+            }
+
             if (handleAutoPay(prompt)) {
                 return;
             }
 
             boolean priorityPrompt = "SELECT".equals(prompt.kind) && "priority".equals(prompt.mode);
-            StateDto state = sendState(true);
-
-            if (autoPass && priorityPrompt && state.actions != null && state.actions.isEmpty()) {
-                // nichts spielbar (ausser Mana) -> automatisch passen
-                prompt.id = promptSeq.incrementAndGet();
-                openPrompt.set(prompt);
-                respondInternal(prompt.id, Response.ofBool(false));
+            String sig = priorityPrompt ? StackSig.top(game) : null;
+            if (sig != null && passedSigs.contains(sig)) {
+                // auf ein gleiches Stapelobjekt schon gepasst -> wieder passen (ohne vollen State)
+                onUpdate();
+                answerInternally(prompt, Response.ofBool(false));
                 return;
             }
+            GameViewMapper.Playable playable = null;
+            if (priorityPrompt) {
+                playable = GameViewMapper.playable(game, human);
+                if (autoPass && !playable.hasActions()) {
+                    // nichts spielbar (ausser Mana) -> automatisch passen; State nur gedrosselt
+                    onUpdate();
+                    answerInternally(prompt, Response.ofBool(false));
+                    return;
+                }
+            }
+            StateDto state = sendState(true, playable);
 
             prompt.id = promptSeq.incrementAndGet();
             prompt.stateSeq = state.seq;
+            promptSig = sig;
+            promptSigId = prompt.id;
             openPrompt.set(prompt);
             emit(prompt);
         } catch (Throwable e) {
             LOG.error("QueryEvent " + event.getQueryType() + " fehlgeschlagen", e);
         }
+    }
+
+    /** Mehrfach-Angriff/-Block: Warteschlange der markierten Kreaturen und gemeinsames Ziel. */
+    private static final class CombatMacro {
+        final String mode;
+        final Deque<UUID> queue;
+        final UUID target;
+        /** zuletzt angeklickte Kreatur (wartet ggf. auf die Zielabfrage) */
+        UUID current;
+
+        CombatMacro(String mode, Deque<UUID> queue, UUID target) {
+            this.mode = mode;
+            this.queue = queue;
+            this.target = target;
+        }
+    }
+
+    /**
+     * Game-Thread: beantwortet die Prompts eines Mehrfach-Angriffs/-Blocks selbst.
+     * <ul>
+     *   <li>{@code SELECT} im gleichen Modus: naechste markierte Kreatur anklicken (bereits angreifende/blockende
+     *       ueberspringen - ein erneuter Klick wuerde sie bei XMage wieder entfernen). Keine mehr: normaler Prompt.</li>
+     *   <li>{@code PICK_TARGET} (Verteidiger bzw. Angreifer zum Blocken): das gemeinsame Ziel, falls waehlbar.</li>
+     *   <li>Alles andere (Kosten, Ziel nicht waehlbar ...): abbrechen und den Prompt normal zeigen. Nie mit "Abbrechen"
+     *       antworten - bei Pflicht-Zielen fragt XMage dann endlos neu.</li>
+     * </ul>
+     *
+     * @return true, wenn der Prompt beantwortet wurde
+     */
+    private boolean continueMacro(CombatMacro m, PromptDto prompt) {
+        boolean attack = "attackers".equals(m.mode);
+        if ("SELECT".equals(prompt.kind) && m.mode.equals(prompt.mode)) {
+            List<UUID> possibleList = attack ? prompt.possibleAttackers : prompt.possibleBlockers;
+            Set<UUID> possible = possibleList == null ? Set.of() : new HashSet<>(possibleList);
+            Set<UUID> busy = new HashSet<>(attack ? game.getCombat().getAttackers() : game.getCombat().getBlockers());
+            UUID next;
+            do {
+                next = m.queue.poll();
+            } while (next != null && (!possible.contains(next) || busy.contains(next)));
+            if (next == null) {
+                macro = null;
+                return false; // fertig -> normaler Prompt (Angriff bestaetigen)
+            }
+            m.current = next;
+            onUpdate();
+            answerInternally(prompt, Response.ofUuid(next));
+            return true;
+        }
+        if ("PICK_TARGET".equals(prompt.kind) && m.current != null && prompt.targets != null && prompt.targets.contains(m.target)) {
+            m.current = null;
+            onUpdate();
+            answerInternally(prompt, Response.ofUuid(m.target));
+            return true;
+        }
+        macro = null;
+        LOG.info("Mehrfach-" + (attack ? "Angriff" : "Block") + " angehalten bei " + prompt.kind + ": " + prompt.messageText);
+        emit(new Messages.Toast("info", RichText.parse(attack
+                ? "Mehrfach-Angriff angehalten – bitte hier selbst entscheiden."
+                : "Mehrfach-Block angehalten – bitte hier selbst entscheiden.")));
+        return false;
     }
 
     /** Auto-Antwort ohne promptClosed-Nachricht an den Client. */
@@ -713,6 +862,9 @@ public final class GameHost {
 
 
     private void onUpdate() {
+        if (!passedSigs.isEmpty() && game.getStack().isEmpty()) {
+            passedSigs.clear();
+        }
         long now = System.currentTimeMillis();
         if (now - lastStateAt >= STATE_MIN_INTERVAL_MS) {
             sendState(false);
@@ -728,8 +880,12 @@ public final class GameHost {
     }
 
     private StateDto sendState(boolean withPlayable) {
+        return sendState(withPlayable, null);
+    }
+
+    private StateDto sendState(boolean withPlayable, GameViewMapper.Playable playable) {
         trackEliminations();
-        StateDto s = GameViewMapper.map(game, humanId, stateSeq.incrementAndGet(), withPlayable, thinking, deckNames);
+        StateDto s = GameViewMapper.map(game, humanId, stateSeq.incrementAndGet(), withPlayable, playable, thinking, deckNames);
         lastState = s;
         lastStateAt = System.currentTimeMillis();
         stateDirty = false;

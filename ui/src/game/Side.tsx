@@ -83,6 +83,8 @@ interface Line {
   key: number
   entry: LogEntry
   plain: string
+  /** Vergleichsschluessel ohne Objekt-Kuerzel, damit "creates a Scute Swarm [998] token" x112 eine Zeile wird */
+  same: string
   count: number
 }
 
@@ -96,6 +98,8 @@ interface TurnGroup {
 function plainOf(e: LogEntry): string {
   return e.rich.map((r) => r.text ?? (r.br ? ' ' : '')).join('').trim()
 }
+
+const OBJ_TAG = /\s*\[[0-9a-f]{3,}\]/gi
 
 export function LogPanel({ filter }: { filter: LogFilter }) {
   const log = useGame((s) => s.log)
@@ -140,9 +144,10 @@ export function LogPanel({ filter }: { filter: LogFilter }) {
       g.total++
       const plain = plainOf(entry)
       if (filter === 'important' && ROUTINE.some((r) => r.test(plain))) return
+      const same = plain.replace(OBJ_TAG, '')
       const last = g.lines[g.lines.length - 1]
-      if (last && last.plain === plain) last.count++
-      else g.lines.push({ key: i, entry, plain, count: 1 })
+      if (last && last.same === same) last.count++
+      else g.lines.push({ key: i, entry, plain, same, count: 1 })
     })
     return out
   }, [log, filter])

@@ -70,6 +70,10 @@ export function RulesText({ text }: { text: string }) {
     .replace(/<\/?(i|b|font|span|div|p)[^>]*>/gi, '')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&mdash;/g, '—')
+    .replace(/&ndash;/g, '–')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -97,7 +101,8 @@ export function Rich({ segs, onObject }: { segs?: RichSeg[]; onObject?: (id: str
           return (
             <span
               key={i}
-              data-obj={s.obj}
+              // nicht data-obj: das ist der Anker fuer Pfeile auf dem Tisch
+              data-ref={s.obj}
               className="font-semibold text-amber-200 underline decoration-amber-200/30 underline-offset-2 hover:decoration-amber-200 cursor-help"
               onMouseEnter={() => onObject?.(s.obj!)}
             >

@@ -31,12 +31,29 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   Stapel ist der größte Geschwindigkeitsgewinn; in den Presets Bedacht/Max abgeschaltet.
 - **Tempo-Presets** (`TempoSettings.Preset`):
 
-  | Preset | skill | Denkzeit | fastOpponentTurns | Aktions-/Kampf-Pause |
-  |---|---|---|---|---|
-  | BLITZ | 1 | 2 s | an | 0 / 150 ms |
-  | NORMAL | 2 | 4 s | an | 350 / 500 ms |
-  | BEDACHT | 5 | 8 s | aus | 500 / 700 ms |
-  | MAX | 7 | 15 s | aus | 600 / 800 ms |
+  | Preset | skill | Denkzeit | fastOpponentTurns | fastStack | Aktions-/Kampf-Pause |
+  |---|---|---|---|---|---|
+  | BLITZ | 1 | 2 s | an | an | 0 / 150 ms |
+  | NORMAL | 2 | 4 s | an | an | 350 / 500 ms |
+  | BEDACHT | 5 | 8 s | aus | aus | 500 / 700 ms |
+  | MAX | 7 | 15 s | aus | aus | 600 / 800 ms |
+
+  Die Aktionspause gibt es nur nach echten Aktionen (Zauber, Fähigkeit, Land), nicht nach bloßem Passen.
+- **`fastStack` (Blitz/Normal, vom Nutzer so festgelegt):** Nach jedem aufgelösten Stapelobjekt bekommt jeder Bot
+  Priorität, und `ComputerPlayer7` sucht in Main-/Kampfschritten **immer**. Bei 112 Scute-Swarm-Triggern lief jede
+  Suche ins Zeitlimit: 3 Bots × 2 s pro Trigger. Darum gilt:
+  - Ein Bot ohne Nicht-Mana-Aktion passt sofort. Das Ergebnis ist identisch, nur die Suche entfällt.
+  - Hat er auf ein Stapelobjekt gepasst, passt er auf gleiche sofort wieder. Gleich heißt laut `StackSig`:
+    gleicher Controller, Quellname, Regeltext und gleiche Ziele, nur Fähigkeiten. Die Liste gilt bis zum leeren
+    Stapel bzw. Schrittwechsel.
+  - In Bedacht/Max rechnen die Bots bei Ketten weiter pro Objekt.
+- **Gleiche Trigger beim Menschen:** Hat der Mensch auf ein Stapelobjekt gepasst, passt die Engine auf gleiche
+  (`StackSig`) automatisch weiter, in allen Tempo-Stufen und auch bei „Passen manuell“. Ein anderes Objekt hält
+  wieder an. F3 und ein leerer Stapel leeren die Liste.
+- **Mehrfach-Angriff/-Block:** Shift+Klick markiert Kreaturen. Klickt man danach ein Ziel an, schickt der Client
+  `{t:"combat", ids, target}`. Die Engine klickt die Kreaturen nacheinander selbst an und beantwortet die
+  Zielabfragen (`GameHost.continueMacro`). Bei allem Unerwarteten (Kosten, Ziel nicht wählbar) bricht sie ab und
+  zeigt den Prompt. Sie antwortet nie mit „Abbrechen“, weil XMage bei Pflicht-Zielen sonst endlos neu fragt.
 
 - **Auto-Passen**: Prioritäts-Prompt ohne Nicht-Mana-Aktion → Engine antwortet selbst „passen“. Dazu Stopps nur in
   eigenen Hauptphasen, bei Angriffen/Blocks und neuen Stapelobjekten, Auto-Pass nach eigenem Zauber

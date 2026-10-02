@@ -18,12 +18,17 @@ export function curve(a: Point, b: Point): string {
   return `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`
 }
 
+/** Mittelpunkt eines Objekts auf dem Feld; zusammengefasste Karten (×N) ueber den Stapel, der sie enthaelt. */
+export function objCenter(id: string): Point | null {
+  return center(`[data-obj="${id}"]`) ?? center(`[data-objs~="${id}"]`)
+}
+
 /** Mittelpunkt eines Spielers (Lebensanzeige bevorzugt) oder eines Objekts auf Feld/Stapel. */
 export function anchorOf(id: string): Point | null {
   return (
     center(`[data-player="${id}"] [data-life]`) ??
     center(`[data-player="${id}"]`) ??
-    center(`[data-obj="${id}"]`) ??
+    objCenter(id) ??
     center(`[data-stack="${id}"]`)
   )
 }

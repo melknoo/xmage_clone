@@ -37,7 +37,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --verbose --dumpJson=datei
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --verbose --dumpJson=datei --scenario=swarm
+ * <p>
+ * {@code --scenario=swarm}: lange Trigger-Ketten (siehe {@link Scenarios}). Der Test-Spieler spielt dann nur Laender,
+ * passt sonst und misst, wie lange jede Kette auf dem Stapel braucht. Beim ersten Angriff greift er per
+ * Mehrfach-Angriff ({@code GameHost.combat}) mit allen Kreaturen einen Gegner an und prueft das Ergebnis.
  */
 public final class HumanSpike {
 
@@ -50,6 +54,10 @@ public final class HumanSpike {
         long seed = Long.parseLong(opt.getOrDefault("seed", String.valueOf(System.nanoTime())));
         boolean verbose = opt.containsKey("verbose");
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
+        String scenario = opt.get("scenario");
+        if (scenario != null && !Scenarios.exists(scenario)) {
+            throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
+        }
 
         Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
@@ -73,7 +81,7 @@ public final class HumanSpike {
                     break;
                 }
             }
-            boolean ok = runGame(g, decks, preset, turnCap, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"));
+            boolean ok = runGame(g, decks, preset, turnCap, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario);
             if (!ok) {
                 failures++;
             }
@@ -83,7 +91,7 @@ public final class HumanSpike {
     }
 
     private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, Random rnd,
-                                   boolean verbose, String dumpJson) throws Exception {
+                                   boolean verbose, String dumpJson, String scenario) throws Exception {
         GameSetup setup = new GameSetup("Tester", decks.get(0), decks.subList(1, 4), preset, null);
         GameHost host = GameHost.create(setup);
         host.getTempo().setActionDelayMs(0);
@@ -93,6 +101,9 @@ public final class HumanSpike {
         go.stopOnTurn = turnCap;
         go.stopAtStep = PhaseStep.UPKEEP;
         host.getGame().setGameOptions(go);
+        if (scenario != null) {
+            Scenarios.apply(scenario, host.getGame(), host.getHumanId());
+        }
 
         out("Spiel %d: Ich=%s vs %s", nr, decks.get(0).name(), decks.subList(1, 4).stream().map(LoadedDeck::name).toList());
 
@@ -126,7 +137,8 @@ public final class HumanSpike {
             inbox.add(msg);
         });
 
-        Driver driver = new Driver(host, rnd, verbose);
+        Driver driver = new Driver(host, rnd, verbose, scenario != null);
+        ChainMeter chains = new ChainMeter();
         host.start();
         long t0 = System.currentTimeMillis();
         boolean stalled = false;
@@ -148,6 +160,7 @@ public final class HumanSpike {
             if (msg instanceof StateDto s) {
                 driver.state = s;
                 turnOrder.accept(s);
+                chains.accept(s);
             } else if (msg instanceof PromptDto p) {
                 driver.handle(p);
             } else if (msg instanceof Messages.GameOver g) {
@@ -174,15 +187,64 @@ public final class HumanSpike {
         }
         out("  Aktionen: Laender=%d Zauber/Faehigkeiten=%d Angriffe=%d Mana-Klicks=%d Passes=%d",
                 driver.lands, driver.casts, driver.attacks, driver.manaClicks, driver.passes);
+        if (driver.landsOnly) {
+            out("  Mehrfach-Angriff: %s", driver.macroResult == null ? "NICHT GETESTET" : driver.macroResult);
+        }
         if (recovered.get() > 0) {
             out("  Verlorene Antworten neu zugestellt (XMage-Race): %d", recovered.get());
         }
+        chains.report();
         out("  Sitzordnung (UI): %s", turnOrder.seats);
         out("  Zugfolge: %s", turnOrder.sequence);
         if (turnOrder.errors > 0) {
             out("  FEHLER: Zugfolge weicht %dx von der Sitzordnung ab", turnOrder.errors);
         }
-        return !stalled && over != null && over.error() == null && turnOrder.errors == 0;
+        boolean macroOk = !driver.landsOnly || (driver.macroResult != null && driver.macroResult.startsWith("OK"));
+        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk;
+    }
+
+    /**
+     * Misst Trigger-Ketten im State-Strom: vom ersten State mit mindestens {@code MIN} Stapelobjekten bis der
+     * Stapel wieder leer ist.
+     */
+    private static final class ChainMeter {
+        static final int MIN = 5;
+        final List<String> lines = new ArrayList<>();
+        long startedAt;
+        int max;
+        int turn;
+
+        void accept(StateDto s) {
+            int n = s.stack == null ? 0 : s.stack.size();
+            long now = System.currentTimeMillis();
+            if (startedAt == 0) {
+                if (n >= MIN) {
+                    startedAt = now;
+                    max = n;
+                    turn = s.turn;
+                }
+                return;
+            }
+            max = Math.max(max, n);
+            if (n == 0) {
+                long ms = now - startedAt;
+                String line = String.format(Locale.ROOT, "Trigger-Kette Zug %d: %d Objekte in %.1f s (%.0f ms/Objekt)",
+                        turn, max, ms / 1000.0, ms / (double) max);
+                lines.add(line);
+                out("  %s", line);
+                startedAt = 0;
+            }
+        }
+
+        void report() {
+            if (startedAt != 0) {
+                out("  Trigger-Kette Zug %d: NICHT FERTIG nach %.1f s (max %d Objekte)", turn,
+                        (System.currentTimeMillis() - startedAt) / 1000.0, max);
+            }
+            for (String l : lines) {
+                out("  %s", l);
+            }
+        }
     }
 
     /**
@@ -246,6 +308,8 @@ public final class HumanSpike {
         final GameHost host;
         final Random rnd;
         final boolean verbose;
+        /** Szenario-Modus: nur Laender spielen, sonst passen, nicht angreifen */
+        final boolean landsOnly;
         volatile StateDto state;
         PromptDto lastPrompt;
         final Map<String, Integer> kinds = new HashMap<>();
@@ -255,14 +319,22 @@ public final class HumanSpike {
         String stepKey = "";
         int actionsThisStep;
         int lands, casts, attacks, manaClicks, passes;
+        /** Mehrfach-Angriff (Szenario): angefragte Angreifer, Ziel, Ergebnis */
+        List<UUID> macroIds;
+        UUID macroDefender;
+        String macroResult;
 
-        Driver(GameHost host, Random rnd, boolean verbose) {
+        Driver(GameHost host, Random rnd, boolean verbose, boolean landsOnly) {
             this.host = host;
             this.rnd = rnd;
             this.verbose = verbose;
+            this.landsOnly = landsOnly;
         }
 
         void handle(PromptDto p) {
+            if (landsOnly && "SELECT".equals(p.kind) && "attackers".equals(p.mode) && macroAttack(p)) {
+                return;
+            }
             lastPrompt = p;
             kinds.merge(p.kind + (p.mode != null ? "/" + p.mode : ""), 1, Integer::sum);
             String repeatKey = p.kind + "|" + p.messageText + "|" + (state == null ? 0 : state.turn);
@@ -287,7 +359,7 @@ public final class HumanSpike {
                     return GameHost.Response.ofBool(rep < 3 && rnd.nextInt(4) != 0);
                 case "SELECT":
                     if ("attackers".equals(p.mode)) {
-                        return attackers(p, s);
+                        return landsOnly ? GameHost.Response.ofBool(true) : attackers(p, s);
                     }
                     if ("blockers".equals(p.mode)) {
                         return GameHost.Response.ofBool(true);
@@ -342,6 +414,45 @@ public final class HumanSpike {
             }
         }
 
+        /**
+         * Szenario: erster Angriffs-Prompt -> alle moeglichen Angreifer per Mehrfach-Angriff auf einen Gegner;
+         * zweiter Angriffs-Prompt (nach dem Makro) -> pruefen und bestaetigen.
+         */
+        boolean macroAttack(PromptDto p) {
+            StateDto s = state;
+            if (macroIds == null) {
+                if (p.possibleAttackers == null || p.possibleAttackers.isEmpty() || s == null) {
+                    return false;
+                }
+                macroDefender = s.players.stream().filter(pl -> !pl.me && !pl.lost).map(pl -> pl.id).findFirst().orElse(null);
+                macroIds = new ArrayList<>(p.possibleAttackers);
+                lastPrompt = p;
+                if (!host.combat(macroIds, macroDefender)) {
+                    macroResult = "FEHLER: combat() abgelehnt";
+                    host.respond(p.id, GameHost.Response.ofBool(true));
+                }
+                return true;
+            }
+            if (macroResult == null) {
+                int ok = 0;
+                for (var g : s.combat) {
+                    if (g.defenderId().equals(macroDefender)) {
+                        for (UUID a : g.attackers()) {
+                            if (macroIds.contains(a)) {
+                                ok++;
+                            }
+                        }
+                    }
+                }
+                macroResult = (ok == macroIds.size() ? "OK " : "FEHLER ") + ok + "/" + macroIds.size() + " greifen an";
+                attacks += ok;
+                lastPrompt = p;
+                host.respond(p.id, GameHost.Response.ofBool(true));
+                return true;
+            }
+            return false;
+        }
+
         GameHost.Response priority(StateDto s) {
             if (s == null || s.actions == null || s.actions.isEmpty()) {
                 passes++;
@@ -358,6 +469,16 @@ public final class HumanSpike {
             }
             actionsThisStep++;
             Set<UUID> actions = new HashSet<>(s.actions);
+            if (landsOnly) {
+                for (CardDto c : s.hand) {
+                    if (actions.contains(c.id) && c.types != null && c.types.contains("LAND")) {
+                        lands++;
+                        return GameHost.Response.ofUuid(c.id);
+                    }
+                }
+                passes++;
+                return GameHost.Response.ofBool(false);
+            }
             // zuerst Land aus der Hand, dann Zauber aus der Hand, dann irgendwas
             for (CardDto c : s.hand) {
                 if (actions.contains(c.id) && c.types != null && c.types.contains("LAND")) {

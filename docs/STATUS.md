@@ -53,6 +53,30 @@ Fallback auf manuelles Klicken.
   `localStorage` `magelite.autoPass`, per WS `settings.autoPass` an die Engine). Aus = Prioritäts-Prompt an den
   Stopps auch ohne spielbare Aktion, damit das Tempo nichts verrät. Nur `tsc` geprüft (kein Java/Display hier).
 
+- 2026-10-02: **Trigger-Ketten schneller.** Ursache war die KI: Nach jedem aufgelösten Stapelobjekt rechnete jeder
+  Bot eine Minimax-Suche bis ins Zeitlimit. Bei 112 Scute-Swarm-Triggern waren das ~6 s pro Trigger, ein Zug dauerte
+  ~13 min.
+  - Neu `fastStack` (Blitz/Normal): Ohne Spielbares passen die Bots sofort; auf gleiche Stapelobjekte (`StackSig`)
+    nur einmal nachdenken.
+  - Die Bot-Pause kommt nur noch nach echten Aktionen.
+  - Der Mensch passt automatisch weiter auf gleiche Trigger, nachdem er einmal gepasst hat (alle Stufen).
+  - Auto-Passen baut keinen vollen State mehr.
+  - Gemessen mit `humanSpike --scenario=swarm` (Blitz): 16 Trigger **99,7 s → 6,5 s**. Davon entfällt der Großteil
+    auf das erste Nachdenken der Bots, die im Szenario Bolt/Mogg Fanatic haben. Eine Kette mit 29–30 Triggern
+    braucht 0,7–1,5 s (25–50 ms/Trigger). Normal: 31 Trigger in 1,8 s.
+- 2026-10-02: **Große Boards:**
+  - Eigene gleiche Permanents werden gestapelt (×N), auch angreifend/blockend nach Ziel gruppiert. Pfeile finden
+    zusammengefasste Karten über `data-objs`.
+  - Im Stapel werden gleiche Fähigkeiten zusammengefasst („+N gleiche darunter“, ×N).
+  - Im Verlauf werden gleiche Zeilen ohne Objekt-Kürzel zusammengefasst.
+  - **Mehrfach-Angriff/-Block:** Shift+Klick markiert Kreaturen oder einen ganzen Stapel; ein Klick aufs Ziel
+    lässt alle angreifen bzw. blocken (WS `combat`). Esc hebt die Markierung auf.
+  - Bugfix: Verlaufs-Links hatten `data-obj` und konnten Pfeile auf den Verlauf umlenken (jetzt `data-ref`).
+  - `&mdash;` u. a. im Regeltext wird dekodiert.
+  - Geprüft: `test` 8/8, `humanSpike` 2/2 ohne STALL, `blockerSpike` 2/2, Szenario Blitz/Normal mit Mehrfach-Angriff
+    16/16 bzw. 15/15, `tsc`, Screenshots (`steps-swarm.json`, `steps-autoplay.json`).
+  - Nicht visuell geprüft: Mehrfach-**Block**; nur der Engine-Pfad ist identisch zum Angriff.
+
 ## Offene Punkte (priorisiert)
 
 0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,
@@ -65,7 +89,8 @@ Fallback auf manuelles Klicken.
 2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `HumanSettings`), Auto-Passen, Auto-Mana,
    Lautstärke, Bild-Cache leeren.
 3. **Bedien-Komfort**
-   - Angreifen per Drag & Drop auf einen Gegner, „Alle angreifen“ mit Zielwahl (geplante Makros/`AutoAnswerQueue`).
+   - Angreifen per Drag & Drop auf einen Gegner. Mehrere auf ein Ziel geht schon: Shift+Klick + Ziel
+     (`GameHost.combat`).
    - „Immer Ja/Nein“ für wiederkehrende Fragen (`REQUEST_AUTO_ANSWER_*`, UI fehlt; Engine erlaubt die Actions).
    - Trigger-Reihenfolge merken (`TRIGGER_AUTO_ORDER_*`, UI fehlt).
    - Animationen (Karte fliegt aufs Feld, Schaden), Sounds aus `vendor/xmage/sounds` statt Synth-Töne.
@@ -82,6 +107,10 @@ Fallback auf manuelles Klicken.
 ## Bekannte Probleme / Grenzen
 
 - XMage-KI ist eher passiv und bei 40+ Permanents langsam (Log: „AI player thinks too long“).
+- In **Bedacht/Max** ist `fastStack` aus (Nutzerwunsch): Bei langen Trigger-Ketten rechnet dort jeder Bot weiter pro
+  Stapelobjekt bis zur Denkzeit. „Nichts spielbar → sofort passen“ wäre auch dort verlustfrei.
+- Mehrfach-Angriff markiert immer den ganzen Stapel (×N); nur einen Teil davon zu markieren geht noch nicht
+  (einzelne Karten per normalem Klick).
 - In Blitz/Normal (`fastOpponentTurns`) reagieren Bots in fremden Zügen nur, wenn etwas auf dem Stapel liegt
   (keine Flash-Kreaturen/Removal am Zugende). Blocken funktioniert unabhängig davon.
 - UI-Dialoge `CHOOSE_PILE`, `MULTI_AMOUNT` und die Mulligan-Unten-Auswahl sind nur über die Spikes getestet,

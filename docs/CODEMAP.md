@@ -31,8 +31,9 @@ Electron (desktop/src/main.cjs)
 | `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität) |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
 | `game/AutoPayer` | Planer fürs automatische Bezahlen von Manakosten |
-| `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, Denkzeit, Pausen, Hooks) |
+| `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, `fastStack`, Denkzeit, Pausen nur nach echten Aktionen, Hooks) |
 | `game/TempoSettings` | Presets BLITZ/NORMAL/BEDACHT/MAX, live änderbar (von allen Bot-Kopien geteilt) |
+| `game/StackSig` | Signatur des obersten Stapelobjekts (Controller, Quellname, Regeltext, Ziele): „gleiche Trigger“ erkennen |
 | `game/MageLiteMatch` | Commander-FFA-Match (40 Leben, London-Mulligan, Rollback aus) |
 | `game/TrackingLondonMulligan` | zählt Mulligans; Copy kopiert private Felder per Reflection |
 | `game/HumanSettings` | `UserData` für den Menschen (Stopps, Auto-Pass nach Zauber …) |
@@ -52,7 +53,8 @@ Electron (desktop/src/main.cjs)
 | `stats/GameRecorder` | Spiel einmalig speichern, XP/Meisterschaft vergeben → `Reward` im `gameOver` |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
-| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung) |
+| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung; `--scenario=swarm` misst Trigger-Ketten und testet den Mehrfach-Angriff) |
+| `spike/Scenarios` | Test-Situationen per `game.cheat` vor dem Start (`swarm`: 16 Scute Swarm + Länder); in der Engine nur mit `--dev` (`POST /api/games {scenario}`) |
 
 ### Lebenszyklus eines Prompts
 
@@ -60,10 +62,11 @@ Electron (desktop/src/main.cjs)
    `waitForResponse`.
 2. `GameHost.onQueryEvent` läuft auf dem Spiel-Thread. Gehört das Event zu einem Bot (`SELECT`), wird nur
    „denkt …“ gemeldet. Gehört es dem Menschen:
-   - Erst wird versucht, es automatisch zu beantworten (`handleAutoPay`).
-   - Dann wird ein State **mit** spielbaren Objekten gesendet.
-   - Bei einem Prioritäts-Prompt ohne Aktion wird automatisch gepasst.
-   - Sonst geht `PromptDto` mit neuer `id` an den Client.
+   - Läuft ein Mehrfach-Angriff/-Block, beantwortet ihn `continueMacro`.
+   - Dann wird versucht, ihn automatisch zu beantworten (`handleAutoPay`).
+   - Prioritäts-Prompt: Hat der Mensch auf ein gleiches Stapelobjekt (`StackSig`) schon gepasst oder hat er keine
+     Nicht-Mana-Aktion (Auto-Passen), wird automatisch gepasst. Dann geht nur ein gedrosselter State raus.
+   - Sonst kommt ein State **mit** spielbaren Objekten und danach `PromptDto` mit neuer `id`.
 3. Der Client schickt `{t:"respond", id, uuid|bool|int|str|mana}`. `GameHost.respond` prüft die `id`, sendet
    `promptClosed` und führt `setResponse*` auf dem CALL-Thread aus – erst, wenn der Spiel-Thread wirklich in
    `HumanPlayer.waitForResponse` → `wait()` steckt (XMage-Race, sonst geht `notifyAll()` verloren). Der Wachhund
@@ -96,6 +99,7 @@ Client → Server:
 | `action` | `PlayerAction` aus Whitelist (F-Tasten `PASS_PRIORITY_*`, `HOLD_PRIORITY`, `TRIGGER_AUTO_ORDER_*`, `REQUEST_AUTO_ANSWER_*`, `MANA_AUTO_PAYMENT_*`, `USE_FIRST_MANA_ABILITY_*`, `CONCEDE`) |
 | `tempo` | `preset` |
 | `autoPay` | offenen Mana-Prompt automatisch bezahlen |
+| `combat` | Mehrfach-Angriff/-Block beim offenen Angriffs-/Block-Prompt: `ids` (markierte Kreaturen), `target` (Spieler/Planeswalker bzw. Angreifer) |
 | `settings` | `autoPay`, `autoPass` (bool) |
 | `autoPass` | `on` |
 | `leave` | Spiel beenden (alle geben auf) |
@@ -158,6 +162,7 @@ first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: 
 | `src/engine.cjs` | Pfade (Dev vs. gepackt), Java finden (`resources/jre`, `JAVA_HOME`, PATH), READY-Handshake (Timeout 10 min) |
 | `src/preload.cjs` | `window.magelite = {port, token, fetchText}` |
 | `tools/shot.cjs`, `tools/autoplay.js`, `tools/steps-autoplay.json` | Screenshot-Automatisierung + In-Page-Autopilot für UI-Tests |
+| `tools/steps-swarm.json`, `tools/swarm-pilot.js` | Szenario `swarm` (Dev-Engine): Stapel ×N, Shift-Markieren, Mehrfach-Angriff, Pfeile, Verlauf ×N |
 
 ## Skripte (`scripts/`)
 

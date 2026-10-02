@@ -284,6 +284,12 @@ function useHotkeys(inter: Interaction) {
         return
       }
       if (e.key === 'Escape') {
+        if (useGame.getState().marked.size > 0) {
+          // erst die Mehrfach-Markierung aufheben
+          e.preventDefault()
+          useGame.getState().clearMarks()
+          return
+        }
         const esc = buttons.find((b) => b.hotkey === 'Esc')
         if (esc) {
           e.preventDefault()

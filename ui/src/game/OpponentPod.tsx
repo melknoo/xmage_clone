@@ -53,7 +53,7 @@ export const OpponentPod = memo(function OpponentPod({
           <CommandZone objects={p.command} inter={inter} onHover={onHover} size="xs" />
         </div>
         <div className="min-h-0 min-w-0 flex-1">
-          <Battlefield perms={p.battlefield} size="sm" inter={inter} onHover={onHover} compact landsFirst />
+          <Battlefield perms={p.battlefield} size="sm" inter={inter} onHover={onHover} landsFirst />
         </div>
       </div>
     </div>
