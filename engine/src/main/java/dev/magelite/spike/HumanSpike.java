@@ -125,6 +125,7 @@ public final class HumanSpike {
         long t0 = System.currentTimeMillis();
         boolean stalled = false;
         Messages.GameOver over = null;
+        TurnOrderCheck turnOrder = new TurnOrderCheck();
         while (over == null) {
             Object msg = inbox.poll(500, TimeUnit.MILLISECONDS);
             if (msg == null) {
@@ -140,6 +141,7 @@ public final class HumanSpike {
             }
             if (msg instanceof StateDto s) {
                 driver.state = s;
+                turnOrder.accept(s);
             } else if (msg instanceof PromptDto p) {
                 driver.handle(p);
             } else if (msg instanceof Messages.GameOver g) {
@@ -166,7 +168,66 @@ public final class HumanSpike {
         }
         out("  Aktionen: Laender=%d Zauber/Faehigkeiten=%d Angriffe=%d Mana-Klicks=%d Passes=%d",
                 driver.lands, driver.casts, driver.attacks, driver.manaClicks, driver.passes);
-        return !stalled && over != null && over.error() == null;
+        out("  Sitzordnung (UI): %s", turnOrder.seats);
+        out("  Zugfolge: %s", turnOrder.sequence);
+        if (turnOrder.errors > 0) {
+            out("  FEHLER: Zugfolge weicht %dx von der Sitzordnung ab", turnOrder.errors);
+        }
+        return !stalled && over != null && over.error() == null && turnOrder.errors == 0;
+    }
+
+    /**
+     * Prueft, ob die Zuege in der Reihenfolge von {@code state.players} (= Sitzordnung der UI) kommen.
+     * Zusatzzuege (gleicher Spieler nochmal) gelten nicht als Fehler.
+     */
+    private static final class TurnOrderCheck {
+        final List<String> sequence = new ArrayList<>();
+        List<String> seats = List.of();
+        int errors;
+        private int lastTurn;
+        private UUID lastActive;
+
+        void accept(StateDto s) {
+            if (s.activePlayerId == null || s.turn == lastTurn || s.players == null) {
+                return;
+            }
+            seats = s.players.stream().map(p -> p.name).toList();
+            if (lastActive != null && !s.activePlayerId.equals(lastActive)) {
+                UUID expected = nextAlive(s.players, lastActive);
+                if (expected != null && !expected.equals(s.activePlayerId)) {
+                    errors++;
+                    out("!!! Zugfolge: Zug %d erwartet %s, aktiv ist %s", s.turn, name(s.players, expected), name(s.players, s.activePlayerId));
+                }
+            }
+            if (sequence.size() < 16) {
+                sequence.add(s.turn + ":" + name(s.players, s.activePlayerId));
+            }
+            lastTurn = s.turn;
+            lastActive = s.activePlayerId;
+        }
+
+        private static UUID nextAlive(List<PlayerDto> players, UUID from) {
+            int idx = -1;
+            for (int i = 0; i < players.size(); i++) {
+                if (players.get(i).id.equals(from)) {
+                    idx = i;
+                }
+            }
+            if (idx < 0) {
+                return null;
+            }
+            for (int k = 1; k <= players.size(); k++) {
+                PlayerDto p = players.get((idx + k) % players.size());
+                if (!p.lost) {
+                    return p.id;
+                }
+            }
+            return null;
+        }
+
+        private static String name(List<PlayerDto> players, UUID id) {
+            return players.stream().filter(p -> p.id.equals(id)).map(p -> p.name).findFirst().orElse(String.valueOf(id));
+        }
     }
 
     /**

@@ -2,6 +2,10 @@
 
 Kontext für Claude Code (und Menschen), um nach einem frischen `git clone` nahtlos weiterzuarbeiten.
 
+If my request is ambiguous, ask one clarifying question before doing anything.
+
+When reporting information to me, be extremely concise and sacrifice grammar for sake of concision.
+
 ## Projekt in einem Satz
 
 Desktop-App, um eigene **Commander-Decks gegen 3 KI-Bots zu goldfishen**. Regeln, Karten und KI kommen

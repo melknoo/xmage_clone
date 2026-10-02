@@ -77,14 +77,16 @@ export interface CardViewProps {
   dim?: boolean
   className?: string
   count?: number
+  /** getappt-Zustand ignorieren (z.B. grosse Vorschau) */
+  upright?: boolean
 }
 
-export const CardView = memo(function CardView({ card, size = 'md', highlight = 'none', onClick, onHover, showBack, dim, className = '', count }: CardViewProps) {
+export const CardView = memo(function CardView({ card, size = 'md', highlight = 'none', onClick, onHover, showBack, dim, className = '', count, upright }: CardViewProps) {
   const perm = card as Permanent
   const url = card.faceDown ? null : cardImageUrl(card, { back: showBack || card.transformed, size: size === 'zoom' || size === 'xl' ? 'normal' : 'normal' })
   const [loaded, setLoaded] = useState(false)
   const [broken, setBroken] = useState(url ? failed.has(url) : true)
-  const tapped = perm.tapped
+  const tapped = perm.tapped && !upright
   const glow =
     highlight === 'playable'
       ? 'glow-playable'

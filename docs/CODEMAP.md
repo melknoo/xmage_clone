@@ -37,9 +37,9 @@ Electron (desktop/src/main.cjs)
 | `game/TrackingLondonMulligan` | zählt Mulligans; Copy kopiert private Felder per Reflection |
 | `game/HumanSettings` | `UserData` für den Menschen (Stopps, Auto-Pass nach Zauber …) |
 | `game/GameRegistry`, `GameSetup` | aktuelles Spiel verwalten; Spielkonfiguration (inkl. `humanDeckId`) |
-| `view/GameViewMapper` | XMage-`GameView` + Spielzustand → `StateDto` (Sitzordnung, Commander-Steuer/-Schaden, spielbare Objekte) |
+| `view/GameViewMapper` | XMage-`GameView` + Spielzustand → `StateDto` (Sitzordnung = echte Zugfolge aus `PlayerList`, Commander-Steuer/-Schaden, spielbare Objekte, Stapel-Ziele mit Namen) |
 | `view/RichText` | XMage-HTML (Log/Prompts) → sichere Segmente `{text}`/`{obj,text,color}`/`{br}` |
-| `view/dto/*` | DTOs: `StateDto`, `PlayerDto`, `CardDto`, `PermanentDto`, `CommandDto`, `PromptDto`, `Messages` |
+| `view/dto/*` | DTOs: `StateDto`, `PlayerDto`, `CardDto`, `PermanentDto`, `CommandDto`, `PromptDto`, `TargetRefDto`, `Messages` |
 | `deck/TextDeckParser` | Textlisten parsen, Karten über `CardRepository` auflösen, Commander erkennen, `.dck` erzeugen |
 | `deck/DeckUrlImporter` | Archidekt/Moxfield-JSON → Textliste (409 „blocked“ → UI lädt über Electron) |
 | `deck/DeckRoutes` | `/api/decks/parse`, `/api/decks/url`, `POST /api/decks`, `/api/decks/{id}/text` |
@@ -52,7 +52,7 @@ Electron (desktop/src/main.cjs)
 | `stats/GameRecorder` | Spiel einmalig speichern, XP/Meisterschaft vergeben → `Reward` im `gameOver` |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
-| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler) |
+| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung) |
 
 ### Lebenszyklus eines Prompts
 
@@ -76,7 +76,7 @@ Server → Client:
 | `t` | Inhalt |
 |---|---|
 | `hello` | `gameId`, `myPlayerId`, `seats[]` (Name, Deck, Commander), `tempo` |
-| `state` | `StateDto`: `seq`, `turn`, `phase`, `step`, `activePlayerId`, `players[]` (beginnend mit mir), `hand`, `stack`, `combat`, `revealed`, `lookedAt`, `playable` (id → Anzahl), `actions` (ids mit Nicht-Mana-Aktion) |
+| `state` | `StateDto`: `seq`, `turn`, `phase`, `step`, `activePlayerId`, `players[]` (beginnend mit mir, dann in Zugfolge), `hand`, `stack` (mit `targets`/`targetRefs`), `combat`, `revealed`, `lookedAt`, `playable` (id → Anzahl), `actions` (ids mit Nicht-Mana-Aktion) |
 | `prompt` | `PromptDto`: `id`, `kind`, `message` (Segmente), `messageText`, Buttons, je nach Art `mode`/`possibleAttackers`/`targets`/`chosen`/`cards`/`choices`/`choice`/`min`/`max`/`items`/`pile1`/`pile2`/`mulligan`/`defenderPick` |
 | `promptClosed` | `id` |
 | `log` | `entries[]` mit `turn`, `kind` (INFO/STATUS), `rich` |
@@ -137,10 +137,11 @@ first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: 
 | `game/promptActions.ts` | Buttons pro Prompt-Art, F-Tasten-Belegung |
 | `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste, Dialoge (Auswahl, Menge, Stapel, Mulligan, Kartenwahl) |
 | `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen |
-| `game/CombatOverlay.tsx` | SVG-Pfeile (sucht Elemente über `data-obj` / `data-player` / `data-life`) |
+| `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
 | `game/Side.tsx` | Kartenvorschau, Spielverlauf, Toasts |
 | `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ |
-| `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, Marken, P/T, Glow) |
+| `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, `upright` für die Vorschau, Marken, P/T, Glow) |
+| `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar |
 | `lib/mana.tsx` | Mana-Symbole (mana-font), Regeltext/Rich-Text ohne `innerHTML` |
 | `lib/sounds.ts` | kurze WebAudio-Töne, Stummschaltung |
 | `index.css` | Tailwind-4-Theme (`ink`, `gold`, `arcane`, `blood`), Glows, `@utility btn*` |

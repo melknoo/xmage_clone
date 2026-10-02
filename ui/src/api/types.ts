@@ -7,6 +7,15 @@ export interface Counter {
   count: number
 }
 
+export interface TargetRef {
+  id: UUID
+  name: string
+  kind: 'player' | 'permanent' | 'spell' | 'card'
+  /** Zone bei kind=card, z.B. GRAVEYARD */
+  zone?: string
+  owner?: string
+}
+
 export interface Card {
   id: UUID
   name: string
@@ -32,6 +41,8 @@ export interface Card {
   transformed?: boolean
   back?: Card
   targets?: UUID[]
+  /** Ziele mit Namen (nur Stapelobjekte) */
+  targetRefs?: TargetRef[]
   kind?: 'spell' | 'ability'
   sourceId?: UUID
   controllerId?: UUID

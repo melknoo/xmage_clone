@@ -36,6 +36,8 @@ public class CardDto {
     public CardDto back;
     /** Ziele (bei Stack-Objekten) */
     public List<UUID> targets;
+    /** Ziele mit Namen (nur Stack-Objekte) */
+    public List<TargetRefDto> targetRefs;
     /** z.B. "ability" fuer Stack-Faehigkeiten */
     public String kind;
     public UUID sourceId;

@@ -9,6 +9,11 @@ import type { Interaction } from './interaction'
 export function PromptDialogs({ inter, onHover }: { inter: Interaction; onHover: (c: Card | null) => void }) {
   const p = inter.prompt
   if (!p) return null
+  // key: jeder neue Prompt startet wieder aufgeklappt
+  return <PromptDialog key={p.id} p={p} inter={inter} onHover={onHover} />
+}
+
+function PromptDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; onHover: (c: Card | null) => void }) {
   switch (p.kind) {
     case 'CHOOSE_ABILITY':
     case 'CHOOSE_MODE':
@@ -38,7 +43,7 @@ function Title({ p }: { p: Prompt }) {
 function ChoiceListDialog({ p }: { p: Prompt }) {
   const answer = useGame((s) => s.answer)
   return (
-    <Modal title={<Title p={p} />} onClose={() => answer({ bool: false })} closable={!p.required}>
+    <Modal minimizable title={<Title p={p} />} onClose={() => answer({ bool: false })} closable={!p.required}>
       <div className="flex flex-col gap-2">
         {(p.choices ?? []).map((c) => (
           <button key={c.id} className="rounded-xl bg-ink-800/80 px-4 py-3 text-left text-sm ring-1 ring-white/10 transition hover:bg-ink-700 hover:ring-gold-400/50" onClick={() => answer({ uuid: c.id })}>
@@ -63,6 +68,7 @@ function ChoiceDialog({ p }: { p: Prompt }) {
   const many = (ch?.items?.length ?? 0) > 12
   return (
     <Modal
+      minimizable
       title={ch?.message ?? <Title p={p} />}
       onClose={() => answer({ str: '' })}
       closable={!ch?.required}
@@ -101,7 +107,7 @@ function AmountDialog({ p }: { p: Prompt }) {
   const max = p.max ?? 0
   const [v, setV] = useState(min)
   return (
-    <Modal title={<Title p={p} />} closable={false} footer={<button className="btn-primary" onClick={() => answer({ int: v })}>OK ({v})</button>}>
+    <Modal minimizable title={<Title p={p} />} closable={false} footer={<button className="btn-primary" onClick={() => answer({ int: v })}>OK ({v})</button>}>
       <div className="flex items-center gap-4">
         <button className="btn-ghost" onClick={() => setV(Math.max(min, v - 1))}>−</button>
         <input type="range" min={min} max={Math.min(max, 1000)} value={v} onChange={(e) => setV(Number(e.target.value))} className="flex-1 accent-amber-400" />
@@ -122,6 +128,7 @@ function MultiAmountDialog({ p }: { p: Prompt }) {
   const ok = total >= (p.min ?? 0) && total <= (p.max ?? Infinity)
   return (
     <Modal
+      minimizable
       title={<Title p={p} />}
       closable={false}
       footer={
@@ -158,7 +165,7 @@ function MultiAmountDialog({ p }: { p: Prompt }) {
 function PileDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) => void }) {
   const answer = useGame((s) => s.answer)
   return (
-    <Modal title={<Title p={p} />} closable={false} wide>
+    <Modal minimizable title={<Title p={p} />} closable={false} wide>
       <div className="grid grid-cols-2 gap-6">
         {[p.pile1 ?? [], p.pile2 ?? []].map((pile, i) => (
           <div key={i} className="flex flex-col gap-3 rounded-xl bg-ink-950/40 p-3 ring-1 ring-white/10">
@@ -182,7 +189,7 @@ function MulliganDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) =
   const answer = useGame((s) => s.answer)
   const hand = useGame((s) => s.state?.hand ?? [])
   return (
-    <Modal title="Starthand" closable={false} wide>
+    <Modal minimizable title="Starthand" closable={false} wide>
       <div className="mb-4 text-sm text-ink-300">
         <Rich segs={p.message} />
       </div>
@@ -208,6 +215,7 @@ function CardPickDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; 
   const canFinish = !!p.rightBtn || !p.required
   return (
     <Modal
+      minimizable
       title={<Title p={p} />}
       closable={false}
       wide

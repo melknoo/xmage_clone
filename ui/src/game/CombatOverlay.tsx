@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState } from 'react'
 import type { CombatGroup } from '../api/types'
+import { center, curve } from './overlayGeometry'
 
 interface Line {
   key: string
@@ -8,13 +9,6 @@ interface Line {
   x2: number
   y2: number
   kind: 'attack' | 'block'
-}
-
-function center(sel: string): { x: number; y: number } | null {
-  const el = document.querySelector(sel)
-  if (!el) return null
-  const r = el.getBoundingClientRect()
-  return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
 }
 
 /** Pfeile Angreifer -> Verteidiger und Blocker -> Angreifer (SVG ueber dem Tisch). */
@@ -57,13 +51,11 @@ export function CombatOverlay({ combat, seq }: { combat: CombatGroup[]; seq: num
         </marker>
       </defs>
       {lines.map((l) => {
-        const mx = (l.x1 + l.x2) / 2
-        const my = (l.y1 + l.y2) / 2 - Math.abs(l.x2 - l.x1) * 0.15
         const color = l.kind === 'attack' ? '#ff6b6b' : '#5cb8ff'
         return (
           <path
             key={l.key}
-            d={`M ${l.x1} ${l.y1} Q ${mx} ${my} ${l.x2} ${l.y2}`}
+            d={curve({ x: l.x1, y: l.y1 }, { x: l.x2, y: l.y2 })}
             stroke={color}
             strokeWidth={3}
             strokeOpacity={0.85}

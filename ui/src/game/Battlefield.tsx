@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { Card, Permanent } from '../api/types'
 import { CardView, type CardSize } from '../components/CardView'
+import { useGame } from '../store/game'
 import type { Interaction } from './interaction'
 
 interface Group {
@@ -8,13 +9,13 @@ interface Group {
   cards: Permanent[]
 }
 
-/** Gleichartige Permanents (gleicher Name, gleicher Zustand, ohne Marken/Anlagen) zusammenfassen. */
-function group(perms: Permanent[], inter: Interaction, collapse: boolean): Group[] {
+/** Gleichartige Permanents (gleicher Name, gleicher Zustand, ohne Marken/Anlagen, kein Ziel) zusammenfassen. */
+function group(perms: Permanent[], inter: Interaction, collapse: boolean, targeted: Set<string>): Group[] {
   if (!collapse) return perms.map((p) => ({ key: p.id, cards: [p] }))
   const out: Group[] = []
   const index = new Map<string, Group>()
   for (const p of perms) {
-    const simple = !p.counters?.length && !p.attachments?.length && !p.attacking && !p.blocking && !p.damage
+    const simple = !p.counters?.length && !p.attachments?.length && !p.attacking && !p.blocking && !p.damage && !targeted.has(p.id)
     const key = simple ? `${p.name}|${p.tapped ? 1 : 0}|${p.sick ? 1 : 0}|${inter.highlight(p.id)}|${p.power ?? ''}/${p.toughness ?? ''}` : p.id
     const g = index.get(key)
     if (g && simple) {
@@ -35,10 +36,11 @@ interface RowProps {
   onHover: (c: Card | null) => void
   collapse: boolean
   attachmentsOf: Map<string, Permanent[]>
+  targeted: Set<string>
 }
 
-function Row({ perms, size, inter, onHover, collapse, attachmentsOf }: RowProps) {
-  const groups = group(perms, inter, collapse)
+function Row({ perms, size, inter, onHover, collapse, attachmentsOf, targeted }: RowProps) {
+  const groups = group(perms, inter, collapse, targeted)
   return (
     <div className="flex min-h-0 flex-wrap content-start items-end gap-x-1.5 gap-y-1">
       {groups.map((g) => {
@@ -79,6 +81,9 @@ export interface BattlefieldProps {
 }
 
 export const Battlefield = memo(function Battlefield({ perms, size, inter, onHover, compact, landsFirst }: BattlefieldProps) {
+  const stack = useGame((s) => s.state?.stack)
+  // Ziele von Stapelobjekten nicht zusammenfassen, damit der Zielpfeil sie findet
+  const targeted = useMemo(() => new Set((stack ?? []).flatMap((c) => c.targets ?? [])), [stack])
   const ids = new Set(perms.map((p) => p.id))
   const attachmentsOf = new Map<string, Permanent[]>()
   const attached = new Set<string>()
@@ -106,7 +111,7 @@ export const Battlefield = memo(function Battlefield({ perms, size, inter, onHov
     <div className="flex h-full min-h-0 flex-col gap-1.5 overflow-y-auto overflow-x-hidden scrollbar-thin p-1">
       {rows.map((r) =>
         r.perms.length > 0 ? (
-          <Row key={r.key} perms={r.perms} size={size} inter={inter} onHover={onHover} collapse={r.collapse} attachmentsOf={attachmentsOf} />
+          <Row key={r.key} perms={r.perms} size={size} inter={inter} onHover={onHover} collapse={r.collapse} attachmentsOf={attachmentsOf} targeted={targeted} />
         ) : null,
       )}
     </div>

@@ -8,8 +8,12 @@ import dev.magelite.view.dto.NamedCardsDto;
 import dev.magelite.view.dto.PermanentDto;
 import dev.magelite.view.dto.PlayerDto;
 import dev.magelite.view.dto.StateDto;
+import dev.magelite.view.dto.TargetRefDto;
 import mage.MageObject;
+import mage.abilities.Ability;
 import mage.abilities.ActivatedAbility;
+import mage.abilities.Mode;
+import mage.abilities.effects.Effect;
 import mage.abilities.mana.ManaAbility;
 import mage.ObjectColor;
 import mage.cards.Card;
@@ -19,7 +23,11 @@ import mage.constants.Zone;
 import mage.game.Game;
 import mage.game.permanent.Permanent;
 import mage.game.stack.Spell;
+import mage.game.stack.StackObject;
 import mage.players.Player;
+import mage.players.PlayerList;
+import mage.target.Target;
+import mage.target.targetpointer.TargetPointer;
 import mage.view.CardView;
 import mage.view.CardsView;
 import mage.view.CombatGroupView;
@@ -89,12 +97,7 @@ public final class GameViewMapper {
         }
         CommanderPlaysCountWatcher playsWatcher = game.getState().getWatcher(CommanderPlaysCountWatcher.class);
 
-        // Sitzordnung = Zugreihenfolge, beginnend mit mir; ausgeschiedene Spieler bleiben sichtbar
-        List<UUID> order = new ArrayList<>(game.getState().getPlayers().keySet());
-        int meIdx = order.indexOf(myId);
-        if (meIdx > 0) {
-            java.util.Collections.rotate(order, -meIdx);
-        }
+        List<UUID> order = seatOrder(game, myId);
         List<PlayerDto> players = new ArrayList<>();
         for (UUID pid : order) {
             PlayerView pv = views.get(pid);
@@ -114,6 +117,11 @@ public final class GameViewMapper {
             if (v instanceof StackAbilityView sav) {
                 d.kind = "ability";
                 CardView src = sav.getSourceCard();
+                if (d.name == null || d.name.isEmpty()) {
+                    // StackAbilityView hat keinen Anzeigenamen -> Name der Quelle
+                    String srcName = src == null ? null : emptyToNull(src.getDisplayName());
+                    d.name = srcName != null ? srcName : emptyToNull(sav.getName());
+                }
                 if (src != null) {
                     d.sourceId = src.getId();
                     d.set = src.getExpansionSetCode();
@@ -130,6 +138,10 @@ public final class GameViewMapper {
             MageObject obj = game.getObject(v.getId());
             if (obj != null) {
                 d.controllerId = game.getControllerId(v.getId());
+            }
+            d.targetRefs = targetRefs(game, v.getId(), d.targets, myId);
+            if (d.targets == null && d.targetRefs != null) {
+                d.targets = d.targetRefs.stream().map(t -> t.id).toList();
             }
             stack.add(d);
         }
@@ -157,6 +169,125 @@ public final class GameViewMapper {
             s.actions = pl.actions();
         }
         return s;
+    }
+
+    /**
+     * Sitzordnung = echte Zugreihenfolge, beginnend mit mir; ausgeschiedene Spieler bleiben sichtbar.
+     * Laeuft die {@code PlayerList} genauso durch wie {@code GameImpl.play()} (getNext, bzw. getPrevious bei
+     * umgekehrter Zugfolge). Die Reihenfolge von {@code getPlayers()} ist dazu genau umgekehrt.
+     */
+    static List<UUID> seatOrder(Game game, UUID myId) {
+        PlayerList list = game.getState().getPlayerList().copy();
+        List<UUID> order = new ArrayList<>(list.size());
+        if (list.isEmpty()) {
+            return order;
+        }
+        if (!list.setCurrent(myId)) {
+            list.setCurrent(list.get(0));
+        }
+        boolean reversed = game.isTurnOrderReversed();
+        UUID id = list.get();
+        for (int i = 0; i < list.size() && !order.contains(id); i++) {
+            order.add(id);
+            id = reversed ? list.getPrevious() : list.getNext();
+        }
+        return order;
+    }
+
+    /**
+     * Ziele eines Stapelobjekts mit Namen. Quelle sind die Ziele aus XMages {@code CardView}; fehlen sie,
+     * werden sie direkt aus den gewaehlten Modi (Targets + TargetPointer der Effekte) gelesen.
+     * Verdeckte Informationen anderer Spieler (Hand, Bibliothek, verdeckte Permanents) bleiben verdeckt.
+     */
+    private static List<TargetRefDto> targetRefs(Game game, UUID stackId, List<UUID> known, UUID myId) {
+        Set<UUID> ids = new LinkedHashSet<>();
+        if (known != null) {
+            ids.addAll(known);
+        }
+        if (ids.isEmpty()) {
+            try {
+                StackObject so = game.getStack().getStackObject(stackId);
+                Ability ability = so == null ? null : so.getStackAbility();
+                if (ability != null) {
+                    for (UUID modeId : ability.getModes().getSelectedModes()) {
+                        Mode mode = ability.getModes().get(modeId);
+                        if (mode == null) {
+                            continue;
+                        }
+                        for (Target t : mode.getTargets()) {
+                            if (t.isChosen(game)) {
+                                ids.addAll(t.getTargets());
+                            }
+                        }
+                        for (Effect e : mode.getEffects()) {
+                            TargetPointer tp = e.getTargetPointer();
+                            if (tp != null) {
+                                ids.addAll(tp.getTargets(game, ability));
+                            }
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // Ziele sind nur Anzeige - nie den State-Aufbau scheitern lassen
+            }
+        }
+        ids.remove(stackId);
+        if (ids.isEmpty()) {
+            return null;
+        }
+        List<TargetRefDto> out = new ArrayList<>(ids.size());
+        for (UUID id : ids) {
+            TargetRefDto t = targetRef(game, id, myId);
+            if (t != null) {
+                out.add(t);
+            }
+        }
+        return out.isEmpty() ? null : out;
+    }
+
+    private static TargetRefDto targetRef(Game game, UUID id, UUID myId) {
+        TargetRefDto t = new TargetRefDto();
+        t.id = id;
+        Player player = game.getPlayer(id);
+        if (player != null) {
+            t.kind = "player";
+            t.name = player.getName();
+            return t;
+        }
+        Permanent perm = game.getPermanent(id);
+        if (perm != null) {
+            t.kind = "permanent";
+            boolean hidden = perm.isFaceDown(game) && !myId.equals(perm.getControllerId());
+            t.name = hidden || perm.getName().isEmpty() ? "verdecktes Permanent" : perm.getName();
+            t.owner = playerName(game, perm.getControllerId());
+            return t;
+        }
+        StackObject so = game.getStack().getStackObject(id);
+        if (so != null) {
+            t.kind = "spell";
+            t.name = so.getName();
+            t.owner = playerName(game, so.getControllerId());
+            return t;
+        }
+        MageObject obj = game.getObject(id);
+        if (obj == null) {
+            return null;
+        }
+        t.kind = "card";
+        Zone zone = game.getState().getZone(id);
+        t.zone = zone == null ? null : zone.name();
+        UUID ownerId = obj instanceof Card c ? c.getOwnerId() : null;
+        t.owner = playerName(game, ownerId);
+        boolean secretZone = zone == Zone.HAND || zone == Zone.LIBRARY;
+        boolean faceDown = obj instanceof Card c && c.isFaceDown(game);
+        boolean mine = myId.equals(ownerId);
+        t.name = (faceDown || secretZone) && !mine ? "verdeckte Karte" : obj.getName();
+        return t;
+    }
+
+    private static String playerName(Game game, UUID playerId) {
+        Player p = playerId == null ? null : game.getPlayer(playerId);
+        return p == null ? null : p.getName();
     }
 
     /**

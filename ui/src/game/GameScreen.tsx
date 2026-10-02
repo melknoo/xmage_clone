@@ -17,6 +17,7 @@ import { PromptBar } from './PromptBar'
 import { PromptDialogs } from './PromptDialogs'
 import { LogPanel, Toasts, ZoomPanel } from './Side'
 import { StackPanel } from './StackPanel'
+import { TargetOverlay } from './TargetOverlay'
 
 const TEMPOS: { key: Tempo; label: string }[] = [
   { key: 'BLITZ', label: 'Blitz' },
@@ -34,6 +35,7 @@ export function GameScreen() {
   const gameOver = useGame((s) => s.gameOver)
   const inter = useInteraction()
   const [showLog, setShowLog] = useState(true)
+  const [stackFocus, setStackFocus] = useState<string | null>(null)
   const onHover = useCallback((c: Card | null) => setHover(c), [setHover])
 
   useHotkeys(inter)
@@ -67,7 +69,7 @@ export function GameScreen() {
         {/* Mitte: Stapel */}
         <div className="pointer-events-none relative flex shrink-0 justify-center">
           <div className="absolute bottom-0 left-1/2 z-20 max-h-[38vh] -translate-x-1/2">
-            <StackPanel stack={state.stack} players={state.players} inter={inter} onHover={onHover} />
+            <StackPanel stack={state.stack} players={state.players} inter={inter} onHover={onHover} focusId={stackFocus} onFocus={setStackFocus} />
           </div>
         </div>
         {/* Ich */}
@@ -94,6 +96,7 @@ export function GameScreen() {
 
       {me?.lost && !gameOver && <EliminatedBanner />}
       <CombatOverlay combat={state.combat} seq={state.seq} />
+      <TargetOverlay stack={state.stack} focusId={stackFocus} seq={state.seq} />
       <PromptDialogs inter={inter} onHover={onHover} />
       <Toasts />
       <AnimatePresence>{gameOver && <GameOverOverlay />}</AnimatePresence>

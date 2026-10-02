@@ -29,9 +29,15 @@ Fallback auf manuelles Klicken.
 - End-to-End: Spiel mit importiertem Deck bis zum natürlichen Ende → XP, Meisterschaft, Kartenstatistik gespeichert.
 - Frischer Klon: `scripts\build.ps1` läuft durch, App startet und baut die DB selbst auf.
 - UI visuell geprüft (Screenshots): Startseite, Deck-Auswahl, Mulligan, Spieltisch mit Kampf/Stapel/Log.
+- 2026-10-02 behoben: Zugfolge lief gegen die Sitzordnung (Mapper nahm `getPlayers()`, XMage spielt die `PlayerList`
+  andersherum ab); Vorschau getappter Karten war gedreht; Ziele von Zaubern/Fähigkeiten auf dem Stapel wurden nicht
+  angezeigt (jetzt Chips + Zielpfeil, `targetRefs`); Fähigkeiten auf dem Stapel hatten keinen Namen; Dialoge sind
+  minimierbar (Tab). `humanSpike` prüft seitdem Zugfolge = Sitzordnung: 9/9 Spiele korrekt.
 
 ## Offene Punkte (priorisiert)
 
+0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,
+   Zugang per Einladungscode, ein Konto pro Freund. Plan mit Etappen und Prüfschritten: `docs/ONLINE-PLAN.md`.
 1. **Installer / Verteilung (P5)**
    - `electron-builder` (portable EXE oder NSIS) mit `extraResources`: `engine/lib`, `ui/dist`, `vendor/xmage`
      (ohne DB), plus per `jlink` erzeugte Java-Laufzeit. Module laut jdeps mindestens: `java.base`, `java.desktop`,
@@ -66,6 +72,12 @@ Fallback auf manuelles Klicken.
 - Statistik: Spalte `game_card_stats.cast` zählt auch gespielte Länder (Anzeige „gespielt“).
 - Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
 - Es läuft immer nur **ein** Spiel; ein neues Spiel beendet das laufende (`GameRegistry`).
+- **Hänger durch verlorene Antwort (XMage-Race):** `HumanPlayer.waitForResponse` setzt `responseOpenedForAnswer = true`
+  *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau dazwischen, geht `notifyAll()` verloren
+  und das Spiel wartet ewig (Thread-Dump: GAME in `waitForResponse`, CALL untätig). `humanSpike` am 2026-10-02:
+  3 STALLs in 9 Spielen, gehäuft in Spielen mit vielen sofortigen Antworten (Mana-Pool-Rückfrage in Schleife).
+  Betrifft potenziell auch Auto-Passen. Idee: in `GameHost.dispatch` vor `setResponse*` kurz warten, bis der
+  Spiel-Thread `WAITING` ist (mit Timeout).
 - `desktop/tools/shot.cjs`: Das versteckte Fenster zeichnet manchmal verzögert – bei verdächtigen Bildern
   nochmal mit längerer Wartezeit aufnehmen.
 

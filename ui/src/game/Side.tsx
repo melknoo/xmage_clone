@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
-import type { Card, LogEntry } from '../api/types'
+import type { Card, LogEntry, Permanent } from '../api/types'
 import { CardView } from '../components/CardView'
 import { ManaCost, Rich, RulesText } from '../lib/mana'
 import { useGame } from '../store/game'
@@ -23,13 +23,14 @@ export function ZoomPanel({ card: hovered }: { card: Card | null }) {
           transition={{ duration: 0.12 }}
           className="pointer-events-none flex flex-col gap-2"
         >
-          <CardView card={card} size="zoom" showBack={back} />
+          <CardView card={card} size="zoom" showBack={back} upright />
           <div className="glass rounded-xl p-3 text-[12px] leading-snug">
             <div className="flex items-start justify-between gap-2">
               <div className="font-semibold text-ink-100">{card.name}</div>
               <ManaCost cost={card.manaCost} />
             </div>
             {card.typeLine && <div className="text-ink-300">{card.typeLine}</div>}
+            {(card as Permanent).tapped && <div className="mt-0.5 text-[11px] font-semibold text-ink-400">↷ getappt</div>}
             {card.rules?.map((r, i) => (
               <div key={i} className="mt-1 text-ink-200">
                 <RulesText text={r} />
