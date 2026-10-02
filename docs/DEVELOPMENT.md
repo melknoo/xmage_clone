@@ -138,7 +138,9 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1   # -> desktop\dist
 - Gepackte App: `resources/{engine/lib, ui, xmage, jre}`; `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst.
   Die Karten-DB wird nicht mitgeliefert, sondern beim ersten Start in `%APPDATA%\MageLite\engine\db` gebaut.
 - Installer: NSIS, pro Nutzer (kein Admin), Zielordner wählbar, Desktop-/Startmenü-Verknüpfung.
-- EXE ist **nicht signiert** → SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“.
+- Setup.exe ca. 320 MB; Ziel: Windows 10/11 x64, ≥ 8 GB RAM empfohlen (Engine `-Xmx3g`).
+- EXE ist **nicht signiert** → SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“. Signieren ginge über
+  Azure Trusted Signing oder ein OV-Zertifikat (kostenpflichtig), aktuell nicht geplant.
 - Fehlt der Laufzeit ein Modul: `NoClassDefFoundError`/`ClassNotFoundException` in `%APPDATA%\MageLite\desktop.log`
   → Modul in `$extraModules` ergänzen.
 - Bricht `electron-builder` beim Entpacken von `winCodeSign` mit „Cannot create symbolic link“ ab: Windows-

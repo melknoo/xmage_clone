@@ -13,7 +13,7 @@ Stand: 2026-10-02. Bitte nach jeder größeren Änderung aktualisieren.
 | P2 | Alle Prompt-Arten, Hotkeys, Kampfpfeile, Auto-Passen, Tempo, Electron-Shell | ✅ fertig, siehe offene Punkte |
 | P3 | Deck-Import (Text, Archidekt, Moxfield), Deck-Bibliothek, Scryfall-Bilder | ✅ fertig (Moxfield nur teilweise, s. u.) |
 | P4 | Statistik, Held/XP/Titel, Deck-Meisterschaft, Spielende-Screen | ✅ fertig |
-| P5 | Installer, gebündelte Java-Laufzeit, Startoptimierung, Feinschliff | 🟡 Installer gebaut (`scripts\package.ps1`), auf Windows noch nicht verifiziert; Rest offen |
+| P5 | Installer, gebündelte Java-Laufzeit, Startoptimierung, Feinschliff | 🟡 Installer fertig (`scripts\package.ps1`, auf Windows gebaut/installiert/gestartet); Startoptimierung, Feinschliff offen |
 
 Zusätzlich umgesetzt (nicht im Plan): **Auto-Mana** (`AutoPayer`): automatisches Bezahlen mit passenden Quellen,
 Fallback auf manuelles Klicken.
@@ -53,11 +53,11 @@ Fallback auf manuelles Klicken.
 
 0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,
    Zugang per Einladungscode, ein Konto pro Freund. Plan mit Etappen und Prüfschritten: `docs/ONLINE-PLAN.md`.
-1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe + jlink-JRE, Details
-   `docs/DEVELOPMENT.md` §7) ist umgesetzt, aber **noch nie auf Windows gelaufen** (entstanden unter Linux ohne
-   JDK/PowerShell; nur das Ressourcen-Layout per `electron-builder --linux dir` geprüft). Zu prüfen: Skript läuft
-   durch, Installation, Start ohne installiertes Java, erster DB-Aufbau, Spiel, Scryfall-Bilder (TLS),
-   Deinstallation. Offen: App-Icon (`desktop/build/icon.ico`), Code-Signatur.
+1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
+   `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
+   Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +
+   Scryfall-Bilder in der gepackten App, Deinstallation, App-Icon (`desktop/build/icon.ico`).
+   Code-Signatur bewusst weggelassen (SmartScreen-Hinweis reicht für private Weitergabe).
 2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `HumanSettings`), Auto-Passen, Auto-Mana,
    Lautstärke, Bild-Cache leeren.
 3. **Bedien-Komfort**
