@@ -49,6 +49,10 @@ Fallback auf manuelles Klicken.
   Courser-Testdeck). **Noch nicht visuell geprüft** (Stapel, Verlauf, 📚-Fenster): unter Linux ohne Display startet
   weder Electron noch Chrome headless mit HTTP-Seiten.
 
+- 2026-10-02: Schalter „⏩ Auto-Passen / Passen manuell“ in der Spielleiste (neben Auto-Mana, gespeichert in
+  `localStorage` `magelite.autoPass`, per WS `settings.autoPass` an die Engine). Aus = Prioritäts-Prompt an den
+  Stopps auch ohne spielbare Aktion, damit das Tempo nichts verrät. Nur `tsc` geprüft (kein Java/Display hier).
+
 ## Offene Punkte (priorisiert)
 
 0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,

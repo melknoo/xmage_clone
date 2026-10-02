@@ -46,6 +46,8 @@ interface GameStore {
   autoPay: () => void
   autoMana: boolean
   setAutoMana: (on: boolean) => void
+  autoPass: boolean
+  setAutoPass: (on: boolean) => void
   leave: () => void
   setHover: (c: Card | null) => void
   dismissToast: (id: number) => void
@@ -161,7 +163,7 @@ export const useGame = create<GameStore>((set, get) => {
     socket = ws
     ws.onopen = () => {
       set({ conn: 'open' })
-      send({ t: 'settings', autoPay: get().autoMana })
+      send({ t: 'settings', autoPay: get().autoMana, autoPass: get().autoPass })
       window.clearInterval(pingTimer)
       pingTimer = window.setInterval(() => send({ t: 'ping' }), 20000)
     }
@@ -244,6 +246,12 @@ export const useGame = create<GameStore>((set, get) => {
       saveBool('magelite.autoMana', on)
       set({ autoMana: on })
       send({ t: 'settings', autoPay: on })
+    },
+    autoPass: loadBool('magelite.autoPass', true),
+    setAutoPass: (on) => {
+      saveBool('magelite.autoPass', on)
+      set({ autoPass: on })
+      send({ t: 'settings', autoPass: on })
     },
     leave: () => send({ t: 'leave' }),
     setHover: (c) => set({ hover: c }),

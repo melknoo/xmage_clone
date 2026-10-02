@@ -161,6 +161,8 @@ function TopBar() {
   const [muted, setMuted] = useState(sounds.isMuted())
   const autoMana = useGame((s) => s.autoMana)
   const setAutoMana = useGame((s) => s.setAutoMana)
+  const autoPass = useGame((s) => s.autoPass)
+  const setAutoPass = useGame((s) => s.setAutoPass)
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 px-1">
@@ -182,6 +184,13 @@ function TopBar() {
           onClick={() => setAutoMana(!autoMana)}
         >
           {autoMana ? '⚡ Auto-Mana' : 'Mana manuell'}
+        </button>
+        <button
+          className={`btn-ghost !px-2 !py-1 !text-xs ${autoPass ? '!border-arcane-400/60 !text-arcane-400' : ''}`}
+          title="Automatisch passen, wenn nichts spielbar ist (aus = Gegner sieht nicht, ob du Optionen hast)"
+          onClick={() => setAutoPass(!autoPass)}
+        >
+          {autoPass ? '⏩ Auto-Passen' : 'Passen manuell'}
         </button>
         <button
           className="btn-ghost !px-2 !py-1 !text-xs"
