@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Card, PlayerState, Tempo } from '../api/types'
 import { me as meOf, opponents as oppsOf, useGame } from '../store/game'
 import { useNav } from '../store/nav'
+import { viewerOpen } from '../components/Modal'
 import { sounds } from '../lib/sounds'
 import { Battlefield } from './Battlefield'
 import { CombatOverlay } from './CombatOverlay'
@@ -15,7 +16,7 @@ import { CommandZone, CommanderDamage, LifeBadge, ManaPool, ZoneCounters, comman
 import { HOTKEY_ACTIONS, usePromptButtons } from './promptActions'
 import { PromptBar } from './PromptBar'
 import { PromptDialogs } from './PromptDialogs'
-import { LogPanel, Toasts, ZoomPanel } from './Side'
+import { LogPanel, RevealPopups, Toasts, ZoomPanel, type LogFilter } from './Side'
 import { StackPanel } from './StackPanel'
 import { TargetOverlay } from './TargetOverlay'
 
@@ -36,6 +37,7 @@ export function GameScreen() {
   const inter = useInteraction()
   const [showLog, setShowLog] = useState(true)
   const [stackFocus, setStackFocus] = useState<string | null>(null)
+  const [logFilter, setLogFilter] = useLogFilter()
   const onHover = useCallback((c: Card | null) => setHover(c), [setHover])
 
   useHotkeys(inter)
@@ -62,13 +64,13 @@ export function GameScreen() {
         <TopBar />
         {/* Gegner */}
         <div className="grid min-h-0 flex-[0.95] grid-cols-3 gap-2">
-          {[left, top, right].map((p) =>
-            p ? <OpponentPod key={p.id} p={p} inter={inter} onHover={onHover} thinking={thinking === p.id} /> : <div key={Math.random()} />,
+          {[left, top, right].map((p, i) =>
+            p ? <OpponentPod key={p.id} p={p} inter={inter} onHover={onHover} thinking={thinking === p.id} /> : <div key={`leer-${i}`} />,
           )}
         </div>
         {/* Mitte: Stapel */}
         <div className="pointer-events-none relative flex shrink-0 justify-center">
-          <div className="absolute bottom-0 left-1/2 z-20 max-h-[38vh] -translate-x-1/2">
+          <div className="absolute bottom-0 left-1/2 z-30 flex max-h-[48vh] -translate-x-1/2 flex-col items-center justify-end">
             <StackPanel stack={state.stack} players={state.players} inter={inter} onHover={onHover} focusId={stackFocus} onFocus={setStackFocus} />
           </div>
         </div>
@@ -83,12 +85,27 @@ export function GameScreen() {
           <ZoomPanel card={hover} />
         </div>
         <div className={`glass flex flex-col overflow-hidden rounded-xl ${showLog ? 'min-h-[180px] flex-1' : 'h-9'}`}>
-          <button className="flex shrink-0 items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wider text-ink-300 hover:text-ink-100" onClick={() => setShowLog(!showLog)}>
-            Spielverlauf <span>{showLog ? '▾' : '▸'}</span>
-          </button>
+          <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
+            <button className="flex flex-1 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-300 hover:text-ink-100" onClick={() => setShowLog(!showLog)}>
+              <span>{showLog ? '▾' : '▸'}</span> Spielverlauf
+            </button>
+            {showLog && (
+              <div className="flex items-center gap-0.5 rounded-md bg-ink-950/60 p-0.5 ring-1 ring-white/10" title="Routine (Ziehen, Zugbeginn …) ausblenden">
+                {(['important', 'all'] as const).map((f) => (
+                  <button
+                    key={f}
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${logFilter === f ? 'bg-ink-600 text-ink-100' : 'text-ink-400 hover:text-ink-200'}`}
+                    onClick={() => setLogFilter(f)}
+                  >
+                    {f === 'important' ? 'Wichtiges' : 'Alles'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {showLog && (
             <div className="min-h-0 flex-1">
-              <LogPanel />
+              <LogPanel filter={logFilter} />
             </div>
           )}
         </div>
@@ -98,6 +115,7 @@ export function GameScreen() {
       <CombatOverlay combat={state.combat} seq={state.seq} />
       <TargetOverlay stack={state.stack} focusId={stackFocus} seq={state.seq} />
       <PromptDialogs inter={inter} onHover={onHover} />
+      <RevealPopups />
       <Toasts />
       <AnimatePresence>{gameOver && <GameOverOverlay />}</AnimatePresence>
     </div>
@@ -247,6 +265,7 @@ function useHotkeys(inter: Interaction) {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      if (viewerOpen()) return
       if (e.key === ' ' || e.key === 'Enter' || e.key === 'F2') {
         const primary = buttons.find((b) => b.hotkey === 'Space') ?? buttons[0]
         if (primary) {
@@ -272,6 +291,25 @@ function useHotkeys(inter: Interaction) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [buttons, action])
+}
+
+function useLogFilter(): [LogFilter, (f: LogFilter) => void] {
+  const [f, setF] = useState<LogFilter>(() => {
+    try {
+      return localStorage.getItem('magelite.logFilter') === 'all' ? 'all' : 'important'
+    } catch {
+      return 'important'
+    }
+  })
+  const set = (v: LogFilter) => {
+    setF(v)
+    try {
+      localStorage.setItem('magelite.logFilter', v)
+    } catch {
+      /* egal */
+    }
+  }
+  return [f, set]
 }
 
 export function FadeIn({ children }: { children: React.ReactNode }) {

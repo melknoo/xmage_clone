@@ -103,6 +103,10 @@ export interface PlayerState {
   skips?: string[]
   thinking: boolean
   deckName?: string
+  /** oberste Bibliothekskarte, falls sichtbar */
+  topCard?: Card
+  /** topCard ist nur fuer mich sichtbar (nicht aufgedeckt) */
+  topCardPrivate?: boolean
 }
 
 export interface CombatGroup {
@@ -228,6 +232,8 @@ export interface Hello {
 export interface LogEntry {
   ts: number
   turn: number
+  /** Name des aktiven Spielers */
+  active?: string
   kind: string
   rich: RichSeg[]
 }

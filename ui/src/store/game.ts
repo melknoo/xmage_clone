@@ -10,6 +10,14 @@ export interface Toast {
   rich: RichSeg[]
 }
 
+/** Aufgedeckte / angesehene Karten. XMage leert sie nach jedem Update, darum haelt der Store sie kurz fest. */
+export interface Reveal {
+  key: string
+  name: string
+  looked: boolean
+  cards: Card[]
+}
+
 interface GameStore {
   gameId: UUID | null
   conn: 'idle' | 'connecting' | 'open' | 'closed'
@@ -28,6 +36,7 @@ interface GameStore {
   hover: Card | null
   tempo: Tempo
   objects: Map<UUID, Card>
+  reveals: Reveal[]
 
   connect: (gameId: UUID) => void
   disconnect: () => void
@@ -40,6 +49,7 @@ interface GameStore {
   leave: () => void
   setHover: (c: Card | null) => void
   dismissToast: (id: number) => void
+  dismissReveal: (key: string) => void
   reset: () => void
 }
 
@@ -48,6 +58,9 @@ let pingTimer: number | undefined
 let reconnectTimer: number | undefined
 let toastSeq = 0
 const LOG_MAX = 600
+const REVEAL_MS = 12000
+/** schon gezeigte Aufdeckungen (pro Spiel), damit sie nach dem Schliessen nicht erneut aufpoppen */
+let seenReveals = new Set<string>()
 
 function indexObjects(s: GameState): Map<UUID, Card> {
   const m = new Map<UUID, Card>()
@@ -59,7 +72,26 @@ function indexObjects(s: GameState): Map<UUID, Card> {
   }
   for (const c of s.hand) m.set(c.id, c)
   for (const c of s.stack) m.set(c.id, c)
+  for (const p of s.players) if (p.topCard) m.set(p.topCard.id, p.topCard)
+  for (const n of [...(s.revealed ?? []), ...(s.lookedAt ?? [])]) for (const c of n.cards) if (!m.has(c.id)) m.set(c.id, c)
   return m
+}
+
+/** Oberste Bibliothekskarte laeuft ueber den Bibliotheks-Knopf, nicht ueber die Einblendung. */
+const TOP_CARD_LOOK = /^top card of/i
+
+function newReveals(s: GameState): Reveal[] {
+  const out: Reveal[] = []
+  const add = (name: string, cards: Card[], looked: boolean) => {
+    if (cards.length === 0 || (looked && TOP_CARD_LOOK.test(name))) return
+    const key = `${looked ? 'L' : 'R'}|${name}|${cards.map((c) => c.id).join(',')}`
+    if (seenReveals.has(key)) return
+    seenReveals.add(key)
+    out.push({ key, name, looked, cards })
+  }
+  for (const r of s.revealed ?? []) add(r.name, r.cards, false)
+  for (const r of s.lookedAt ?? []) add(r.name, r.cards, true)
+  return out
 }
 
 export const useGame = create<GameStore>((set, get) => {
@@ -72,12 +104,17 @@ export const useGame = create<GameStore>((set, get) => {
   function handle(msg: ServerMessage) {
     switch (msg.t) {
       case 'hello':
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL' })
+        // nach einem Reconnect schickt die Engine Verlauf, State und offenen Prompt erneut
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null })
         break
       case 'state': {
         const prev = get().state
+        // veraltete States (Reconnect-Rennen) verwerfen
+        if (prev && msg.seq < prev.seq) break
         if (prev && msg.turn !== prev.turn && msg.activePlayerId === msg.myPlayerId) sounds.play('turn')
-        set({ state: msg, objects: indexObjects(msg) })
+        const fresh = newReveals(msg)
+        set({ state: msg, objects: indexObjects(msg), ...(fresh.length ? { reveals: [...get().reveals, ...fresh].slice(-4) } : {}) })
+        for (const r of fresh) window.setTimeout(() => get().dismissReveal(r.key), REVEAL_MS)
         break
       }
       case 'prompt':
@@ -170,10 +207,12 @@ export const useGame = create<GameStore>((set, get) => {
     hover: null,
     tempo: 'NORMAL',
     objects: new Map(),
+    reveals: [],
 
     connect: (gameId) => {
       get().disconnect()
-      set({ gameId, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null })
+      seenReveals = new Set()
+      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map() })
       open(gameId)
     },
     disconnect: () => {
@@ -209,9 +248,10 @@ export const useGame = create<GameStore>((set, get) => {
     leave: () => send({ t: 'leave' }),
     setHover: (c) => set({ hover: c }),
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
+    dismissReveal: (key) => set({ reveals: get().reveals.filter((r) => r.key !== key) }),
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null })
+      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [] })
     },
   }
 })

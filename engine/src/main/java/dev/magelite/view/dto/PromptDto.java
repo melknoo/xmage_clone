@@ -50,7 +50,10 @@ public class PromptDto {
     public ChoiceDto choice;
 
     /** AMOUNT / MULTI_AMOUNT */
+    // immer senden: max = 0 ist ein gueltiger Wert (UI faellt sonst auf "unbegrenzt" zurueck)
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     public int min;
+    @JsonInclude(JsonInclude.Include.ALWAYS)
     public int max;
     public List<AmountItem> items;
 

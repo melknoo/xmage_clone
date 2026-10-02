@@ -31,8 +31,9 @@ public final class Messages {
         }
     }
 
+    /** {@code active}: Name des aktiven Spielers (Gruppierung im Verlauf) */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record LogEntry(long ts, int turn, String kind, List<Map<String, Object>> rich) {
+    public record LogEntry(long ts, int turn, String active, String kind, List<Map<String, Object>> rich) {
     }
 
     public record Log(String t, List<LogEntry> entries) {

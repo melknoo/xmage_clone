@@ -78,10 +78,10 @@ Server → Client:
 | `t` | Inhalt |
 |---|---|
 | `hello` | `gameId`, `myPlayerId`, `seats[]` (Name, Deck, Commander), `tempo` |
-| `state` | `StateDto`: `seq`, `turn`, `phase`, `step`, `activePlayerId`, `players[]` (beginnend mit mir, dann in Zugfolge), `hand`, `stack` (mit `targets`/`targetRefs`), `combat`, `revealed`, `lookedAt`, `playable` (id → Anzahl), `actions` (ids mit Nicht-Mana-Aktion) |
+| `state` | `StateDto`: `seq`, `turn`, `phase`, `step`, `activePlayerId`, `players[]` (beginnend mit mir, dann in Zugfolge; `topCard` = oberste Bibliothekskarte, wenn aufgedeckt oder für mich einsehbar, dann `topCardPrivate`), `hand`, `stack` (mit `targets`/`targetRefs`), `combat`, `revealed`, `lookedAt`, `playable` (id → Anzahl), `actions` (ids mit Nicht-Mana-Aktion) |
 | `prompt` | `PromptDto`: `id`, `kind`, `message` (Segmente), `messageText`, Buttons, je nach Art `mode`/`possibleAttackers`/`targets`/`chosen`/`cards`/`choices`/`choice`/`min`/`max`/`items`/`pile1`/`pile2`/`mulligan`/`defenderPick` |
 | `promptClosed` | `id` |
-| `log` | `entries[]` mit `turn`, `kind` (INFO/STATUS), `rich` |
+| `log` | `entries[]` mit `turn`, `active` (Name des aktiven Spielers), `kind` (INFO/STATUS), `rich`; nach Reconnect kommt der Verlauf komplett neu (Client leert ihn bei `hello`) |
 | `status` | `thinking` (Bot-id), `waitingFor` |
 | `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/engine/idle/stuck), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
 | `toast` | `level`, `rich` |
@@ -139,13 +139,13 @@ first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: 
 | `game/interaction.ts` | **Klicklogik**: aus Prompt + State → Modus (priority/attack/block/target/mana/dialog), Hervorhebung, Klickziel |
 | `game/promptActions.ts` | Buttons pro Prompt-Art, F-Tasten-Belegung |
 | `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste, Dialoge (Auswahl, Menge, Stapel, Mulligan, Kartenwahl) |
-| `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen |
+| `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen; Stapel mit großem obersten Objekt (einklappbar); Zonen-Knöpfe leuchten, wenn darin etwas spielbar/Ziel ist, 📚 öffnet die sichtbare oberste Bibliothekskarte |
 | `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
-| `game/Side.tsx` | Kartenvorschau, Spielverlauf, Toasts |
+| `game/Side.tsx` | Kartenvorschau, Spielverlauf (nach Zügen gruppiert, Filter Wichtiges/Alles, Icons per Stichwort-Regex), Toasts, Einblendung aufgedeckter/angesehener Karten (`RevealPopups`, Store `reveals`) |
 | `game/ActivityIndicator.tsx` | Anzeige in der TopBar: arbeitet die Engine wirklich (Modus + CPU aus `activity`), Warnung bei Stillstand/ohne Verbindung |
 | `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ |
 | `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, `upright` für die Vorschau, Marken, P/T, Glow) |
-| `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar |
+| `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar; `viewer` → reine Ansicht (Esc schließt nur sie, Spiel-Hotkeys gesperrt) |
 | `lib/mana.tsx` | Mana-Symbole (mana-font), Regeltext/Rich-Text ohne `innerHTML` |
 | `lib/sounds.ts` | kurze WebAudio-Töne, Stummschaltung |
 | `index.css` | Tailwind-4-Theme (`ink`, `gold`, `arcane`, `blood`), Glows, `@utility btn*` |

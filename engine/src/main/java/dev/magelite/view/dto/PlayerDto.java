@@ -34,4 +34,8 @@ public class PlayerDto {
     /** Bot denkt gerade */
     public boolean thinking;
     public String deckName;
+    /** oberste Bibliothekskarte, falls sichtbar (aufgedeckt oder fuer mich einsehbar) */
+    public CardDto topCard;
+    /** topCard ist nur fuer mich sichtbar (nicht aufgedeckt) */
+    public boolean topCardPrivate;
 }

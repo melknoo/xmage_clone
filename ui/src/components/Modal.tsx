@@ -1,6 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState, type ReactNode } from 'react'
 
+/** offene Ansichts-Dialoge (Friedhof, Exil, Bibliothek); solange einer offen ist, gehen Spiel-Hotkeys nicht durch */
+let openViewers = 0
+export const viewerOpen = () => openViewers > 0
+
 export function Modal({
   title,
   children,
@@ -9,6 +13,7 @@ export function Modal({
   wide,
   closable = true,
   minimizable = false,
+  viewer = false,
 }: {
   title?: ReactNode
   children: ReactNode
@@ -18,8 +23,27 @@ export function Modal({
   closable?: boolean
   /** Dialog kann eingeklappt werden, damit das Spielfeld sichtbar und bedienbar ist (Tab schaltet um) */
   minimizable?: boolean
+  /** reine Ansicht im Spiel: Esc schliesst nur diesen Dialog, Leertaste & Co. erreichen das Spiel nicht */
+  viewer?: boolean
 }) {
   const [minimized, setMinimized] = useState(false)
+
+  useEffect(() => {
+    if (!viewer) return
+    openViewers++
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      onClose?.()
+    }
+    // Capture-Phase: vor den Spiel-Hotkeys
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      openViewers--
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [viewer, onClose])
 
   useEffect(() => {
     if (!minimizable) return

@@ -15,6 +15,8 @@ public final class GameRegistry {
     private static final Logger LOG = Logger.getLogger(GameRegistry.class);
 
     private final Map<UUID, GameHost> games = new ConcurrentHashMap<>();
+    /** zuletzt gestartetes Spiel; aeltere werden nur noch beendet */
+    private volatile GameHost current;
 
     private volatile java.util.function.BiFunction<GameHost, dev.magelite.view.dto.Messages.GameOver, Object> rewardHook;
 
@@ -35,6 +37,7 @@ public final class GameRegistry {
         host.setOnFinished(onFinished);
         host.setRewardHook(rewardHook);
         games.put(host.getId(), host);
+        current = host;
         host.start();
         return host;
     }
@@ -44,7 +47,8 @@ public final class GameRegistry {
     }
 
     public Optional<GameHost> current() {
-        return games.values().stream().filter(GameHost::isRunning).findFirst();
+        GameHost c = current;
+        return c != null && c.isRunning() ? Optional.of(c) : Optional.empty();
     }
 
     public void shutdown() {

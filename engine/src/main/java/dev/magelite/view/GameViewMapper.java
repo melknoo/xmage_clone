@@ -13,7 +13,9 @@ import mage.MageObject;
 import mage.abilities.Ability;
 import mage.abilities.ActivatedAbility;
 import mage.abilities.Mode;
+import mage.abilities.StaticAbility;
 import mage.abilities.effects.Effect;
+import mage.abilities.effects.common.continuous.LookAtTopCardOfLibraryAnyTimeEffect;
 import mage.abilities.mana.ManaAbility;
 import mage.ObjectColor;
 import mage.cards.Card;
@@ -96,6 +98,7 @@ public final class GameViewMapper {
             views.put(pv.getPlayerId(), pv);
         }
         CommanderPlaysCountWatcher playsWatcher = game.getState().getWatcher(CommanderPlaysCountWatcher.class);
+        Playable pl = withPlayable && me != null ? playable(game, me) : null;
 
         List<UUID> order = seatOrder(game, myId);
         List<PlayerDto> players = new ArrayList<>();
@@ -105,7 +108,12 @@ public final class GameViewMapper {
             if (pv == null || p == null) {
                 continue;
             }
-            players.add(mapPlayer(game, pv, p, myId, attacking, blocking, playsWatcher, thinkingPlayerId, deckNames));
+            PlayerDto pd = mapPlayer(game, pv, p, myId, attacking, blocking, playsWatcher, thinkingPlayerId, deckNames);
+            if (pd.me && pd.topCard == null) {
+                pd.topCard = privateTopCard(game, p, pl);
+                pd.topCardPrivate = pd.topCard != null;
+            }
+            players.add(pd);
         }
         s.players = players;
 
@@ -163,8 +171,7 @@ public final class GameViewMapper {
             s.lookedAt = la;
         }
 
-        if (withPlayable && me != null) {
-            Playable pl = playable(game, me);
+        if (pl != null) {
             s.playable = pl.all();
             s.actions = pl.actions();
         }
@@ -285,6 +292,37 @@ public final class GameViewMapper {
         return t;
     }
 
+    /**
+     * Oberste Bibliothekskarte, die nur ich sehen darf: "you may look at the top card of your library any time"
+     * (Vizier, Bolas's Citadel ...), von oben spielbar oder gerade angesehen. Aufgedeckte Karten kommen ueber
+     * {@code PlayerView.getTopCard()}.
+     */
+    private static CardDto privateTopCard(Game game, Player me, Playable pl) {
+        try {
+            Card top = me.getLibrary().hasCards() ? me.getLibrary().getFromTop(game) : null;
+            if (top == null) {
+                return null;
+            }
+            boolean visible = pl != null && pl.all().containsKey(top.getId());
+            if (!visible) {
+                Map<String, Cards> looked = game.getState().getLookedAt(me.getId());
+                visible = looked != null && looked.values().stream().anyMatch(c -> c.contains(top.getId()));
+            }
+            if (!visible) {
+                // statische Faehigkeit eigener Permanents; bewusst nicht ueber ContinuousEffects.getLayeredEffects,
+                // das aktualisiert Zeitstempel (Nebenwirkung auf die Layer-Reihenfolge)
+                visible = game.getBattlefield().getAllActivePermanents(me.getId()).stream()
+                        .flatMap(perm -> perm.getAbilities(game).stream())
+                        .filter(a -> a instanceof StaticAbility)
+                        .flatMap(a -> a.getEffects().stream())
+                        .anyMatch(e -> e instanceof LookAtTopCardOfLibraryAnyTimeEffect);
+            }
+            return visible ? card(new CardView(top, game)) : null;
+        } catch (RuntimeException e) {
+            return null; // nur Anzeige
+        }
+    }
+
     private static String playerName(Game game, UUID playerId) {
         Player p = playerId == null ? null : game.getPlayer(playerId);
         return p == null ? null : p.getName();
@@ -357,6 +395,7 @@ public final class GameViewMapper {
         d.initiative = pv.isInitiative();
         d.thinking = d.id.equals(thinkingPlayerId);
         d.deckName = deckNames == null ? null : deckNames.get(d.id);
+        d.topCard = pv.getTopCard() == null ? null : card(pv.getTopCard());
 
         List<String> skips = new ArrayList<>();
         if (pv.isPassedTurn()) skips.add("nextTurn");

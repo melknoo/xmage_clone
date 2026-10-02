@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { Highlight } from '../components/CardView'
-import type { Prompt, UUID } from '../api/types'
+import type { Card, GameState, Prompt, UUID } from '../api/types'
 import { useGame } from '../store/game'
 
 export type Mode = 'none' | 'priority' | 'attack' | 'block' | 'target' | 'mana' | 'dialog'
@@ -13,8 +13,24 @@ export interface Interaction {
   click: (id: UUID) => void
   /** Spieler ist waehlbares Ziel (z.B. Angriffsziel, Zauberziel) */
   playerTargetable: (id: UUID) => boolean
-  /** Karten-Auswahl ueber Modal (Bibliothek, aufgedeckte Karten ...) */
+  /** Karten-Auswahl ueber Modal (Bibliothek, Friedhof, Exil, aufgedeckte Karten ...) */
   needsCardModal: boolean
+  /** Karten fuer dieses Modal */
+  modalCards: Card[]
+}
+
+/** Objekte, die direkt auf dem Tisch anklickbar sind (Spieler, Spielfeld, Hand, Stapel, Kommandozone). */
+function onTable(s: GameState | null): Set<UUID> {
+  const ids = new Set<UUID>()
+  if (!s) return ids
+  for (const p of s.players) {
+    ids.add(p.id)
+    for (const c of p.battlefield) ids.add(c.id)
+    for (const c of p.command) if (c.kind !== 'commander-away') ids.add(c.id)
+  }
+  for (const c of s.hand) ids.add(c.id)
+  for (const c of s.stack) ids.add(c.id)
+  return ids
 }
 
 const DIALOG_KINDS = new Set(['CHOOSE_ABILITY', 'CHOOSE_MODE', 'CHOOSE_CHOICE', 'AMOUNT', 'MULTI_AMOUNT', 'CHOOSE_PILE', 'PICK_ABILITY'])
@@ -34,6 +50,7 @@ export function useInteraction(): Interaction {
     let clickable = new Set<UUID>()
     let mode: Mode = 'none'
     let needsCardModal = false
+    let modalCards: Card[] = []
 
     const attacking = new Set<UUID>()
     const blocking = new Set<UUID>()
@@ -59,8 +76,16 @@ export function useInteraction(): Interaction {
         case 'PICK_TARGET':
           mode = 'target'
           clickable = new Set(active.targets ?? [])
-          if (active.cards && active.cards.length > 0) {
-            needsCardModal = active.cards.some((c) => !objects.has(c.id))
+          {
+            // Ziele abseits des Tisches (Friedhof, Exil, Bibliothek, aufgedeckt) brauchen das Auswahl-Modal
+            const table = onTable(state)
+            if (active.cards && active.cards.length > 0) {
+              needsCardModal = active.cards.some((c) => !table.has(c.id))
+              modalCards = active.cards
+            } else {
+              modalCards = (active.targets ?? []).filter((id) => !table.has(id)).flatMap((id) => objects.get(id) ?? [])
+              needsCardModal = modalCards.length > 0
+            }
           }
           break
         case 'PLAY_MANA':
@@ -102,6 +127,7 @@ export function useInteraction(): Interaction {
       },
       playerTargetable: (id: UUID) => (mode === 'target' || mode === 'attack') && clickable.has(id),
       needsCardModal,
+      modalCards,
     }
   }, [prompt, answered, state, objects, answer])
 }

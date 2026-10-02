@@ -36,6 +36,19 @@ Fallback auf manuelles Klicken.
 - 2026-10-02 neu: Aktivitätsanzeige in der Prompt-Leiste (Herzschlag `activity` 1/s mit Modus + gemessener CPU-Last):
   „X rechnet …“ mit drehendem Zahnrad nur bei echter Rechenlast, Warnung bei Stillstand (> 15 s) oder ohne Verbindung.
 
+- 2026-10-02 (Branch `fix/spieltisch-feinschliff`): oberste Bibliothekskarte sichtbar und von oben spielbar
+  (aufgedeckt: `PlayerView.getTopCard()`; nur für mich: „look at the top card any time“, spielbar oder angesehen);
+  Stapel größer/vorne mit Hero-Objekt; Spielverlauf nach Zügen gruppiert (alte Züge zu, Spielerfarben, Icons, ×n,
+  Filter Wichtiges/Alles); aufgedeckte/angesehene Karten werden kurz eingeblendet. Bugfixes: Auto-Bezahlen-Fehlschlag
+  ließ die UI ohne Prompt hängen; Verlauf nach Reconnect doppelt; veraltete States nach Reconnect; Esc/Leertaste
+  im Friedhof-/Exil-Fenster gingen ans Spiel; Ziele in Friedhof/Exil ohne Auswahlfenster; Pfeile zum Commander
+  zeigten auf die Kommandozone; `/api/games/current` konnte ein altes Spiel liefern; doppelte Antwort auf einen
+  Prompt möglich (jetzt `compareAndSet`); Auto-Mana zahlte {C} mit „beliebige Farbe“-Quellen; Kartenbild nach
+  Transformieren leer; MULTI_AMOUNT mit `max = 0` unbegrenzt.
+  Geprüft: `test`, `humanSpike` 2/2 ohne STALL, WS-Probe (Reconnect-Reihenfolge, `active` im Log, `topCard` mit
+  Courser-Testdeck). **Noch nicht visuell geprüft** (Stapel, Verlauf, 📚-Fenster): unter Linux ohne Display startet
+  weder Electron noch Chrome headless mit HTTP-Seiten.
+
 ## Offene Punkte (priorisiert)
 
 0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,

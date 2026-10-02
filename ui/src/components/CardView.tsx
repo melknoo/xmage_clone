@@ -79,13 +79,23 @@ export interface CardViewProps {
   count?: number
   /** getappt-Zustand ignorieren (z.B. grosse Vorschau) */
   upright?: boolean
+  /** false: kein data-obj (Duplikat, z.B. Commander ausserhalb der Kommandozone) - Pfeile suchen das Original */
+  anchor?: boolean
 }
 
-export const CardView = memo(function CardView({ card, size = 'md', highlight = 'none', onClick, onHover, showBack, dim, className = '', count, upright }: CardViewProps) {
+export const CardView = memo(function CardView({ card, size = 'md', highlight = 'none', onClick, onHover, showBack, dim, className = '', count, upright, anchor = true }: CardViewProps) {
   const perm = card as Permanent
   const url = card.faceDown ? null : cardImageUrl(card, { back: showBack || card.transformed, size: size === 'zoom' || size === 'xl' ? 'normal' : 'normal' })
   const [loaded, setLoaded] = useState(false)
   const [broken, setBroken] = useState(url ? failed.has(url) : true)
+  // anderes Bild (Transformieren, Rueckseite, andere Karte im selben Platz): Ladezustand zuruecksetzen
+  const [shownUrl, setShownUrl] = useState(url)
+  if (url !== shownUrl) {
+    setShownUrl(url)
+    setLoaded(false)
+    setBroken(url ? failed.has(url) : true)
+  }
+  const objId = anchor ? card.id : undefined
   const tapped = perm.tapped && !upright
   const glow =
     highlight === 'playable'
@@ -109,7 +119,7 @@ export const CardView = memo(function CardView({ card, size = 'md', highlight = 
   const h = Math.round((w * 88) / 63)
   const inner = (
     <div
-      data-obj={tapped ? undefined : card.id}
+      data-obj={tapped ? undefined : objId}
       className={`relative shrink-0 ${SIZES[size]} aspect-[63/88] transition-transform duration-200 ${tapped ? 'rotate-90' : ''} ${tapped ? '' : className}`}
       style={tapped ? { position: 'absolute', left: (h - w) / 2, top: (w - h) / 2 } : undefined}
       onMouseEnter={tapped ? undefined : () => onHover?.(card)}
@@ -173,7 +183,7 @@ export const CardView = memo(function CardView({ card, size = 'md', highlight = 
   if (!tapped) return inner
   return (
     <div
-      data-obj={card.id}
+      data-obj={objId}
       className={`relative shrink-0 ${className}`}
       style={{ width: h, height: w }}
       onMouseEnter={() => onHover?.(card)}

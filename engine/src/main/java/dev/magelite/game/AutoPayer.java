@@ -185,6 +185,10 @@ public final class AutoPayer {
     }
 
     private static boolean canMake(Source s, Color c) {
+        // {C} verlangt farbloses Mana - "beliebige Farbe" (City of Brass, Treasure) zahlt es nicht
+        if (c == Color.C) {
+            return s.colors().contains(Color.C);
+        }
         return s.any() || s.colors().contains(c);
     }
 

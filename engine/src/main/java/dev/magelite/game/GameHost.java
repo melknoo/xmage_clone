@@ -34,9 +34,11 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
@@ -154,7 +156,8 @@ public final class GameHost {
     private volatile Sink sink = msg -> {
     };
     private volatile StateDto lastState;
-    private volatile PromptDto openPrompt;
+    /** offener Prompt des Menschen; Antworten raeumen ihn per compareAndSet (genau eine Antwort pro Prompt) */
+    private final AtomicReference<PromptDto> openPrompt = new AtomicReference<>();
     private volatile UUID thinking;
     private volatile boolean autoPass = true;
     private volatile Messages.GameOver gameOver;
@@ -290,7 +293,7 @@ public final class GameHost {
         if (s != null) {
             newSink.send(s);
         }
-        PromptDto p = openPrompt;
+        PromptDto p = openPrompt.get();
         if (p != null) {
             newSink.send(p);
         }
@@ -374,13 +377,17 @@ public final class GameHost {
      */
     public void abort() {
         humanConceded = true;
-        callExecutor.execute(() -> {
-            for (Player p : game.getPlayers().values()) {
-                if (p.isInGame()) {
-                    game.setConcedingPlayer(p.getId());
+        try {
+            callExecutor.execute(() -> {
+                for (Player p : game.getPlayers().values()) {
+                    if (p.isInGame()) {
+                        game.setConcedingPlayer(p.getId());
+                    }
                 }
-            }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            // Spiel ist bereits zu Ende, CALL-Executor heruntergefahren
+        }
     }
 
     public boolean awaitEnd(long timeoutMs) throws InterruptedException {
@@ -398,11 +405,10 @@ public final class GameHost {
      * Antwort auf den offenen Prompt. Ignoriert veraltete promptIds (Doppelklicks).
      */
     public boolean respond(long promptId, Response r) {
-        PromptDto p = openPrompt;
-        if (p == null || p.id != promptId) {
+        PromptDto p = openPrompt.get();
+        if (p == null || p.id != promptId || !openPrompt.compareAndSet(p, null)) {
             return false;
         }
-        openPrompt = null;
         emit(new Messages.PromptClosed(promptId));
         dispatch(target -> apply(target, r));
         return true;
@@ -419,9 +425,8 @@ public final class GameHost {
             return false;
         }
         boolean closesPrompt = action.name().startsWith("PASS_PRIORITY_UNTIL") || action == PlayerAction.CONCEDE;
-        PromptDto p = openPrompt;
-        if (closesPrompt && p != null && "SELECT".equals(p.kind)) {
-            openPrompt = null;
+        PromptDto p = openPrompt.get();
+        if (closesPrompt && p != null && "SELECT".equals(p.kind) && openPrompt.compareAndSet(p, null)) {
             emit(new Messages.PromptClosed(p.id));
         }
         callExecutor.execute(() -> {
@@ -536,14 +541,14 @@ public final class GameHost {
             if (autoPass && priorityPrompt && state.actions != null && state.actions.isEmpty()) {
                 // nichts spielbar (ausser Mana) -> automatisch passen
                 prompt.id = promptSeq.incrementAndGet();
-                openPrompt = prompt;
+                openPrompt.set(prompt);
                 respondInternal(prompt.id, Response.ofBool(false));
                 return;
             }
 
             prompt.id = promptSeq.incrementAndGet();
             prompt.stateSeq = state.seq;
-            openPrompt = prompt;
+            openPrompt.set(prompt);
             emit(prompt);
         } catch (Throwable e) {
             LOG.error("QueryEvent " + event.getQueryType() + " fehlgeschlagen", e);
@@ -552,11 +557,10 @@ public final class GameHost {
 
     /** Auto-Antwort ohne promptClosed-Nachricht an den Client. */
     private void respondInternal(long promptId, Response r) {
-        PromptDto p = openPrompt;
-        if (p == null || p.id != promptId) {
+        PromptDto p = openPrompt.get();
+        if (p == null || p.id != promptId || !openPrompt.compareAndSet(p, null)) {
             return;
         }
-        openPrompt = null;
         dispatch(target -> apply(target, r));
     }
 
@@ -588,7 +592,7 @@ public final class GameHost {
 
     private void answerInternally(PromptDto prompt, Response r) {
         prompt.id = promptSeq.incrementAndGet();
-        openPrompt = prompt;
+        openPrompt.set(prompt);
         respondInternal(prompt.id, r);
     }
 
@@ -600,7 +604,7 @@ public final class GameHost {
 
     /** Client-Knopf "Auto bezahlen" bei offenem Mana-Prompt (Game-Thread wartet gerade). */
     public void autoPayNow() {
-        PromptDto p = openPrompt;
+        PromptDto p = openPrompt.get();
         if (p == null || !"PLAY_MANA".equals(p.kind)) {
             return;
         }
@@ -608,6 +612,10 @@ public final class GameHost {
             AutoPayer.Step st = AutoPayer.next(game, humanId, p.messageText, GameViewMapper.playable(game, human).all().keySet());
             if (st == null) {
                 emit(new Messages.Toast("info", RichText.parse("Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.")));
+                // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
+                if (openPrompt.get() == p) {
+                    emit(p);
+                }
                 return;
             }
             autoPayActive = true;
@@ -623,11 +631,10 @@ public final class GameHost {
 
     /** Antwort vom CALL-Thread aus (ohne erneutes Einreihen). */
     private boolean respondDirect(long promptId, Response r) {
-        PromptDto p = openPrompt;
-        if (p == null || p.id != promptId) {
+        PromptDto p = openPrompt.get();
+        if (p == null || p.id != promptId || !openPrompt.compareAndSet(p, null)) {
             return false;
         }
-        openPrompt = null;
         if (human.isGameUnderControl()) {
             apply(human, r);
         }
@@ -743,7 +750,7 @@ public final class GameHost {
         if (html == null || html.isBlank()) {
             return;
         }
-        Messages.LogEntry entry = new Messages.LogEntry(System.currentTimeMillis(), game.getTurnNum(), kind, RichText.parse(html));
+        Messages.LogEntry entry = new Messages.LogEntry(System.currentTimeMillis(), game.getTurnNum(), activePlayerName(), kind, RichText.parse(html));
         synchronized (logTail) {
             logTail.addLast(entry);
             while (logTail.size() > LOG_KEEP) {
@@ -751,6 +758,11 @@ public final class GameHost {
             }
         }
         emit(new Messages.Log(List.of(entry)));
+    }
+
+    private String activePlayerName() {
+        Player p = game.getPlayer(game.getActivePlayerId());
+        return p == null ? null : p.getName();
     }
 
     private void emit(Object msg) {
@@ -826,7 +838,7 @@ public final class GameHost {
 
     /** Antwort gesetzt, seitdem keine neue Frage, kein Fortschritt, aber XMage wartet noch -> Antwort verloren. */
     private boolean looksLost(long now) {
-        return lastApplied != null && openPrompt == null && lastAppliedAt > lastHumanQueryAt
+        return lastApplied != null && openPrompt.get() == null && lastAppliedAt > lastHumanQueryAt
                 && now - lastAppliedAt > RECOVER_AFTER_MS && now - lastProgressAt > RECOVER_AFTER_MS;
     }
 
@@ -852,7 +864,7 @@ public final class GameHost {
         UUID th = thinking;
         String mode;
         String who = null;
-        if (waiting && openPrompt != null) {
+        if (waiting && openPrompt.get() != null) {
             mode = "you";
         } else if (th != null) {
             mode = "bot";

@@ -125,7 +125,7 @@ function MultiAmountDialog({ p }: { p: Prompt }) {
   const answer = useGame((s) => s.answer)
   const [vals, setVals] = useState(() => (p.items ?? []).map((i) => i.value))
   const total = vals.reduce((a, b) => a + b, 0)
-  const ok = total >= (p.min ?? 0) && total <= (p.max ?? Infinity)
+  const ok = total >= (p.min ?? 0) && total <= (p.max ?? 0)
   return (
     <Modal
       minimizable
@@ -222,7 +222,7 @@ function CardPickDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; 
       footer={canFinish ? <button className="btn-primary" onClick={() => answer({ bool: false })}>{p.chosen?.length ? 'Fertig' : 'Keine wählen'}</button> : undefined}
     >
       <div className="flex flex-wrap gap-2">
-        {(p.cards ?? []).map((c) => (
+        {inter.modalCards.map((c) => (
           <CardView key={c.id} card={c} size="lg" highlight={inter.highlight(c.id)} onHover={onHover} onClick={() => inter.click(c.id)} dim={!inter.canClick(c.id)} />
         ))}
       </div>

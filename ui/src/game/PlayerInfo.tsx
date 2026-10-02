@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { cardImageUrl } from '../api/client'
 import type { Card, CommandObject, PlayerState } from '../api/types'
 import { CardView } from '../components/CardView'
@@ -26,30 +26,84 @@ export function LifeBadge({ life, big }: { life: number; big?: boolean }) {
   )
 }
 
-function ZoneButton({ label, icon, count, onClick }: { label: string; icon: string; count: number; onClick?: () => void }) {
+const GLOW: Record<string, string> = {
+  playable: 'glow-playable',
+  mana: 'glow-mana',
+  target: 'glow-target',
+  chosen: 'glow-chosen',
+}
+
+function ZoneButton({
+  label,
+  icon,
+  count,
+  onClick,
+  glow,
+  onHover,
+  children,
+}: {
+  label: string
+  icon: string
+  count: number
+  onClick?: () => void
+  glow?: string
+  onHover?: (on: boolean) => void
+  children?: React.ReactNode
+}) {
   return (
     <button
-      className="flex items-center gap-1 rounded-md bg-ink-950/50 px-1.5 py-0.5 text-[11px] text-ink-200 ring-1 ring-white/10 hover:bg-ink-700/70 disabled:opacity-60"
+      className={`flex items-center gap-1 rounded-md bg-ink-950/50 px-1.5 py-0.5 text-[11px] text-ink-200 ring-1 ring-white/10 hover:bg-ink-700/70 disabled:opacity-60 ${glow ?? ''}`}
       onClick={onClick}
       disabled={!onClick}
       title={label}
+      onMouseEnter={() => onHover?.(true)}
+      onMouseLeave={() => onHover?.(false)}
     >
       <span>{icon}</span>
       <span className="tabular-nums">{count}</span>
+      {children}
     </button>
   )
 }
 
+/** staerkste Hervorhebung einer Zone (fuer den Knopf) */
+function zoneGlow(cards: Card[], inter: Interaction): string | undefined {
+  let best: string | undefined
+  for (const c of cards) {
+    const h = inter.highlight(c.id)
+    if (h === 'target' || h === 'playable') return GLOW[h]
+    if (h === 'chosen' || h === 'mana') best = GLOW[h]
+  }
+  return best
+}
+
 export function ZoneCounters({ p, onHover, inter }: { p: PlayerState; onHover: (c: Card | null) => void; inter: Interaction }) {
-  const [view, setView] = useState<null | 'gy' | 'ex'>(null)
+  const [view, setView] = useState<null | 'gy' | 'ex' | 'lib'>(null)
   const cards = view === 'gy' ? p.graveyard : view === 'ex' ? p.exile : []
+  const top = p.topCard
+  const close = useCallback(() => setView(null), [])
+  // Auswahl aus der Ansicht: danach schliessen, damit das Spielfeld wieder frei ist
+  const pick = (id: string) => {
+    if (!inter.canClick(id)) return
+    inter.click(id)
+    close()
+  }
   return (
     <>
       <div className="flex flex-wrap items-center gap-1">
-        <ZoneButton label="Bibliothek" icon="📚" count={p.library} />
+        <ZoneButton
+          label={top ? `Bibliothek – oberste Karte: ${top.name}${p.topCardPrivate ? ' (nur für dich sichtbar)' : ' (aufgedeckt)'}` : 'Bibliothek'}
+          icon="📚"
+          count={p.library}
+          onClick={top ? () => setView('lib') : undefined}
+          glow={top ? zoneGlow([top], inter) : undefined}
+          onHover={top ? (on) => onHover(on ? top : null) : undefined}
+        >
+          {top && <span className={`text-[10px] ${p.topCardPrivate ? 'text-arcane-400' : 'text-gold-300'}`}>👁</span>}
+        </ZoneButton>
         <ZoneButton label="Hand" icon="✋" count={p.handCount} />
-        <ZoneButton label="Friedhof" icon="🪦" count={p.graveyard.length} onClick={p.graveyard.length ? () => setView('gy') : undefined} />
-        <ZoneButton label="Exil" icon="🌀" count={p.exile.length} onClick={p.exile.length ? () => setView('ex') : undefined} />
+        <ZoneButton label="Friedhof" icon="🪦" count={p.graveyard.length} onClick={p.graveyard.length ? () => setView('gy') : undefined} glow={zoneGlow(p.graveyard, inter)} />
+        <ZoneButton label="Exil" icon="🌀" count={p.exile.length} onClick={p.exile.length ? () => setView('ex') : undefined} glow={zoneGlow(p.exile, inter)} />
         {p.counters?.map((c) => (
           <span key={c.name} className="rounded-md bg-purple-500/20 px-1.5 py-0.5 text-[11px] text-purple-200 ring-1 ring-purple-400/30" title={c.name}>
             {counterLabel(c.name)} {c.count}
@@ -58,11 +112,22 @@ export function ZoneCounters({ p, onHover, inter }: { p: PlayerState; onHover: (
         {p.monarch && <span title="Monarch" className="text-sm">👑</span>}
         {p.initiative && <span title="Initiative" className="text-sm">🗝️</span>}
       </div>
-      {view && (
-        <Modal title={`${view === 'gy' ? 'Friedhof' : 'Exil'} – ${p.name}`} onClose={() => setView(null)} wide>
+      {view === 'lib' && top && (
+        <Modal viewer title={`Bibliothek – ${p.name}`} onClose={close}>
+          <div className="flex flex-col items-center gap-3">
+            <div className="text-sm text-ink-300">
+              Oberste Karte von {p.library} · {p.topCardPrivate ? 'nur für dich sichtbar' : 'für alle aufgedeckt'}
+            </div>
+            <CardView card={top} size="xl" onHover={onHover} highlight={inter.highlight(top.id)} onClick={() => pick(top.id)} />
+            {inter.canClick(top.id) && <div className="text-xs text-arcane-400">Anklicken, um sie zu spielen</div>}
+          </div>
+        </Modal>
+      )}
+      {(view === 'gy' || view === 'ex') && (
+        <Modal viewer title={`${view === 'gy' ? 'Friedhof' : 'Exil'} – ${p.name}`} onClose={close} wide>
           <div className="flex flex-wrap gap-2">
             {[...cards].reverse().map((c) => (
-              <CardView key={c.id} card={c} size="lg" onHover={onHover} highlight={inter.highlight(c.id)} onClick={() => inter.click(c.id)} />
+              <CardView key={c.id} card={c} size="lg" onHover={onHover} highlight={inter.highlight(c.id)} onClick={() => pick(c.id)} />
             ))}
           </div>
         </Modal>
@@ -88,7 +153,7 @@ export function CommandZone({ objects, inter, onHover, size = 'sm' }: { objects:
         const away = o.kind === 'commander-away'
         return (
           <div key={o.id} className="relative">
-            <CardView card={card} size={size} dim={away} highlight={away ? 'none' : inter.highlight(o.id)} onHover={onHover} onClick={() => inter.click(o.id)} />
+            <CardView card={card} size={size} dim={away} anchor={!away} highlight={away ? 'none' : inter.highlight(o.id)} onHover={onHover} onClick={() => inter.click(o.id)} />
             {(o.kind === 'commander' || away) && (o.tax ?? 0) > 0 && (
               <span className="absolute -bottom-1 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-ink-950/95 px-1 text-[10px] font-semibold text-gold-300 ring-1 ring-gold-400/40" title={`${o.casts}× gewirkt`}>
                 +{o.tax} Steuer

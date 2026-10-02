@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react'
+import { useEffect, useState } from 'react'
 import type { Card, PlayerState, TargetRef } from '../api/types'
 import { CardView } from '../components/CardView'
 import { RulesText } from '../lib/mana'
@@ -29,47 +30,118 @@ export function StackPanel({
   focusId?: string | null
   onFocus?: (id: string | null) => void
 }) {
-  const nameOf = (id?: string) => players.find((p) => p.id === id)?.name
-  const activeId = stack.some((c) => c.id === focusId) ? focusId : stack[0]?.id
+  const [collapsed, setCollapsed] = useState(false)
+  const top = stack[0]
+  // neues oberstes Objekt -> wieder aufklappen
+  useEffect(() => {
+    if (top?.id) setCollapsed(false)
+  }, [top?.id])
+  const who = (id?: string) => {
+    const p = players.find((x) => x.id === id)
+    return p ? { name: p.me ? 'Du' : p.name, me: p.me } : null
+  }
+  const activeId = stack.some((c) => c.id === focusId) ? focusId : top?.id
+
   return (
     <AnimatePresence>
-      {stack.length > 0 && (
+      {top && collapsed && (
+        <motion.button
+          key="pill"
+          data-stack={top.id}
+          className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink-900/90 px-4 py-1.5 text-sm font-semibold text-gold-300 shadow-2xl ring-2 ring-gold-400/60 backdrop-blur"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          onClick={() => setCollapsed(false)}
+          title="Stapel aufklappen"
+        >
+          <span className="rounded-full bg-gold-400 px-1.5 text-xs text-ink-950">{stack.length}</span>
+          Stapel · <span className="max-w-[220px] truncate text-ink-100">{top.name}</span> ▸
+        </motion.button>
+      )}
+      {top && !collapsed && (
         <motion.div
-          className="glass pointer-events-auto flex max-h-full w-[300px] flex-col gap-1.5 overflow-y-auto rounded-2xl p-2 scrollbar-thin"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          key="panel"
+          className="pointer-events-auto flex max-h-[48vh] w-[440px] flex-col overflow-hidden rounded-2xl bg-ink-900/90 shadow-[0_12px_48px_rgba(0,0,0,0.7),0_0_36px_rgba(245,184,74,0.2)] ring-2 ring-gold-400/55 backdrop-blur-md"
+          initial={{ opacity: 0, scale: 0.92, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95 }}
           onMouseLeave={() => onFocus?.(null)}
         >
-          <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-ink-300">Stapel ({stack.length})</div>
-          {stack.map((c, i) => (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gold-400/20 bg-gold-400/10 px-3 py-1.5">
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-sm font-bold uppercase tracking-widest text-gold-300">Stapel</span>
+              <span className="rounded-full bg-gold-400 px-1.5 text-xs font-bold text-ink-950">{stack.length}</span>
+              {stack.length > 1 && <span className="text-[11px] text-ink-300">oberstes löst zuerst auf</span>}
+            </div>
+            <button className="rounded px-1.5 text-ink-300 hover:bg-white/10 hover:text-white" onClick={() => setCollapsed(true)} title="Einklappen">
+              ▾
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2 scrollbar-thin">
+            {/* oberstes Objekt gross */}
             <motion.div
-              key={c.id}
-              data-stack={c.id}
-              layout
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className={`flex gap-2 rounded-xl p-1.5 ${i === 0 ? 'bg-gold-400/10 ring-1 ring-gold-400/40' : 'bg-ink-950/40'} ${c.id === activeId && i !== 0 ? 'ring-1 ring-gold-400/30' : ''}`}
-              onMouseEnter={() => onFocus?.(c.id)}
+              key={top.id}
+              data-stack={top.id}
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1, boxShadow: ['0 0 0 0 rgba(245,184,74,0.7)', '0 0 0 10px rgba(245,184,74,0)'] }}
+              transition={{ duration: 0.6 }}
+              className={`flex gap-3 rounded-xl bg-gold-400/10 p-2 ring-1 ${activeId === top.id ? 'ring-gold-400/60' : 'ring-gold-400/30'}`}
+              onMouseEnter={() => onFocus?.(top.id)}
             >
-              <CardView card={c} size="sm" highlight={inter.highlight(c.id)} onHover={onHover} onClick={() => inter.click(c.id)} />
-              <div className="min-w-0 flex-1 text-[11px] leading-snug">
-                <div className="truncate font-semibold text-ink-100">{c.name}</div>
-                <div className="text-ink-300">
-                  {c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'} · {nameOf(c.controllerId) ?? ''}
-                </div>
-                {c.targetRefs && c.targetRefs.length > 0 && <TargetChips refs={c.targetRefs} onHover={onHover} />}
-                {c.kind === 'ability' && c.rules?.[0] && (
-                  <div className="mt-0.5 line-clamp-3 text-ink-200">
-                    <RulesText text={c.rules[0]} />
+              <CardView card={top} size="lg" anchor={false} highlight={inter.highlight(top.id)} onHover={onHover} onClick={() => inter.click(top.id)} />
+              <div className="min-w-0 flex-1 text-[12px] leading-snug">
+                <div className="font-display text-base font-bold leading-tight text-ink-100">{top.name}</div>
+                <Origin c={top} who={who(top.controllerId)} />
+                {top.typeLine && top.kind !== 'ability' && <div className="mt-0.5 text-ink-300">{top.typeLine}</div>}
+                {top.targetRefs && top.targetRefs.length > 0 && <TargetChips refs={top.targetRefs} onHover={onHover} />}
+                {top.kind === 'ability' && top.rules?.[0] && (
+                  <div className="mt-1 line-clamp-6 text-ink-200">
+                    <RulesText text={top.rules[0]} />
                   </div>
                 )}
               </div>
             </motion.div>
-          ))}
+            {/* darunter liegende Objekte kompakt */}
+            {stack.slice(1).map((c, i) => (
+              <motion.div
+                key={c.id}
+                data-stack={c.id}
+                layout
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className={`flex items-start gap-2 rounded-xl bg-ink-950/50 p-1.5 ${c.id === activeId ? 'ring-1 ring-gold-400/40' : ''}`}
+                onMouseEnter={() => onFocus?.(c.id)}
+              >
+                <span className="w-4 shrink-0 pt-0.5 text-center text-[11px] font-bold tabular-nums text-ink-400">{i + 2}</span>
+                <CardView card={c} size="sm" anchor={false} highlight={inter.highlight(c.id)} onHover={onHover} onClick={() => inter.click(c.id)} />
+                <div className="min-w-0 flex-1 text-[11px] leading-snug">
+                  <div className="truncate font-semibold text-ink-100">{c.name}</div>
+                  <Origin c={c} who={who(c.controllerId)} />
+                  {c.targetRefs && c.targetRefs.length > 0 && <TargetChips refs={c.targetRefs} onHover={onHover} />}
+                  {c.kind === 'ability' && c.rules?.[0] && (
+                    <div className="mt-0.5 line-clamp-2 text-ink-300">
+                      <RulesText text={c.rules[0]} />
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
+  )
+}
+
+function Origin({ c, who }: { c: Card; who: { name: string; me: boolean } | null }) {
+  return (
+    <div className="flex items-center gap-1.5 text-[11px]">
+      <span className="text-ink-300">{c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'}</span>
+      {who && (
+        <span className={`rounded px-1 font-semibold ${who.me ? 'bg-arcane-500/15 text-arcane-400' : 'bg-white/5 text-ink-200'}`}>{who.name}</span>
+      )}
+    </div>
   )
 }
 
