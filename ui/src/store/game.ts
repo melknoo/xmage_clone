@@ -60,6 +60,10 @@ interface GameStore {
   clearMarks: () => void
   /** alle Markierten greifen target an (Spieler/Planeswalker) bzw. blocken den Angreifer target */
   combatMany: (target: UUID) => void
+  /** Ersatzeffekt-Wahl: accept = Effekt key anwenden (Folge-Frage beantwortet die Engine), decline = alle optionalen ablehnen */
+  replacement: (mode: 'accept' | 'decline', key?: string, always?: boolean) => void
+  /** "Fuer dieses Spiel merken" der abgelehnten Ersatzeffekte zuruecknehmen */
+  resetReplDeclines: () => void
   reset: () => void
 }
 
@@ -293,6 +297,17 @@ export const useGame = create<GameStore>((set, get) => {
       if (!p || ids.length === 0 || get().answeredPromptId === p.id) return
       set({ answeredPromptId: p.id, marked: new Set() })
       send({ t: 'combat', ids, target })
+    },
+    replacement: (mode, key, always) => {
+      const p = get().prompt
+      if (!p || get().answeredPromptId === p.id) return
+      set({ answeredPromptId: p.id })
+      send({ t: 'replacement', mode, key, always: !!always })
+    },
+    resetReplDeclines: () => {
+      const s = get().state
+      if (s?.replDeclines) set({ state: { ...s, replDeclines: undefined } })
+      send({ t: 'replReset' })
     },
     reset: () => {
       get().disconnect()

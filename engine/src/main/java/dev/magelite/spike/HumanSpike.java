@@ -37,13 +37,17 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge
  * <p>
  * {@code --humans=N}: N automatische Test-Menschen mit eigenem Sitz und eigenem Autopiloten in einem Spiel (Routing-Test).
  * <p>
  * {@code --scenario=swarm}: lange Trigger-Ketten (siehe {@link Scenarios}). Der Test-Spieler spielt dann nur Laender,
  * passt sonst und misst, wie lange jede Kette auf dem Stapel braucht. Beim ersten Angriff greift er per
  * Mehrfach-Angriff ({@code GameHost.combat}) mit allen Kreaturen einen Gegner an und prueft das Ergebnis.
+ * <p>
+ * {@code --scenario=dredge}: Ersatzeffekt-Wahl beim Ziehen ({@code GameHost.replacement}). 1. Dialog "Keinen
+ * anwenden", 2. ersten Effekt per 1-Klick anwenden, 3. "Keinen anwenden" + merken. Prueft, dass danach keine
+ * "Dredge ...?"-Frage und nach dem Merken kein Dialog mehr kommt.
  */
 public final class HumanSpike {
 
@@ -131,7 +135,7 @@ public final class HumanSpike {
         java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
         Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
         for (GameHost.HumanSeat seat : host.seats()) {
-            drivers.put(seat, new Driver(host, seat, rnd, verbose, scenario != null));
+            drivers.put(seat, new Driver(host, seat, rnd, verbose, scenario));
             host.attach(seat, msg -> {
                 if (msg instanceof Messages.Activity a) {
                     // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
@@ -231,8 +235,16 @@ public final class HumanSpike {
         if (!promptsEverywhere) {
             out("  FEHLER: ein Sitz hat keinen einzigen Prompt bekommen");
         }
-        if (driver.landsOnly) {
+        if (driver.swarm) {
             out("  Mehrfach-Angriff: %s", driver.macroResult == null ? "NICHT GETESTET" : driver.macroResult);
+        }
+        boolean replOk = true;
+        if (driver.dredge) {
+            boolean shown = driver.state != null && driver.state.replDeclines != null && !driver.state.replDeclines.isEmpty();
+            replOk = driver.replErrors == 0 && driver.replDialogs >= 3 && driver.replAcceptedOk && shown;
+            out("  Ersatzeffekte: %s | Dialoge=%d Fehler=%d angewendet=%s (%s) gemerkt=%s",
+                    replOk ? "OK" : "FEHLER", driver.replDialogs, driver.replErrors, driver.replAccepted,
+                    driver.replAcceptedOk ? "auf der Hand" : "NICHT auf der Hand", shown ? driver.state.replDeclines : "FEHLT");
         }
         if (recovered.get() > 0) {
             out("  Verlorene Antworten neu zugestellt (XMage-Race): %d", recovered.get());
@@ -243,8 +255,8 @@ public final class HumanSpike {
         if (turnOrder.errors > 0) {
             out("  FEHLER: Zugfolge weicht %dx von der Sitzordnung ab", turnOrder.errors);
         }
-        boolean macroOk = !driver.landsOnly || (driver.macroResult != null && driver.macroResult.startsWith("OK"));
-        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && allOver && promptsEverywhere;
+        boolean macroOk = !driver.swarm || (driver.macroResult != null && driver.macroResult.startsWith("OK"));
+        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
     }
 
     /**
@@ -355,6 +367,8 @@ public final class HumanSpike {
         final boolean verbose;
         /** Szenario-Modus: nur Laender spielen, sonst passen, nicht angreifen */
         final boolean landsOnly;
+        final boolean swarm;
+        final boolean dredge;
         volatile StateDto state;
         PromptDto lastPrompt;
         final Map<String, Integer> kinds = new HashMap<>();
@@ -368,17 +382,29 @@ public final class HumanSpike {
         List<UUID> macroIds;
         UUID macroDefender;
         String macroResult;
+        /** Ersatzeffekte (Szenario dredge) */
+        int replDialogs, replErrors;
+        /** bis zum naechsten anderen Prompt darf keine "Dredge ...?"-Frage kommen */
+        boolean replNoAsk;
+        boolean replAlways;
+        String replAccepted;
+        boolean replAcceptedOk;
 
-        Driver(GameHost host, GameHost.HumanSeat seat, Random rnd, boolean verbose, boolean landsOnly) {
+        Driver(GameHost host, GameHost.HumanSeat seat, Random rnd, boolean verbose, String scenario) {
             this.host = host;
             this.seat = seat;
             this.rnd = rnd;
             this.verbose = verbose;
-            this.landsOnly = landsOnly;
+            this.landsOnly = scenario != null;
+            this.swarm = "swarm".equalsIgnoreCase(scenario);
+            this.dredge = "dredge".equalsIgnoreCase(scenario);
         }
 
         void handle(PromptDto p) {
-            if (landsOnly && "SELECT".equals(p.kind) && "attackers".equals(p.mode) && macroAttack(p)) {
+            if (dredge && replacement(p)) {
+                return;
+            }
+            if (swarm && "SELECT".equals(p.kind) && "attackers".equals(p.mode) && macroAttack(p)) {
                 return;
             }
             lastPrompt = p;
@@ -458,6 +484,63 @@ public final class HumanSpike {
                 default:
                     return GameHost.Response.ofBool(false);
             }
+        }
+
+        /**
+         * Szenario dredge: Ersatzeffekt-Dialoge ueber {@code GameHost.replacement} beantworten und pruefen, dass die
+         * Engine die Folge-Fragen selbst erledigt.
+         *
+         * @return true, wenn der Prompt beantwortet wurde
+         */
+        boolean replacement(PromptDto p) {
+            StateDto s = state;
+            if (replAccepted != null && !replAcceptedOk && s != null && s.hand != null) {
+                replAcceptedOk = s.hand.stream().anyMatch(c -> replAccepted.equals(c.name));
+            }
+            boolean dialog = "CHOOSE_CHOICE".equals(p.kind) && p.choice != null && p.choice.groups != null;
+            boolean dredgeAsk = "ASK".equals(p.kind) && p.messageText != null && p.messageText.startsWith("Dredge ");
+            if (dredgeAsk && (replNoAsk || replAlways)) {
+                replErrors++;
+                out("!!! Dredge-Frage trotz Entscheidung: %s", p.messageText);
+            }
+            if (!dialog) {
+                if (!dredgeAsk) {
+                    replNoAsk = false;
+                }
+                return false;
+            }
+            lastPrompt = p;
+            replDialogs++;
+            kinds.merge("REPLACEMENT", 1, Integer::sum);
+            if (replAlways) {
+                replErrors++;
+                out("!!! Ersatz-Dialog trotz 'merken'");
+            }
+            String mode = "decline";
+            String key = null;
+            boolean always = replDialogs >= 3;
+            if (replDialogs == 2) {
+                PromptDto.ReplSource src = p.choice.groups.stream().filter(PromptDto.ReplGroup::optional)
+                        .map(g -> g.sources().get(0)).findFirst().orElse(null);
+                if (src != null) {
+                    mode = "accept";
+                    key = src.key();
+                    replAccepted = src.name();
+                }
+            }
+            out("  [T%s] Ersatz-Dialog %d: %s -> %s%s", s == null ? "?" : s.turn, replDialogs,
+                    p.choice.groups.stream().map(g -> g.label() + "x" + g.sources().size()).toList(), mode,
+                    "accept".equals(mode) ? " " + replAccepted : always ? " + merken" : "");
+            if (!host.replacement(seat, mode, key, always)) {
+                replErrors++;
+                out("!!! GameHost.replacement abgelehnt");
+                return false;
+            }
+            replNoAsk = true;
+            if (always) {
+                replAlways = true;
+            }
+            return true;
         }
 
         /**

@@ -33,6 +33,13 @@ Fallback auf manuelles Klicken.
   andersherum ab); Vorschau getappter Karten war gedreht; Ziele von Zaubern/Fähigkeiten auf dem Stapel wurden nicht
   angezeigt (jetzt Chips + Zielpfeil, `targetRefs`); Fähigkeiten auf dem Stapel hatten keinen Namen; Dialoge sind
   minimierbar (Tab). `humanSpike` prüft seitdem Zugfolge = Sitzordnung: 9/9 Spiele korrekt.
+- 2026-10-05 neu: **Ersatzeffekt-Wahl gruppiert** (`ReplacementAssist`, `GameHost.replacement`): gleiche Effekte
+  (z. B. 7× „Dredge 2“) als ein Kasten mit Karten-Chips; Chip = diesen Effekt anwenden (Folge-Frage beantwortet die
+  Engine), „Keinen anwenden“ = ganze Ja/Nein-Kette ablehnen, „für dieses Spiel merken“ + Rücksetz-Knopf in der Leiste.
+  Geprüft: `humanSpike --scenario=dredge` (3 Dialoge, 0 Fehler, Karte nach 1-Klick auf der Hand, danach kein Dialog
+  mehr), Regression `humanSpike` 2/2, Screenshots `steps-dredge.json`. Nicht eigens getestet: „merken“ bei nur noch
+  einer Dredge-Karte im Friedhof (kein Wahl-Dialog, Ablehnen über den Regeltext an der Karte).
+  Grenze: „Keinen anwenden“ gilt bis zum nächsten anderen Prompt, bei „ziehe 2“ also auch für die zweite Karte.
 - 2026-10-02 neu: Aktivitätsanzeige in der Prompt-Leiste (Herzschlag `activity` 1/s mit Modus + gemessener CPU-Last):
   „X rechnet …“ mit drehendem Zahnrad nur bei echter Rechenlast, Warnung bei Stillstand (> 15 s) oder ohne Verbindung.
 
@@ -124,6 +131,7 @@ Fallback auf manuelles Klicken.
    - Angreifen per Drag & Drop auf einen Gegner. Mehrere auf ein Ziel geht schon: Shift+Klick + Ziel
      (`GameHost.combat`).
    - „Immer Ja/Nein“ für wiederkehrende Fragen (`REQUEST_AUTO_ANSWER_*`, UI fehlt; Engine erlaubt die Actions).
+     Für Ersatzeffekte (Dredge & Co.) gibt es das seit 2026-10-05 („Keinen anwenden“ + „für dieses Spiel merken“).
    - Trigger-Reihenfolge merken (`TRIGGER_AUTO_ORDER_*`, UI fehlt).
    - Animationen (Karte fliegt aufs Feld, Schaden), Sounds aus `vendor/xmage/sounds` statt Synth-Töne.
 4. **Moxfield-Import**: Server-Abruf wird von Cloudflare geblockt (HTTP 403). Der Fallback über Electron

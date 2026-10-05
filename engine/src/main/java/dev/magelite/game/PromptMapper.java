@@ -104,6 +104,9 @@ public final class PromptMapper {
             case CHOOSE_CHOICE -> {
                 Choice c = event.getChoice();
                 p.choice = choice(c);
+                if (ReplacementAssist.isReplacementChoice(c)) {
+                    p.choice.groups = ReplacementAssist.groups(p.choice);
+                }
                 p.message = RichText.parse(c.getMessage());
                 p.messageText = RichText.plain(c.getMessage());
                 p.required = c.isRequired();

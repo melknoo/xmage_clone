@@ -167,6 +167,10 @@ public final class GameHost {
         private volatile long promptSigId;
         /** laufender Mehrfach-Angriff/-Block (Game-Thread, gestartet vom WS-Thread) */
         private volatile CombatMacro macro;
+        /** laufende Ersatzeffekt-Entscheidung (1-Klick / "Keinen anwenden"), siehe {@link #handleReplacement} */
+        private volatile ReplMacro replMacro;
+        /** Ersatzeffekte (Regeltext -> Kurzname), die dieses Spiel automatisch abgelehnt werden */
+        private final Map<String, String> replDeclineAlways = new ConcurrentHashMap<>();
         // Auto-Bezahlen (Game-Thread)
         private boolean autoPayActive;
         private boolean autoPayFailed;
@@ -597,6 +601,7 @@ public final class GameHost {
             return false;
         }
         seat.macro = null;
+        seat.replMacro = null;
         String sig = seat.promptSig;
         if (sig != null && seat.promptSigId == promptId && Boolean.FALSE.equals(r.bool())) {
             // gepasst -> gleiche Stapelobjekte laufen ab jetzt automatisch durch
@@ -645,6 +650,150 @@ public final class GameHost {
         notifyOthers(seat, null);
         dispatch(seat, t -> apply(seat, t, Response.ofUuid(first)));
         return true;
+    }
+
+    /**
+     * Ersatzeffekt-Wahl mit Gruppen: {@code accept} = Effekt {@code key} anwenden, seine Folge-Frage ("Dredge X?")
+     * beantwortet {@link #handleReplacement} mit Ja. {@code decline} = alle optionalen Effekte ablehnen (Wahl und
+     * Nein-Kette automatisch), mit {@code always} auch in allen weiteren Ereignissen dieses Spiels.
+     */
+    public boolean replacement(HumanSeat seat, String mode, String key, boolean always) {
+        PromptDto p = openPrompt.get();
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        List<PromptDto.ReplGroup> groups = "CHOOSE_CHOICE".equals(p.kind) && p.choice != null ? p.choice.groups : null;
+        ReplMacro m = null;
+        String answer = null;
+        if (groups != null && "accept".equals(mode) && key != null) {
+            for (PromptDto.ReplGroup g : groups) {
+                for (PromptDto.ReplSource s : g.sources()) {
+                    if (key.equals(s.key())) {
+                        m = new ReplMacro(true);
+                        if (g.optional() && s.objectId() != null) {
+                            m.sourceIds.add(s.objectId());
+                        }
+                        answer = key;
+                    }
+                }
+            }
+        } else if (groups != null && "decline".equals(mode)) {
+            m = new ReplMacro(false);
+            for (PromptDto.ReplGroup g : groups) {
+                if (!g.optional()) {
+                    continue;
+                }
+                m.add(g);
+                if (always) {
+                    seat.replDeclineAlways.put(g.rule(), g.label());
+                }
+                if (answer == null) {
+                    answer = g.sources().get(0).key();
+                }
+            }
+        }
+        if (answer == null || !openPrompt.compareAndSet(p, null)) {
+            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        seat.macro = null;
+        seat.replMacro = m;
+        String a = answer;
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        dispatch(seat, t -> apply(seat, t, Response.ofString(a)));
+        return true;
+    }
+
+    /** "Fuer dieses Spiel merken" zuruecknehmen. */
+    public void resetReplacementDeclines(HumanSeat seat) {
+        seat.replDeclineAlways.clear();
+        StateDto last = seat.lastState;
+        if (last != null) {
+            last.replDeclines = null; // Client leert seine Anzeige selbst; der naechste State kommt ohne
+        }
+    }
+
+    /** Laufende Ersatzeffekt-Entscheidung: welche Effekte (Regeltexte/Quellen) ab- bzw. angenommen werden. */
+    private static final class ReplMacro {
+        final boolean accept;
+        final Set<String> rules = new HashSet<>();
+        final Set<UUID> sourceIds = new HashSet<>();
+
+        ReplMacro(boolean accept) {
+            this.accept = accept;
+        }
+
+        void add(PromptDto.ReplGroup g) {
+            rules.add(g.rule());
+            for (PromptDto.ReplSource s : g.sources()) {
+                if (s.objectId() != null) {
+                    sourceIds.add(s.objectId());
+                }
+            }
+        }
+    }
+
+    /**
+     * Game-Thread: beantwortet Ersatzeffekt-Prompts selbst.
+     * <ul>
+     *   <li>Wahl: Gruppe, die abgelehnt werden soll (laufende Entscheidung oder "merken") -&gt; deren ersten Effekt
+     *       waehlen, die Frage danach beantwortet der ASK-Zweig mit Nein. Alle Optionen identisch (Token-Kopien)
+     *       -&gt; erste waehlen.</li>
+     *   <li>{@code ASK} aus einem Ersatzeffekt ({@link ReplacementAssist#inReplaceEvent}) zu einer Quelle der
+     *       laufenden Entscheidung -&gt; Ja/Nein. Auch der letzte Effekt ohne Wahl-Dialog und "merken"-Effekte mit nur
+     *       einer Quelle (Regeltext an der Quelle) werden so abgelehnt.</li>
+     *   <li>Alles andere beendet die laufende Entscheidung.</li>
+     * </ul>
+     *
+     * @return true, wenn der Prompt beantwortet wurde
+     */
+    private boolean handleReplacement(HumanSeat seat, PromptDto prompt) {
+        ReplMacro m = seat.replMacro;
+        List<PromptDto.ReplGroup> groups = "CHOOSE_CHOICE".equals(prompt.kind) && prompt.choice != null ? prompt.choice.groups : null;
+        if (groups != null) {
+            for (PromptDto.ReplGroup g : groups) {
+                boolean declined = (m != null && !m.accept && m.rules.contains(g.rule())) || seat.replDeclineAlways.containsKey(g.rule());
+                if (declined && g.optional()) {
+                    if (m == null || m.accept) {
+                        m = new ReplMacro(false);
+                        seat.replMacro = m;
+                    }
+                    m.add(g);
+                    onUpdate();
+                    answerInternally(seat, prompt, Response.ofString(g.sources().get(0).key()));
+                    return true;
+                }
+            }
+            seat.replMacro = null;
+            if (ReplacementAssist.allIdentical(groups)) {
+                onUpdate();
+                answerInternally(seat, prompt, Response.ofString(groups.get(0).sources().get(0).key()));
+                return true;
+            }
+            return false;
+        }
+        if ("ASK".equals(prompt.kind) && (m != null || !seat.replDeclineAlways.isEmpty()) && ReplacementAssist.inReplaceEvent()) {
+            Set<UUID> ids = ReplacementAssist.objIds(prompt);
+            if (m != null && ids.stream().anyMatch(m.sourceIds::contains)) {
+                if (m.accept) {
+                    seat.replMacro = null;
+                }
+                onUpdate();
+                answerInternally(seat, prompt, Response.ofBool(m.accept));
+                return true;
+            }
+            if (ReplacementAssist.hasRule(game, ids, seat.replDeclineAlways.keySet())) {
+                onUpdate();
+                answerInternally(seat, prompt, Response.ofBool(false));
+                return true;
+            }
+        }
+        seat.replMacro = null;
+        return false;
     }
 
     private static Set<UUID> inCombat(StateDto s, boolean attackers) {
@@ -792,6 +941,10 @@ public final class GameHost {
 
             CombatMacro m = seat.macro;
             if (m != null && continueMacro(seat, m, prompt)) {
+                return;
+            }
+
+            if (handleReplacement(seat, prompt)) {
                 return;
             }
 
@@ -1100,6 +1253,9 @@ public final class GameHost {
         for (HumanSeat s : humans.values()) {
             boolean withPlayable = s == forSeat;
             StateDto st = GameViewMapper.map(game, s.playerId, seq, withPlayable, withPlayable ? playable : null, thinking, deckNames);
+            if (!s.replDeclineAlways.isEmpty()) {
+                st.replDeclines = new ArrayList<>(new LinkedHashSet<>(s.replDeclineAlways.values()));
+            }
             s.lastState = st;
             send(s, st);
             if (s == forSeat || (mine == null && forSeat == null)) {

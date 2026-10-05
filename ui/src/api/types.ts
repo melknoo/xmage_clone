@@ -139,6 +139,8 @@ export interface GameState {
   lookedAt?: NamedCards[]
   playable?: Record<UUID, number>
   actions?: UUID[]
+  /** Ersatzeffekte, die fuer dieses Spiel automatisch abgelehnt werden (Kurznamen) */
+  replDeclines?: string[]
 }
 
 export type RichSeg = { text?: string; obj?: string; color?: string; i?: boolean; b?: boolean; br?: boolean }
@@ -170,6 +172,15 @@ export interface ChoiceItem {
   value: string
   sort?: number
   hints?: string[]
+}
+
+export interface ReplGroup {
+  rule: string
+  /** Kurzname, z.B. "Dredge 2" */
+  label: string
+  /** Effekt fragt selbst nach ("you may") -> 1-Klick und "Keinen anwenden" moeglich */
+  optional?: boolean
+  sources: { key: string; name: string; objectId?: UUID }[]
 }
 
 export interface Prompt {
@@ -204,6 +215,8 @@ export interface Prompt {
     manaColor?: boolean
     items?: ChoiceItem[]
     specialText?: string
+    /** nur bei der Ersatzeffekt-Wahl: gleiche Effekte (Regeltext) zusammengefasst */
+    groups?: ReplGroup[]
   }
   min?: number
   max?: number

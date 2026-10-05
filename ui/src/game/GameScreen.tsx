@@ -176,6 +176,8 @@ function TopBar() {
   const autoPass = useGame((s) => s.autoPass)
   const setAutoPass = useGame((s) => s.setAutoPass)
   const isHost = useGame((s) => s.hello?.host !== false)
+  const replDeclines = state.replDeclines
+  const resetReplDeclines = useGame((s) => s.resetReplDeclines)
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 px-1">
@@ -211,6 +213,16 @@ function TopBar() {
         >
           {autoPass ? '⏩ Auto-Passen' : 'Passen manuell'}
         </button>
+        {replDeclines && replDeclines.length > 0 && (
+          <button
+            className="btn-ghost !border-amber-400/50 !px-2 !py-1 !text-xs !text-amber-300"
+            title={`Automatisch abgelehnt: ${replDeclines.join(', ')} – Klick setzt zurück`}
+            onClick={resetReplDeclines}
+          >
+            🚫 {replDeclines[0]}
+            {replDeclines.length > 1 ? ` +${replDeclines.length - 1}` : ''} ✕
+          </button>
+        )}
         <button
           className="btn-ghost !px-2 !py-1 !text-xs"
           title="Ton an/aus"

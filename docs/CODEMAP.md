@@ -35,6 +35,7 @@ Electron (desktop/src/main.cjs)
 | `api/Json` | gemeinsamer Jackson-`ObjectMapper` |
 | `game/GameHost` | **Herzstück**: ein Spiel (1–4 Menschen, Rest Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität). Pro Mensch ein `HumanSeat` (Sink, eigener State, Auto-Pay-Zustand, gepasste Trigger, Aufgabe); der eine offene Prompt gehört `promptSeat`, nur der Besitzer darf antworten; `leave(seat)` = nur dieser Sitz gibt auf, ohne Menschen geben die Bots auf |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
+| `game/ReplacementAssist` | Ersatzeffekt-Wahl: Items nach Regeltext gruppieren (`choice.groups`), „you may“ = optional, Frage aus `ContinuousEffects.replaceEvent` erkennen (StackWalker), Regeltext an einer Quelle finden. `GameHost.replacement`/`handleReplacement` nutzen das für 1-Klick, „Keinen anwenden“ und „für dieses Spiel merken“ |
 | `game/AutoPayer` | Planer fürs automatische Bezahlen von Manakosten |
 | `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, `fastStack`, `reactInCombat`, Denkzeit, Pausen nur nach echten Aktionen, Hooks); Angriffe über `FfaAttack` |
 | `game/FfaAttack` | Angriffe im FFA: Lethal gegen irgendeinen Gegner, „sicher“ pro Verteidiger, Ziel nach Schaden/Leben × Bedrohung, Blocker gegen Gegenschlag zurückhalten |
@@ -60,9 +61,9 @@ Electron (desktop/src/main.cjs)
 | `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
-| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung; `--scenario=swarm` misst Trigger-Ketten und testet den Mehrfach-Angriff) |
+| `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung; `--scenario=swarm` misst Trigger-Ketten und testet den Mehrfach-Angriff; `--scenario=dredge` prüft Ersatzeffekt-Gruppen, 1-Klick, „Keinen anwenden“, „merken“) |
 | `spike/BotArena` | KI-Vergleich A vs B (je 2 Sitze, Spiegel-Spiele mit getauschten Seiten): Siege, Platzierungspunkte, ms/Zug, CSV in `run/arena/` (`gradlew botArena`) |
-| `spike/Scenarios` | Test-Situationen per `game.cheat` vor dem Start (`swarm`: 16 Scute Swarm + Länder); in der Engine nur mit `--dev` (`POST /api/games {scenario}`) |
+| `spike/Scenarios` | Test-Situationen per `game.cheat` vor dem Start (`swarm`: 16 Scute Swarm + Länder; `dredge`: 7 Dredge-Karten im Friedhof, 3 Gruppen); in der Engine nur mit `--dev` (`POST /api/games {scenario}`) |
 
 **XMage-Ersatzklasse** (`engine/src/main/java/mage/player/ai/score/GameStateEvaluator2.java`): gleicher Name wie im
 XMage-Jar, API identisch. Bewertet gegen **alle** Gegner statt nur den ersten. Greift nur, weil das Engine-Jar auf dem
@@ -164,7 +165,7 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `game/GameScreen.tsx` | Tisch-Layout, TopBar, eigener Bereich, Hotkeys, „ausgeschieden“-Banner |
 | `game/interaction.ts` | **Klicklogik**: aus Prompt + State → Modus (priority/attack/block/target/mana/dialog), Hervorhebung, Klickziel |
 | `game/promptActions.ts` | Buttons pro Prompt-Art, F-Tasten-Belegung |
-| `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste, Dialoge (Auswahl, Menge, Stapel, Mulligan, Kartenwahl) |
+| `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste, Dialoge (Auswahl, Ersatzeffekte gruppiert, Menge, Stapel, Mulligan, Kartenwahl) |
 | `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen; Stapel mit großem obersten Objekt (einklappbar); Zonen-Knöpfe leuchten, wenn darin etwas spielbar/Ziel ist, 📚 öffnet die sichtbare oberste Bibliothekskarte |
 | `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
 | `game/Side.tsx` | Kartenvorschau, Spielverlauf (nach Zügen gruppiert, Filter Wichtiges/Alles, Icons per Stichwort-Regex), Toasts, Einblendung aufgedeckter/angesehener Karten (`RevealPopups`, Store `reveals`) |
@@ -185,6 +186,7 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `src/preload.cjs` | `window.magelite = {port, token, fetchText}` |
 | `tools/shot.cjs`, `tools/autoplay.js`, `tools/steps-autoplay.json` | Screenshot-Automatisierung + In-Page-Autopilot für UI-Tests |
 | `tools/steps-swarm.json`, `tools/swarm-pilot.js` | Szenario `swarm` (Dev-Engine): Stapel ×N, Shift-Markieren, Mehrfach-Angriff, Pfeile, Verlauf ×N |
+| `tools/steps-dredge.json`, `tools/dredge-pilot.js` | Szenario `dredge` (Dev-Engine): Ersatzeffekt-Dialog mit Gruppen + Hover, „Keinen anwenden“, „merken“ + Toolbar-Knopf |
 | `tools/steps-server.json` | Server-Modus über den Vite-Proxy: Login-Screen, `#invite=`-Login, Einladungen, Spiel |
 
 ## Skripte (`scripts/`) und Server-Dateien

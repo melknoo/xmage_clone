@@ -80,9 +80,19 @@ public class PromptDto {
         /** key -> Anzeige (bei nicht-keyed: value -> value) */
         public List<ChoiceItem> items;
         public String specialText;
+        /** nur bei der Ersatzeffekt-Wahl: Items nach Regeltext gruppiert */
+        public List<ReplGroup> groups;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ChoiceItem(String key, String value, Integer sort, List<String> hints) {
+    }
+
+    /** Gleiche Ersatzeffekte; {@code optional} = Regel enthaelt "you may" (Effekt fragt selbst nach). */
+    public record ReplGroup(String rule, String label, boolean optional, List<ReplSource> sources) {
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ReplSource(String key, String name, UUID objectId) {
     }
 }

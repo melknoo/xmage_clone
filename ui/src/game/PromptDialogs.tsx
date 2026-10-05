@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Card, Prompt } from '../api/types'
+import type { Card, Prompt, ReplGroup } from '../api/types'
 import { CardView } from '../components/CardView'
 import { Modal } from '../components/Modal'
 import { Rich, withSymbols } from '../lib/mana'
@@ -20,7 +20,7 @@ function PromptDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; on
     case 'PICK_ABILITY':
       return <ChoiceListDialog p={p} />
     case 'CHOOSE_CHOICE':
-      return <ChoiceDialog p={p} />
+      return p.choice?.groups ? <ReplacementDialog p={p} onHover={onHover} /> : <ChoiceDialog p={p} />
     case 'AMOUNT':
       return <AmountDialog p={p} />
     case 'MULTI_AMOUNT':
@@ -85,6 +85,78 @@ function ChoiceDialog({ p }: { p: Prompt }) {
           </button>
         ))}
         {items.length > 300 && <div className="col-span-2 p-2 text-xs text-ink-400">… {items.length - 300} weitere – Suche verfeinern</div>}
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Ersatzeffekt-Wahl: gleiche Effekte (Regeltext) als ein Kasten mit Karten-Chips. Bei optionalen Effekten
+ * ("you may", z.B. Dredge) wendet ein Chip-Klick den Effekt direkt an; "Keinen anwenden" lehnt alle ab.
+ */
+function ReplacementDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) => void }) {
+  const answer = useGame((s) => s.answer)
+  const replacement = useGame((s) => s.replacement)
+  const objects = useGame((s) => s.objects)
+  const [remember, setRemember] = useState(false)
+  const groups = p.choice?.groups ?? []
+  const anyOptional = groups.some((g) => g.optional)
+  const pick = (g: ReplGroup, key: string) => (g.optional ? replacement('accept', key) : answer({ str: key }))
+  return (
+    <Modal
+      minimizable
+      title="Ersatzeffekt wählen"
+      closable={false}
+      footer={
+        anyOptional ? (
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-ink-300" title="Diese Effekte ab jetzt ohne Nachfrage ablehnen (Knopf oben in der Leiste setzt zurück)">
+              <input type="checkbox" className="accent-amber-400" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+              Für dieses Spiel merken
+            </label>
+            <button className="btn-primary" onClick={() => replacement('decline', undefined, remember)}>
+              Keinen anwenden
+            </button>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className="mb-3 text-xs text-ink-400">{anyOptional ? 'Karte anklicken = diesen Effekt anwenden.' : 'Welcher Effekt wirkt zuerst?'}</div>
+      <div className="flex flex-col gap-2">
+        {groups.map((g) => {
+          const rest = g.rule.startsWith(g.label) ? g.rule.slice(g.label.length) : null
+          return (
+            <div key={g.rule} className="rounded-xl bg-ink-800/60 p-3 ring-1 ring-white/10">
+              <div className="mb-2 text-sm">
+                {rest === null ? (
+                  withSymbols(g.rule)
+                ) : (
+                  <>
+                    <span className="font-semibold text-gold-300">{g.label}</span>
+                    {g.sources.length > 1 && <span className="ml-1.5 text-xs text-ink-400">×{g.sources.length}</span>}
+                    <span className="text-ink-400">{withSymbols(rest)}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {g.sources.map((src) => {
+                  const card = src.objectId ? objects.get(src.objectId) : undefined
+                  return (
+                    <button
+                      key={src.key}
+                      className="rounded-lg bg-ink-950/60 px-2.5 py-1 text-xs font-semibold text-ink-100 ring-1 ring-white/15 transition hover:bg-ink-700 hover:ring-gold-400/60"
+                      onMouseEnter={() => card && onHover(card)}
+                      onMouseLeave={() => onHover(null)}
+                      onClick={() => pick(g, src.key)}
+                    >
+                      {src.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </Modal>
   )

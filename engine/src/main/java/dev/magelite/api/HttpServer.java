@@ -366,6 +366,9 @@ public final class HttpServer {
                         host.setAutoPass(seat, m.get("autoPass").asBoolean(true));
                     }
                 }
+                case "replacement" -> host.replacement(seat, m.path("mode").asText(),
+                        m.hasNonNull("key") ? m.get("key").asText() : null, m.path("always").asBoolean(false));
+                case "replReset" -> host.resetReplacementDeclines(seat);
                 case "leave" -> host.leave(seat);
                 case "ping" -> ctx.send("{\"t\":\"pong\"}");
                 default -> LOG.debug("Unbekannte Nachricht: " + text);

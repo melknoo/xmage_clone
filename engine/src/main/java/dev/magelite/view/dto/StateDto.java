@@ -31,4 +31,6 @@ public class StateDto {
     public Map<UUID, Integer> playable;
     /** Objekte mit Nicht-Mana-Aktionen (Land, Zauber, Faehigkeit) */
     public List<UUID> actions;
+    /** Ersatzeffekte, die dieser Spieler fuer dieses Spiel automatisch ablehnt (Kurznamen) */
+    public List<String> replDeclines;
 }

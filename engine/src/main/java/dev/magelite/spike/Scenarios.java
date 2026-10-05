@@ -22,7 +22,7 @@ public final class Scenarios {
     }
 
     public static boolean exists(String name) {
-        return name != null && "swarm".equals(name.toLowerCase(Locale.ROOT));
+        return name != null && List.of("swarm", "dredge").contains(name.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -34,19 +34,58 @@ public final class Scenarios {
         if (!exists(name)) {
             throw new IllegalArgumentException("Unbekanntes Szenario: " + name);
         }
+        if ("dredge".equals(name.toLowerCase(Locale.ROOT))) {
+            dredge(game, humanId);
+            return;
+        }
         List<PutToBattlefieldInfo> mine = new ArrayList<>();
         mine.addAll(battlefield("Forest", 6));
         mine.addAll(battlefield("Scute Swarm", 16));
-        game.cheat(humanId, List.of(), cards("Forest", "Forest", "Giant Growth"), mine, List.of(), List.of(), List.of());
+        cheat(game, humanId, cards("Forest", "Forest", "Giant Growth"), mine, List.of());
         for (Player p : game.getPlayers().values()) {
             if (p.getId().equals(humanId)) {
                 continue;
             }
             List<PutToBattlefieldInfo> bf = new ArrayList<>(battlefield("Mountain", 2));
             bf.addAll(battlefield("Mogg Fanatic", 1));
-            game.cheat(p.getId(), List.of(), cards("Lightning Bolt"), bf, List.of(), List.of(), List.of());
+            cheat(game, p.getId(), cards("Lightning Bolt"), bf, List.of());
         }
         game.setStartingPlayerId(humanId);
+    }
+
+    /**
+     * {@code dredge}: Ersatzeffekt-Wahl beim Ziehen. Mein Friedhof: 5x Dredge 2 (gleicher Regeltext -> eine
+     * Gruppe), Life from the Loam (Dredge 3) und Stinkweed Imp (Dredge 5) -> 3 Gruppen. 4 Waelder im Spiel.
+     * Ein Bot beginnt, damit ich schon im ersten eigenen Zug ziehe.
+     */
+    private static void dredge(Game game, UUID humanId) {
+        List<Card> gy = cards("Dakmor Salvage", "Golgari Brownscale", "Moldervine Cloak", "Necroplasm", "Nightmare Void",
+                "Life from the Loam", "Stinkweed Imp");
+        cheat(game, humanId, List.of(), battlefield("Forest", 4), gy);
+        UUID starter = null;
+        for (Player p : game.getPlayers().values()) {
+            if (!p.getId().equals(humanId) && starter == null) {
+                starter = p.getId();
+            }
+        }
+        if (starter != null) {
+            game.setStartingPlayerId(starter);
+        }
+    }
+
+    /**
+     * {@code game.cheat} legt die Karten ab und wendet danach die Effekte an. Vor {@code game.start()} wirft das bei
+     * manchen Karten im Spiel (z.B. P/T = Karten in allen Friedhoefen: "game is not started"); die Karten liegen dann
+     * schon richtig, die Effekte rechnet der Spielstart neu.
+     */
+    private static void cheat(Game game, UUID playerId, List<Card> hand, List<PutToBattlefieldInfo> battlefield, List<Card> graveyard) {
+        try {
+            game.cheat(playerId, List.of(), hand, battlefield, graveyard, List.of(), List.of());
+        } catch (IllegalStateException e) {
+            if (e.getMessage() == null || !e.getMessage().contains("game is not started")) {
+                throw e;
+            }
+        }
     }
 
     private static List<PutToBattlefieldInfo> battlefield(String name, int n) {

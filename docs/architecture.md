@@ -262,7 +262,7 @@ Every prompt has `{t:"prompt", promptId, stateSeq, kind, playerId, message:rich,
 | `PICK_ABILITY` | `abilities:[{id, text, sourceId, sourceName, set, num}]` | uuid |
 | `CHOOSE_ABILITY` | `objectName`, `choices:[{id,text}]` in order | uuid (null = cancel) |
 | `CHOOSE_MODE` | `choices:[{id,text}]`, including the DONE/CANCEL ids | uuid |
-| `CHOOSE_CHOICE` | `choice:{message, subMessage, required, keyed, items:[{key,value,hint?}], search, sort?, manaColor, special?{text,hint,canBeEmpty}}` | str (key or value; `"#"+key` = remember; `""` = cancel) |
+| `CHOOSE_CHOICE` | `choice:{message, subMessage, required, keyed, items:[{key,value,hint?}], search, sort?, manaColor, special?{text,hint,canBeEmpty}, groups?}`; `groups:[{rule,label,optional,sources:[{key,name,objectId}]}]` only for the replacement-effect choice (items grouped by rules text, `optional` = text contains "you may") | str (key or value; `"#"+key` = remember; `""` = cancel); for `groups` also `{t:"replacement"}` (below) |
 | `PLAY_MANA` | `cost` (parsed from "Pay {…}"), `canSpecial` | uuid, mana{playerId,type}, str "special", bool false (cancel) |
 | `PLAY_X_MANA` | — | bool, uuid, mana |
 | `AMOUNT` | `min`, `max` | int |
@@ -278,6 +278,7 @@ Every prompt has `{t:"prompt", promptId, stateSeq, kind, playerId, message:rich,
   - `CONCEDE` → `setConcedingPlayer`
   - Rejected: `UNDO`, `ROLLBACK_*`, permission/`CLIENT_*`/`VIEW_*`/macro actions.
 - `{t:"macro", kind:"attack", attackerId, defenderId}`, `{kind:"attackAll", defenderId}`, `{kind:"block", blockerId, attackerId}`, later `{kind:"autoTap"}`
+- `{t:"replacement", mode:"accept"|"decline", key?, always?}` on a replacement choice with `groups`: `accept` picks `key` and the engine answers the effect's own follow-up `ASK` ("Dredge X?") with yes; `decline` picks an optional effect and answers the whole yes/no chain with no for this event, `always` keeps declining these rules texts for the rest of the game (`state.replDeclines` lists them, `{t:"replReset"}` clears).
 - `{t:"settings", stops, autoPass, passAfterCast, confirmEmptyPool}`, `{t:"tempo", preset|{thinkSecs, actionDelayMs, fastOpponentTurns}}`, `{t:"leave"}`, `{t:"ping"}`
 
 Rules on both sides:
@@ -309,7 +310,8 @@ Rules on both sides:
   - Settings toggle `MANA_AUTO_PAYMENT_ON` (use pool automatically) and `USE_FIRST_MANA_ABILITY`.
   - "Auto-tap" is a Phase-5 stretch: a host planner computes a land set and sends uuid clicks, answering `CHOOSE_ABILITY` with the planned ids.
 - **X / amount.** Slider + numeric input with min/max → `int`. **Multi-amount**: one row per item with a running total → `str` of space-separated ints.
-- **Choices.** Virtualized searchable list (card-name choice can have about 30,000 entries) → `str` key/value. Replacement effects get a "Remember" checkbox, which sends `"#"+key`.
+- **Choices.** Virtualized searchable list (card-name choice can have about 30,000 entries) → `str` key/value.
+- **Replacement effects.** Equal effects (same rules text, e.g. 7× "Dredge 2") are one box with a chip per source card (hover shows the card). For optional effects a chip click applies that one (`replacement accept`, no extra yes/no), "Keinen anwenden" declines all (`replacement decline`), "Für dieses Spiel merken" adds `always`; a toolbar button shows the remembered effects and resets them. If all options are identical including the card name (token copies), the engine picks the first one itself. XMage's own "Remember answer" (`"#"+key`) is not used.
 - **Modes, abilities, piles, triggers.** Modes and abilities open a modal list (Done/Cancel are the special UUIDs). Piles show two columns. Trigger order (`PICK_ABILITY`) is a list where you click the trigger that goes on the stack first; a context menu offers "always first/last" (`TRIGGER_AUTO_ORDER_*`).
 - **ASK auto-answer.** "Always yes/no for this" sends `REQUEST_AUTO_ANSWER_TEXT_YES/NO` with `data=autoAnswer.text`, then answers the current prompt.
 - **Concede / leave.** Confirm dialog, then `CONCEDE` / `leave`.
