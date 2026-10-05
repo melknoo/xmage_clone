@@ -43,6 +43,7 @@ cd engine; .\gradlew.bat runServer  # Dev-Engine im Server-Modus (Cookie-Login, 
 cd ui; npm run dev                  # Vite-UI: http://localhost:5173/?port=7317 (direkt) bzw. http://localhost:5173/ (Proxy, Cookies)
 node scripts\e2e-login.mjs          # Server-Modus: Konten/Cookie/Nutzertrennung gegen runServer
 node scripts\e2e-online.mjs         # Server-Modus: 2 Menschen in einem Spiel (Routing, Aufgeben, Belohnung je Nutzer)
+node scripts\e2e-tables.mjs         # Server-Modus: Lobby/Tische (eroeffnen, beitreten, Start, Revanche, 409-Faelle)
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB

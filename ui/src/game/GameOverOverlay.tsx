@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
+import { useTable } from '../store/table'
 
 function fmtDuration(ms: number) {
   const m = Math.floor(ms / 60000)
@@ -16,6 +17,7 @@ export function GameOverOverlay() {
   const reset = useGame((s) => s.reset)
   const go = useNav((s) => s.go)
   const lastSetup = useNav((s) => s.lastSetup)
+  const tableId = useTable((s) => s.tableId)
   const [hidden, setHidden] = useState(false)
   const [busy, setBusy] = useState(false)
   const myId = useGame((s) => s.hello?.myPlayerId)
@@ -126,9 +128,21 @@ export function GameOverOverlay() {
           >
             Hauptmenü
           </button>
-          <button className="btn-primary" disabled={!lastSetup || busy} onClick={again}>
-            {busy ? 'Starte …' : 'Nochmal'}
-          </button>
+          {tableId ? (
+            <button
+              className="btn-primary"
+              onClick={() => {
+                reset()
+                go('table')
+              }}
+            >
+              Zurück zum Tisch
+            </button>
+          ) : (
+            <button className="btn-primary" disabled={!lastSetup || busy} onClick={again}>
+              {busy ? 'Starte …' : 'Nochmal'}
+            </button>
+          )}
         </div>
       </motion.div>
     </motion.div>

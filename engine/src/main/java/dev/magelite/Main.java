@@ -3,6 +3,9 @@ package dev.magelite;
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
+import dev.magelite.api.TableRoutes;
+import dev.magelite.deck.DeckResolver;
+import dev.magelite.game.TableManager;
 import dev.magelite.auth.AccountService;
 import dev.magelite.auth.AuthRoutes;
 import dev.magelite.boot.CardDbManager;
@@ -98,6 +101,11 @@ public final class Main {
         httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
         httpServer.addModule(new DeckRoutes(deckStore));
         httpServer.addModule(new StatsRoutes(db, profile));
+        if (server) {
+            // Lobby/Tische: nur online sinnvoll (lokal startet man direkt)
+            DeckResolver deckResolver = new DeckResolver(deckStore, samples);
+            httpServer.addModule(new TableRoutes(new TableManager(games, deckResolver), deckResolver));
+        }
         int port = httpServer.start();
 
         // Sample-Katalog im Hintergrund vorbereiten

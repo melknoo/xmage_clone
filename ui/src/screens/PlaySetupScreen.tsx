@@ -5,16 +5,43 @@ import { ColorPips } from '../lib/mana'
 import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
 
-const TEMPOS: { key: Tempo; label: string; desc: string }[] = [
+export const TEMPOS: { key: Tempo; label: string; desc: string }[] = [
   { key: 'BLITZ', label: 'Blitz', desc: 'Bots entscheiden in ~2 s, keine Pausen' },
   { key: 'NORMAL', label: 'Normal', desc: 'Schnell, mit kurzen Pausen zum Mitlesen' },
   { key: 'BEDACHT', label: 'Bedacht', desc: 'Bots denken länger und reagieren in deinem Zug' },
   { key: 'MAX', label: 'Max', desc: 'Stärkste Bots – deutlich langsamer' },
 ]
 
-export function PlaySetupScreen() {
+export interface DeckInfo {
+  name: string
+  sub: string
+  colors: string
+  art: string | null
+}
+
+/** Eigene und mitgelieferte Decks laden; `describe` macht aus einer Deck-Angabe Anzeigedaten. */
+export function useDeckCatalog() {
   const [decks, setDecks] = useState<StoredDeck[]>([])
   const [samples, setSamples] = useState<SampleDeck[]>([])
+  useEffect(() => {
+    api.get<StoredDeck[]>('/api/decks').then(setDecks).catch(() => setDecks([]))
+    api.get<SampleDeck[]>('/api/samples').then(setSamples).catch(() => setSamples([]))
+  }, [])
+  const describe = (spec: DeckSpec | null | undefined): DeckInfo | null => {
+    if (!spec) return null
+    if (spec.type === 'random') return { name: 'Zufälliges Deck', sub: 'aus den mitgelieferten Commander-Decks', colors: '', art: null }
+    if (spec.type === 'user') {
+      const d = decks.find((x) => x.id === spec.id)
+      return d ? { name: d.name, sub: d.commanders.join(' & '), colors: d.colors, art: d.commanderSet && d.commanderNum ? cardImageUrl({ set: d.commanderSet, num: d.commanderNum }, { size: 'art_crop' }) : null } : null
+    }
+    const s = samples.find((x) => x.id === spec.id)
+    return s ? { name: s.name, sub: s.commanders.join(' & '), colors: s.colors, art: s.commanderSet && s.commanderNum ? cardImageUrl({ set: s.commanderSet, num: s.commanderNum }, { size: 'art_crop' }) : null } : null
+  }
+  return { decks, samples, describe }
+}
+
+export function PlaySetupScreen() {
+  const { decks, samples, describe } = useDeckCatalog()
   const lastSetup = useNav((s) => s.lastSetup)
   const setLastSetup = useNav((s) => s.setLastSetup)
   const go = useNav((s) => s.go)
@@ -25,22 +52,6 @@ export function PlaySetupScreen() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [picker, setPicker] = useState<null | { target: 'me' | number }>(null)
-
-  useEffect(() => {
-    api.get<StoredDeck[]>('/api/decks').then(setDecks).catch(() => setDecks([]))
-    api.get<SampleDeck[]>('/api/samples').then(setSamples).catch(() => setSamples([]))
-  }, [])
-
-  const describe = (spec: DeckSpec | null) => {
-    if (!spec) return null
-    if (spec.type === 'random') return { name: 'Zufälliges Deck', sub: 'aus den mitgelieferten Commander-Decks', colors: '', art: null as string | null }
-    if (spec.type === 'user') {
-      const d = decks.find((x) => x.id === spec.id)
-      return d ? { name: d.name, sub: d.commanders.join(' & '), colors: d.colors, art: d.commanderSet && d.commanderNum ? cardImageUrl({ set: d.commanderSet, num: d.commanderNum }, { size: 'art_crop' }) : null } : null
-    }
-    const s = samples.find((x) => x.id === spec.id)
-    return s ? { name: s.name, sub: s.commanders.join(' & '), colors: s.colors, art: s.commanderSet && s.commanderNum ? cardImageUrl({ set: s.commanderSet, num: s.commanderNum }, { size: 'art_crop' }) : null } : null
-  }
 
   const start = async () => {
     if (!myDeck) return
@@ -117,7 +128,7 @@ export function PlaySetupScreen() {
   )
 }
 
-function SeatCard({ info, onClick, empty, highlight, small }: { info: { name: string; sub: string; colors: string; art: string | null } | null; onClick: () => void; empty: string; highlight?: boolean; small?: boolean }) {
+export function SeatCard({ info, onClick, empty, highlight, small }: { info: DeckInfo | null; onClick: () => void; empty: string; highlight?: boolean; small?: boolean }) {
   return (
     <button className={`group relative flex w-full items-center gap-4 overflow-hidden rounded-2xl text-left ring-1 transition ${highlight ? 'ring-gold-400/40 hover:ring-gold-400/80' : 'ring-white/10 hover:ring-white/30'} ${small ? 'h-[72px]' : 'h-[120px]'} bg-ink-900/70`} onClick={onClick}>
       {info?.art && <div className="absolute inset-0 bg-cover bg-center opacity-35 transition group-hover:opacity-50" style={{ backgroundImage: `url(${info.art})` }} />}
@@ -140,7 +151,7 @@ function SeatCard({ info, onClick, empty, highlight, small }: { info: { name: st
   )
 }
 
-function DeckPicker({ decks, samples, allowRandom, onPick, onClose }: { decks: StoredDeck[]; samples: SampleDeck[]; allowRandom: boolean; onPick: (s: DeckSpec) => void; onClose: () => void }) {
+export function DeckPicker({ decks, samples, allowRandom, onPick, onClose }: { decks: StoredDeck[]; samples: SampleDeck[]; allowRandom: boolean; onPick: (s: DeckSpec) => void; onClose: () => void }) {
   const [tab, setTab] = useState<'mine' | 'samples'>(decks.length ? 'mine' : 'samples')
   const [q, setQ] = useState('')
   const filtered = useMemo(() => {

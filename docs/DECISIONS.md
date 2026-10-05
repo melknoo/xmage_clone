@@ -131,3 +131,15 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
     pro Spiel. Jeder bekommt XP auf seinen Helden und Meisterschaft auf sein Deck; ein `StatsSink` pro Spieler.
   - Weitere Menschen kommen bis zur Lobby (E4) nur ueber ein Dev-Feld in `POST /api/games`; auf dem Server ist
     der Weg geschlossen.
+- **Lobby und Tische (E4, 2026-10-05):**
+  - **Polling statt WebSocket** fuer die Lobby (`GET /api/tables/{id}` alle 1,5 s, Liste alle 3 s): wenige Nutzer,
+    einfache Logik, kein zweiter Kanal mit Reconnect-Pflege. Der Spieltisch selbst bleibt WebSocket.
+  - **Ein Tisch pro Gastgeber, ein Platz pro Nutzer**; Beitritt an einen anderen Tisch verlaesst den alten
+    automatisch (ausser man ist dort Gastgeber). Schliesst der Gastgeber, ist der Tisch weg (kein Gastgeber-Wechsel).
+  - **Offene Plaetze fallen beim Start weg** (2-4 Spieler, auch 1 gegen 1); der Gastgeber besetzt freie Plaetze
+    bewusst mit Bots, statt dass sie automatisch aufgefuellt werden.
+  - **Nach dem Spiel zurueck in die Lobby** mit denselben Plaetzen und Decks (Revanche per Klick); `lastGameId`
+    bleibt fuer die Statistik.
+  - Fremde Decks sieht man nur als Namen (`deckName`), die Deck-Angabe (`deck`) nur fuer den eigenen Platz bzw.
+    die Bots des Gastgebers.
+  - Tische nur im Server-Modus registriert (`Main`); lokal startet man weiter direkt ueber das Spiel-Setup.

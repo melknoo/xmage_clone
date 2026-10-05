@@ -8,9 +8,13 @@ import { HomeScreen } from './screens/HomeScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { PlaySetupScreen } from './screens/PlaySetupScreen'
 import { StatsScreen } from './screens/StatsScreen'
+import { takeTableFromUrl, tablesApi } from './api/tables'
+import { LobbyScreen } from './screens/LobbyScreen'
+import { TableScreen } from './screens/TableScreen'
 import { takeInviteFromUrl, useAuth } from './store/auth'
 import { useGame } from './store/game'
 import { useNav, type Screen } from './store/nav'
+import { useTable } from './store/table'
 
 const NAV: { key: Screen; label: string; icon: string }[] = [
   { key: 'home', label: 'Held', icon: '🛡️' },
@@ -21,6 +25,20 @@ const NAV: { key: Screen; label: string; icon: string }[] = [
 
 // Lokal startet die Engine in Sekunden; auf fly kann der Kaltstart (Maschine + Karten-DB) deutlich laenger dauern.
 const HEALTH_TRIES = endpoint.mode === 'local' ? 40 : 360
+
+/** Online: Tisch aus dem Link (#table=…) betreten oder an den eigenen Tisch zurueck. */
+async function resumeTable(stop: boolean) {
+  if (useAuth.getState().mode !== 'server') return
+  const fromUrl = takeTableFromUrl()
+  try {
+    const t = fromUrl ? await tablesApi.join(fromUrl) : await tablesApi.mine()
+    if (stop) return
+    useTable.getState().setTableId(t.id)
+    useNav.getState().go('table')
+  } catch {
+    if (!fromUrl) useTable.getState().setTableId(null)
+  }
+}
 
 export function App() {
   const screen = useNav((s) => s.screen)
@@ -57,10 +75,12 @@ export function App() {
           if (!stop && cur?.gameId && !useGame.getState().gameId) {
             connect(cur.gameId)
             go('game')
+            return
           }
         } catch {
           /* kein laufendes Spiel */
         }
+        await resumeTable(stop)
       } catch {
         tries++
         if (!stop) {
@@ -128,7 +148,7 @@ export function App() {
         {nav.map((n) => (
           <button
             key={n.key}
-            className={`flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === n.key ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:bg-white/5 hover:text-ink-100'}`}
+            className={`flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === n.key || (n.key === 'play' && (screen === 'solo' || screen === 'table')) ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:bg-white/5 hover:text-ink-100'}`}
             onClick={() => go(n.key)}
           >
             <span className="text-xl">{n.icon}</span>
@@ -156,7 +176,9 @@ export function App() {
         <AnimatePresence mode="wait">
           <motion.div key={screen} className="h-full" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
             {screen === 'home' && <HomeScreen />}
-            {screen === 'play' && <PlaySetupScreen />}
+            {screen === 'play' && (mode === 'server' ? <LobbyScreen /> : <PlaySetupScreen />)}
+            {screen === 'solo' && <PlaySetupScreen />}
+            {screen === 'table' && <TableScreen />}
             {screen === 'decks' && <DecksScreen />}
             {screen === 'stats' && <StatsScreen />}
             {screen === 'admin' && <AdminScreen />}

@@ -1,10 +1,15 @@
 # MageLite online (fly.io)
 
 Betrieb der Engine als Web-Server, damit Freunde **ohne Installation im Browser** spielen. Stand 2026-10-05:
-Server-Modus mit Konten und Einladungscodes (E1), das fly-Setup (E2) und der Engine-Kern für mehrere Menschen an
-einem Tisch (E3) sind gebaut; die Lobby zum Zusammenfinden (E4) kommt als Nächstes, siehe `ONLINE-PLAN.md`. Bis
-dahin goldfisht jeder Freund **solo gegen 3 Bots**, mit eigener Deckbibliothek, eigenem Helden und eigener
-Statistik. Es läuft **ein Spiel gleichzeitig** (4 GB RAM).
+Server-Modus mit Konten und Einladungscodes (E1), das fly-Setup (E2), mehrere Menschen an einem Tisch (E3) und
+die Lobby mit Tischen (E4) sind gebaut; Feinschliff (E5) steht aus, siehe `ONLINE-PLAN.md`. Jeder Freund hat
+eigene Deckbibliothek, eigenen Helden und eigene Statistik. Es läuft **ein Spiel gleichzeitig** (4 GB RAM).
+
+**So spielt man zusammen:** Unter „Spielen“ ist online die **Lobby**. Einer klickt „Eröffnen“ und ist Gastgeber,
+die anderen treten in der Lobby bei oder über den **Einladungslink** des Tisches (`…/#table=XXXXXX`). Jeder wählt
+sein Deck, der Gastgeber setzt auf freie Plätze Bots (oder lässt sie frei, dann fallen sie weg), stellt das
+Bot-Tempo ein und startet. Nach dem Spiel führt „Zurück zum Tisch“ zur Revanche mit denselben Plätzen.
+„Schnellspiel gegen Bots“ in der Lobby ist das alte Solo-Setup.
 
 ## Wie es funktioniert
 

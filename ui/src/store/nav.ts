@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { DeckSpec, Tempo } from '../api/types'
 
-export type Screen = 'home' | 'decks' | 'play' | 'game' | 'stats' | 'admin'
+/** 'play' = lokal Spiel-Setup, online Lobby; 'solo' = Spiel-Setup gegen Bots im Server-Modus; 'table' = Tisch */
+export type Screen = 'home' | 'decks' | 'play' | 'solo' | 'table' | 'game' | 'stats' | 'admin'
 
 export interface LastSetup {
   deck: DeckSpec
