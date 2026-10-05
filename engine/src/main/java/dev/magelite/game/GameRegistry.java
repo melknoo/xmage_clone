@@ -79,9 +79,11 @@ public final class GameRegistry {
         return Optional.ofNullable(games.get(id));
     }
 
-    /** Laufendes Spiel, in dem der Nutzer sitzt. */
+    /** Laufendes Spiel, in dem der Nutzer noch mitspielt (nicht aufgegeben hat); fuer den Reconnect. */
     public Optional<GameHost> currentOf(long userId) {
-        return games.values().stream().filter(g -> g.isRunning() && g.getSetup().hasUser(userId)).findFirst();
+        return games.values().stream()
+                .filter(g -> g.isRunning() && g.seatOf(userId).map(s -> !s.conceded()).orElse(false))
+                .findFirst();
     }
 
     /** Anzahl laufender Spiele. */

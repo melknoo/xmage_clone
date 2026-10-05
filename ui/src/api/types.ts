@@ -311,6 +311,7 @@ export type ServerMessage =
   | { t: 'promptClosed'; id: number }
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'status'; thinking?: UUID; autoPassed?: boolean; waitingFor?: string }
+  | { t: 'seat'; conceded: boolean }
   | Activity
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }

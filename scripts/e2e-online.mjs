@@ -69,6 +69,7 @@ function pilot(name, cookie) {
       if (st.hello && m.myPlayerId !== st.hello.myPlayerId) st.foreignPrompts++
     }
     if (m.t === 'status' && m.waitingFor) st.waitingFor.add(m.waitingFor)
+    if (m.t === 'seat') st.seat = m
     if (m.t === 'gameOver') st.over = m
     if (m.t !== 'prompt') return
     st.prompts++
@@ -117,9 +118,9 @@ ok(A.hello?.seats?.filter((s) => s.human).length === 2, `2 menschliche Sitze im 
 // Bob versucht, als Fremder in ein anderes Spiel zu kommen -> es gibt nur dieses; stattdessen: Tempo von Bob ignoriert
 B.ws.send(JSON.stringify({ t: 'tempo', preset: 'MAX' }))
 
-// 90 s spielen lassen
+// spielen lassen, bis ein paar Zuege vorbei sind (Blitz-Spiele koennen schnell enden), hoechstens 90 s
 const t0 = Date.now()
-while (Date.now() - t0 < 90000 && !A.over && !B.over) await sleep(1000)
+while (Date.now() - t0 < 90000 && !A.over && !B.over && (A.last?.turn ?? 0) < 6) await sleep(1000)
 ok(A.prompts > 0 && B.prompts > 0, `beide bekamen Prompts: Owner=${A.prompts} Bob=${B.prompts}`)
 ok(A.states > 0 && B.states > 0 && A.foreignPrompts === 0 && B.foreignPrompts === 0, `States je aus eigener Sicht (fremd: ${A.foreignPrompts}/${B.foreignPrompts})`)
 ok([...A.waitingFor].includes('Bob') || [...B.waitingFor].includes('Owner'), `Warte-Hinweis auf den anderen Menschen (Owner sah: ${[...A.waitingFor].join(',')}; Bob sah: ${[...B.waitingFor].join(',')})`)
@@ -132,6 +133,11 @@ if (!B.over) {
 }
 ok(!B.over, `Bob nach dem Aufgeben noch ohne gameOver (Zuschauer): ${B.over ? 'FEHLER, hat ' + B.over.result : 'ok'}`)
 ok(B.last?.players?.find((p) => p.id === B.hello?.myPlayerId)?.lost === true, 'Bob ist im State als ausgeschieden markiert')
+ok(B.seat?.conceded === true && !A.seat, `seat-Nachricht: Bob conceded=${B.seat?.conceded}, Owner keine`)
+r = await call('GET', '/api/games/current', { cookie: bob })
+ok(r.status === 404, `Bob /api/games/current nach Aufgeben -> ${r.status} (kein Rueckholen beim Neuladen)`)
+r = await call('GET', '/api/games/current', { cookie: owner })
+ok(r.status === 200, `Owner /api/games/current weiterhin -> ${r.status}`)
 r = await call('GET', '/api/health')
 ok(r.json?.games === 1, `Spiel laeuft fuer Owner weiter (games=${r.json?.games})`)
 const turnAtLeave = A.last?.turn ?? 0

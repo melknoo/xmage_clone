@@ -119,7 +119,14 @@ Fallback auf manuelles Klicken.
      Tests: `humanSpike --humans=2` (17,8 s) und `--humans=4` (24 Züge, 27,6 s) 0 fehlgeschlagen, Standard 1 Mensch
      2/2, `scripts/e2e-online.mjs`. Weitere Menschen kommen bis zur Lobby nur über das Dev-Feld `humans` in
      `POST /api/games`.
-   - Danach E4 (Lobby/Tische), E5 (Feinschliff).
+   - 2026-10-05 **E4 fertig (live):** `TableManager`/`TableRoutes` (`/api/tables`, Polling 1,5 s), Lobby- und
+     Tisch-Screen, `#table=`-Link, Bots auf freie Plätze, offene Plätze fallen beim Start weg, nach dem Spiel
+     „Zurück zum Tisch“ (Revanche). `scripts/e2e-tables.mjs` lokal und gegen https://magelite.fly.dev grün.
+   - 2026-10-05 **Pausemenü** (Esc / „☰ Menü“): Optionen (Auto-Mana, Auto-Passen, Ton, Verlauf, Tempo), Aufgeben
+     mit Ja/Nein, danach „Zuschauen“/„Zurück zum Tisch“/„Zum Hauptmenü“. Neue WS-Nachricht `seat {conceded}`;
+     `/api/games/current` liefert für aufgegebene Sitze 404 (kein Rückholen beim Neuladen).
+   - Offen: E5 (Trennung mitten im Spiel: „getrennt“-Anzeige, Gastgeber darf nach 60 s aufgeben lassen;
+     WebSocket-Deflate; State-Größen messen).
 1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
    `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
    Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +

@@ -26,6 +26,13 @@ public final class Messages {
     public record Seat(UUID playerId, String name, boolean human, String deckName, List<String> commanders) {
     }
 
+    /** Zustand des eigenen Sitzes: {@code conceded} = ich habe aufgegeben (Spiel laeuft ggf. fuer die anderen weiter). */
+    public record SeatStatus(String t, boolean conceded) {
+        public SeatStatus(boolean conceded) {
+            this("seat", conceded);
+        }
+    }
+
     public record PromptClosed(String t, long id) {
         public PromptClosed(long id) {
             this("promptClosed", id);

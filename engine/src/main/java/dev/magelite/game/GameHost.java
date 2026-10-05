@@ -417,6 +417,9 @@ public final class GameHost {
         seat.sink = newSink;
         seat.disconnectedSince = 0;
         newSink.send(hello(seat));
+        if (seat.conceded) {
+            newSink.send(new Messages.SeatStatus(true));
+        }
         synchronized (logTail) {
             if (!logTail.isEmpty()) {
                 newSink.send(new Messages.Log(new ArrayList<>(logTail)));
@@ -561,6 +564,7 @@ public final class GameHost {
         }
         seat.conceded = true;
         closePromptOf(seat);
+        send(seat, new Messages.SeatStatus(true));
         boolean humansLeft = humans.values().stream().anyMatch(s -> !s.conceded);
         try {
             callExecutor.execute(() -> {

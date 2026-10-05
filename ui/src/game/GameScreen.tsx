@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Card, PlayerState, Tempo } from '../api/types'
 import { me as meOf, opponents as oppsOf, useGame } from '../store/game'
 import { useNav } from '../store/nav'
+import { useTable } from '../store/table'
 import { viewerOpen } from '../components/Modal'
 import { sounds } from '../lib/sounds'
 import { Battlefield } from './Battlefield'
@@ -14,6 +15,7 @@ import { OpponentPod } from './OpponentPod'
 import { PhaseBar } from './PhaseBar'
 import { CommandZone, CommanderDamage, LifeBadge, ManaPool, ZoneCounters, commanderArt } from './PlayerInfo'
 import { HOTKEY_ACTIONS, usePromptButtons } from './promptActions'
+import { PauseMenu } from './PauseMenu'
 import { PromptBar } from './PromptBar'
 import { PromptDialogs } from './PromptDialogs'
 import { LogPanel, RevealPopups, Toasts, ZoomPanel, type LogFilter } from './Side'
@@ -34,6 +36,7 @@ export function GameScreen() {
   const setHover = useGame((s) => s.setHover)
   const thinking = useGame((s) => s.thinking)
   const gameOver = useGame((s) => s.gameOver)
+  const menuOpen = useGame((s) => s.menuOpen)
   const inter = useInteraction()
   const [showLog, setShowLog] = useState(true)
   const [stackFocus, setStackFocus] = useState<string | null>(null)
@@ -111,7 +114,8 @@ export function GameScreen() {
         </div>
       </div>
 
-      {me?.lost && !gameOver && <EliminatedBanner />}
+      {me?.lost && !gameOver && !menuOpen && <EliminatedBanner />}
+      {menuOpen && !gameOver && <PauseMenu logFilter={logFilter} setLogFilter={setLogFilter} />}
       <CombatOverlay combat={state.combat} seq={state.seq} />
       <TargetOverlay stack={state.stack} focusId={stackFocus} seq={state.seq} />
       <PromptDialogs inter={inter} onHover={onHover} />
@@ -127,16 +131,19 @@ function EliminatedBanner() {
   const reset = useGame((s) => s.reset)
   const setTempo = useGame((s) => s.setTempo)
   const isHost = useGame((s) => s.hello?.host !== false)
+  const conceded = useGame((s) => s.conceded)
   const otherHumans = useGame((s) => (s.hello?.seats.filter((x) => x.human && x.playerId !== s.hello?.myPlayerId).length ?? 0) > 0)
+  const tableId = useTable((s) => s.tableId)
   const go = useNav((s) => s.go)
   const [watching, setWatching] = useState(false)
   if (watching) return null
-  // Mit anderen Menschen am Tisch laeuft das Spiel ohne mich weiter -> zurueck ins Menue (Ergebnis kommt in die Statistik)
+  // Mit anderen Menschen am Tisch (oder nach eigenem Aufgeben) laeuft das Spiel ohne mich weiter -> raus
+  // (Ergebnis kommt in die Statistik). Solo beendet leave() das Spiel, das Ergebnis zeigt GameOverOverlay.
   const leaveTable = () => {
     leave()
-    if (otherHumans) {
+    if (otherHumans || conceded) {
       reset()
-      go('home')
+      go(tableId ? 'table' : 'home')
     }
   }
   return (
@@ -155,7 +162,7 @@ function EliminatedBanner() {
         {isHost ? 'Zuschauen (Blitz)' : 'Zuschauen'}
       </button>
       <button className="btn-primary" onClick={leaveTable}>
-        Spiel verlassen
+        {tableId && (otherHumans || conceded) ? 'Zurück zum Tisch' : 'Spiel verlassen'}
       </button>
     </motion.div>
   )
@@ -165,11 +172,10 @@ function TopBar() {
   const state = useGame((s) => s.state)!
   const tempo = useGame((s) => s.tempo)
   const setTempo = useGame((s) => s.setTempo)
-  const leave = useGame((s) => s.leave)
+  const setMenuOpen = useGame((s) => s.setMenuOpen)
   const gameOver = useGame((s) => s.gameOver)
   const reset = useGame((s) => s.reset)
   const go = useNav((s) => s.go)
-  const [confirm, setConfirm] = useState(false)
   const [muted, setMuted] = useState(sounds.isMuted())
   const autoMana = useGame((s) => s.autoMana)
   const setAutoMana = useGame((s) => s.setAutoMana)
@@ -243,15 +249,9 @@ function TopBar() {
           >
             Zum Menü
           </button>
-        ) : confirm ? (
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-ink-300">Wirklich aufgeben?</span>
-            <button className="btn-danger !px-2 !py-1 !text-xs" onClick={() => { leave(); setConfirm(false) }}>Ja</button>
-            <button className="btn-ghost !px-2 !py-1 !text-xs" onClick={() => setConfirm(false)}>Nein</button>
-          </div>
         ) : (
-          <button className="btn-ghost !px-3 !py-1 !text-xs" onClick={() => setConfirm(true)}>
-            Aufgeben
+          <button className="btn-ghost !px-3 !py-1 !text-xs" title="Pausemenü: Optionen, Aufgeben, Spiel verlassen (Esc)" onClick={() => setMenuOpen(true)}>
+            ☰ Menü
           </button>
         )}
       </div>
@@ -325,6 +325,12 @@ function useHotkeys(inter: Interaction) {
         if (esc) {
           e.preventDefault()
           esc.run()
+          return
+        }
+        // sonst: Pausemenue
+        if (!useGame.getState().gameOver) {
+          e.preventDefault()
+          useGame.getState().setMenuOpen(true)
         }
         return
       }

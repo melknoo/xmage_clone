@@ -40,6 +40,11 @@ interface GameStore {
   reveals: Reveal[]
   /** Mehrfach-Angriff/-Block: per Shift+Klick markierte eigene Kreaturen */
   marked: Set<UUID>
+  /** ich habe aufgegeben (Spiel laeuft ggf. fuer die anderen weiter) */
+  conceded: boolean
+  /** Pausemenue offen */
+  menuOpen: boolean
+  setMenuOpen: (open: boolean) => void
 
   connect: (gameId: UUID) => void
   disconnect: () => void
@@ -118,8 +123,8 @@ export const useGame = create<GameStore>((set, get) => {
   function handle(msg: ServerMessage) {
     switch (msg.t) {
       case 'hello':
-        // nach einem Reconnect schickt die Engine Verlauf, State und offenen Prompt erneut
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null })
+        // nach einem Reconnect schickt die Engine Verlauf, State, offenen Prompt und ggf. "seat" erneut
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false })
         break
       case 'state': {
         const prev = get().state
@@ -153,6 +158,9 @@ export const useGame = create<GameStore>((set, get) => {
         break
       case 'status':
         set({ thinking: msg.thinking ?? null, waitingFor: msg.waitingFor ?? null })
+        break
+      case 'seat':
+        set({ conceded: msg.conceded })
         break
       case 'toast':
         pushToast(msg.level, msg.rich)
@@ -232,11 +240,14 @@ export const useGame = create<GameStore>((set, get) => {
     objects: new Map(),
     reveals: [],
     marked: new Set(),
+    conceded: false,
+    menuOpen: false,
+    setMenuOpen: (open) => set({ menuOpen: open }),
 
     connect: (gameId) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set() })
+      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false })
       open(gameId)
     },
     disconnect: () => {
@@ -275,7 +286,11 @@ export const useGame = create<GameStore>((set, get) => {
       set({ autoPass: on })
       send({ t: 'settings', autoPass: on })
     },
-    leave: () => send({ t: 'leave' }),
+    leave: () => {
+      // optimistisch; die Engine bestaetigt mit {t:"seat", conceded:true}
+      set({ conceded: true })
+      send({ t: 'leave' })
+    },
     setHover: (c) => set({ hover: c }),
     dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
     dismissReveal: (key) => set({ reveals: get().reveals.filter((r) => r.key !== key) }),
@@ -311,7 +326,7 @@ export const useGame = create<GameStore>((set, get) => {
     },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set() })
+      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false })
     },
   }
 })

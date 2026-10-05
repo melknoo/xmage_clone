@@ -100,6 +100,7 @@ Server → Client:
 | `promptClosed` | `id` |
 | `log` | `entries[]` mit `turn`, `active` (Name des aktiven Spielers), `kind` (INFO/STATUS), `rich`; nach Reconnect kommt der Verlauf komplett neu (Client leert ihn bei `hello`) |
 | `status` | `thinking` (Bot-id), `waitingFor` (Bot- oder Mitspieler-Name; null = niemand mehr) |
+| `seat` | `conceded` – eigener Sitz hat aufgegeben (nach `leave` und beim Reconnect); `/api/games/current` liefert dann 404 |
 | `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/human/engine/idle/stuck; `human` = ein anderer Mensch ist dran), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
 | `toast` | `level`, `rich` |
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
@@ -170,7 +171,8 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
 | `game/Side.tsx` | Kartenvorschau, Spielverlauf (nach Zügen gruppiert, Filter Wichtiges/Alles, Icons per Stichwort-Regex), Toasts, Einblendung aufgedeckter/angesehener Karten (`RevealPopups`, Store `reveals`) |
 | `game/ActivityIndicator.tsx` | Anzeige in der TopBar: arbeitet die Engine wirklich (Modus + CPU aus `activity`), Warnung bei Stillstand/ohne Verbindung |
-| `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ |
+| `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ bzw. „Zurück zum Tisch“ |
+| `game/PauseMenu.tsx` | Pausemenü (Esc / „☰ Menü“): Auto-Mana, Auto-Passen, Ton, Verlauf-Filter, Tempo (Gastgeber); Aufgeben mit Ja/Nein; nach Aufgabe/Ausscheiden „Zuschauen“, „Zurück zum Tisch“, „Zum Hauptmenü“ |
 | `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, `upright` für die Vorschau, Marken, P/T, Glow) |
 | `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar; `viewer` → reine Ansicht (Esc schließt nur sie, Spiel-Hotkeys gesperrt) |
 | `lib/mana.tsx` | Mana-Symbole (mana-font), Regeltext/Rich-Text ohne `innerHTML` |
