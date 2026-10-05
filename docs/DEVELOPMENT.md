@@ -30,8 +30,12 @@ Drei Terminals:
 # A: Engine (Port 7317, ohne Token, Konsolen-Log, Daten in engine\run)
 cd engine; .\gradlew.bat run
 
+# A' (statt A): Engine im Server-Modus (Cookie-Login, Konten, Owner-Code DEV-OWNER-CODE)
+cd engine; .\gradlew.bat runServer
+
 # B: UI mit Hot-Reload
-cd ui; npm run dev            # http://localhost:5173/?port=7317 im Browser öffnen
+cd ui; npm run dev            # http://localhost:5173/?port=7317 (direkt, Token) oder
+                              # http://localhost:5173/        (Vite-Proxy, same-origin, Cookies -> Server-Modus testen)
 
 # C (optional): Electron-Fenster mit der Vite-UI
 cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; $env:MAGELITE_UI_DEV=1; npx electron .
@@ -56,6 +60,8 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 | Deck-Validierung | `.\gradlew.bat spike -PspikeArgs="--validate"` | 67/70 Sample-Decks gültig (3 mit gebannten Karten) |
 | Prompt-API-Stresstest | `.\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32 --verbose"` | „0 fehlgeschlagen“, keine STALLs |
 | REST + WS End-to-End | Dev-Engine starten, dann `node scripts\e2e-flow.mjs https://archidekt.com/decks/7031486` | Spielende mit `reward` |
+| Server-Modus (Konten) | `gradlew runServer`, dann `node scripts\e2e-login.mjs` | „alles gruen“ (Login, Cookie, Nutzertrennung, 409, Rotieren, Rate-Limit) |
+| Server-UI visuell | `runServer` + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-server.json` in `desktop/` | `engine/run/shot-server-*.png` (Login, Einladungen, Spiel) |
 | UI visuell | siehe unten | Screenshots ansehen |
 
 Spike-Argumente: `--games --turnCap --tempo=BLITZ|NORMAL|BEDACHT|MAX --fastOpp=true|false --seed --verbose

@@ -12,12 +12,14 @@ import mage.player.ai.util.CombatInfo;
 import mage.player.ai.util.CombatUtil;
 import org.apache.log4j.Logger;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * XMage-"mad"-Bot mit einstellbarem Tempo.
@@ -102,6 +104,11 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
                 }
                 return quickPass(game);
             }
+        }
+
+        if (isGameUnderControl() && !SimPool.awaitIdle(tempo.thinkSecs() * 1000L)) {
+            LOG.warn(getName() + ": KI-Simulation vom letzten Timeout laeuft noch - passe ohne Suche");
+            return quickPass(game);
         }
 
         acted = false;
@@ -296,6 +303,47 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+    }
+
+    /**
+     * Simulations-Pool von {@code ComputerPlayer6} (statisch, von allen Bots geteilt). Nach einem Timeout bricht XMage
+     * die Suche per Interrupt ab, aber einzelne Schritte (z.B. alle Zielkombinationen einer Opfer-Faehigkeit
+     * erzeugen) pruefen den Interrupt nicht und laufen weiter. Startet der naechste Bot trotzdem eine Suche, stapeln
+     * sich solche Laeufe, bis der Heap voll ist (Arena 2026-10-05: OutOfMemoryError). Darum: vor jeder Suche warten,
+     * bis der Pool leer ist.
+     */
+    static final class SimPool {
+        private static final ThreadPoolExecutor POOL = find();
+
+        private SimPool() {
+        }
+
+        private static ThreadPoolExecutor find() {
+            try {
+                Field f = mage.player.ai.ComputerPlayer6.class.getDeclaredField("threadPoolSimulations");
+                f.setAccessible(true);
+                return f.get(null) instanceof ThreadPoolExecutor tpe ? tpe : null;
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOG.warn("KI-Simulations-Pool nicht gefunden - keine Sperre gegen gestapelte Suchen: " + e);
+                return null;
+            }
+        }
+
+        /** true, wenn der Pool (spaetestens nach {@code maxWaitMs}) keine laufende Simulation mehr hat. */
+        static boolean awaitIdle(long maxWaitMs) {
+            if (POOL == null || POOL.getActiveCount() == 0) {
+                return true;
+            }
+            long end = System.currentTimeMillis() + maxWaitMs;
+            try {
+                while (POOL.getActiveCount() > 0 && System.currentTimeMillis() < end) {
+                    Thread.sleep(50);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return POOL.getActiveCount() == 0;
         }
     }
 

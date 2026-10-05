@@ -156,6 +156,8 @@ public final class GameHost {
     private final List<UUID> eliminationOrder = new ArrayList<>();
     private final Map<UUID, Integer> eliminatedTurn = new LinkedHashMap<>();
 
+    /** 0 = Client verbunden; sonst Zeitpunkt der Trennung (bzw. Erzeugung, solange sich noch niemand verbunden hat) */
+    private volatile long disconnectedSince = System.currentTimeMillis();
     private volatile Sink sink = msg -> {
     };
     private volatile StateDto lastState;
@@ -296,6 +298,7 @@ public final class GameHost {
      */
     public synchronized void attach(Sink newSink) {
         this.sink = newSink;
+        disconnectedSince = 0;
         newSink.send(hello());
         synchronized (logTail) {
             if (!logTail.isEmpty()) {
@@ -320,7 +323,14 @@ public final class GameHost {
         if (this.sink == oldSink) {
             this.sink = msg -> {
             };
+            disconnectedSince = System.currentTimeMillis();
         }
+    }
+
+    /** Seit wann kein Client verbunden ist (ms); 0, wenn verbunden. Vor dem ersten {@link #attach} zaehlt ab Erzeugung. */
+    public long disconnectedForMs() {
+        long since = disconnectedSince;
+        return since == 0 ? 0 : System.currentTimeMillis() - since;
     }
 
     public Messages.Hello hello() {

@@ -48,6 +48,20 @@ tasks.named<JavaExec>("run") {
     doFirst { runDir.asFile.mkdirs() }
 }
 
+// Dev-Engine im Server-Modus (Cookie-Login, Konten); Owner-Code aus der Umgebung, sonst DEV-OWNER-CODE
+tasks.register<JavaExec>("runServer") {
+    group = "magelite"
+    description = "Dev-Engine im Server-Modus auf Port 7317 (--server --dev)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.magelite.Main")
+    jvmArgs = jvmArgsCommon
+    workingDir = runDir.asFile
+    args = listOf("--data=${runDir.asFile.absolutePath}", "--port=7317", "--server", "--dev")
+    environment("MAGELITE_OWNER_CODE", System.getenv("MAGELITE_OWNER_CODE") ?: "DEV-OWNER-CODE")
+    environment("MAGELITE_OWNER_NAME", System.getenv("MAGELITE_OWNER_NAME") ?: "Owner")
+    doFirst { runDir.asFile.mkdirs() }
+}
+
 // P0a: 4 Bots spielen headless gegeneinander
 tasks.register<JavaExec>("spike") {
     group = "magelite"

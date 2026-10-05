@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { wsUrl } from '../api/client'
+import { useAuth } from './auth'
 import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, ServerMessage, Tempo, UUID } from '../api/types'
 import { sounds } from '../lib/sounds'
 import { useNav } from './nav'
@@ -190,12 +191,16 @@ export const useGame = create<GameStore>((set, get) => {
       if (socket !== ws) return
       set({ conn: 'closed' })
       window.clearInterval(pingTimer)
-      if (ev.code === 4404) {
-        // Spiel existiert nicht mehr (z.B. Engine neu gestartet) -> zurueck ins Menue
+      if (ev.code === 4404 || ev.code === 4401 || ev.code === 4403) {
+        // 4404: Spiel existiert nicht mehr (Engine neu gestartet); 4401: Anmeldung ungueltig; 4403: fremdes Spiel
         socket = null
         set({ gameId: null, hello: null, state: null, prompt: null, gameOver: null, thinking: null })
         useNav.getState().go('home')
-        pushToast('info', [{ text: 'Das Spiel ist nicht mehr vorhanden (Engine wurde neu gestartet).' }])
+        if (ev.code === 4401) {
+          useAuth.getState().markLoggedOut()
+        } else {
+          pushToast('info', [{ text: ev.code === 4403 ? 'Dieses Spiel gehört einem anderen Spieler.' : 'Das Spiel ist nicht mehr vorhanden (Engine wurde neu gestartet).' }])
+        }
         return
       }
       if (get().gameId === gameId && !get().gameOver) {

@@ -1,6 +1,7 @@
 package dev.magelite.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.auth.User;
 import dev.magelite.deck.DeckLoader;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.LoadedDeck;
@@ -33,27 +34,41 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * Lokaler HTTP/WebSocket-Server (nur 127.0.0.1). REST fuer Decks/Spielstart, WebSocket fuer das Spiel.
+ * HTTP/WebSocket-Server. REST fuer Decks/Spielstart, WebSocket fuer das Spiel.
+ * <p>
+ * Lokal: nur {@code 127.0.0.1}, Zufallstoken, Nutzer 1. Server-Modus ({@code --server}): {@code 0.0.0.0},
+ * Anmeldung per Cookie (siehe {@link Auth}), jedes Spiel gehoert einem Nutzer.
  */
 public final class HttpServer {
 
     private static final Logger LOG = Logger.getLogger(HttpServer.class);
 
-    public record Config(int port, String token, Path uiDir, String version) {
+    /**
+     * @param host     Bind-Adresse ({@code 127.0.0.1} lokal, {@code 0.0.0.0} auf fly)
+     * @param token    Zufallstoken (lokal, Release); null im Dev- und Server-Modus
+     * @param server   Server-Modus (Cookie-Login, Konten)
+     * @param dev      Dev-Engine (Szenarien erlaubt, keine Origin-Pruefung)
+     */
+    public record Config(int port, String host, String token, Path uiDir, String version, boolean server, boolean dev) {
     }
 
-    /** Zusatzdienste, die spaeter angehaengt werden (Bilder, Stats, Profil). */
+    /** Zusatzdienste, die spaeter angehaengt werden (Bilder, Stats, Profil, Konten). */
     public interface Module {
         void register(Javalin app);
     }
 
+    private record Session(Outbox outbox, long userId) {
+    }
+
     private final Config config;
+    private final Auth auth;
     private final GameRegistry games;
     private final DeckStore deckStore;
     private final SampleDeckCatalog samples;
     private final List<Module> modules = new ArrayList<>();
-    private final Map<WsContext, Outbox> sockets = new ConcurrentHashMap<>();
+    private final Map<WsContext, Session> sockets = new ConcurrentHashMap<>();
     private final Random random = new Random();
+    private volatile long lastActivity = System.currentTimeMillis();
     private volatile Consumer<GameHost> onGameFinished = g -> {
     };
     private volatile GameStartListener onGameStarted = (host, deckId) -> {
@@ -64,8 +79,9 @@ public final class HttpServer {
         void started(GameHost host, Long humanDeckId);
     }
 
-    public HttpServer(Config config, GameRegistry games, DeckStore deckStore, SampleDeckCatalog samples) {
+    public HttpServer(Config config, Auth auth, GameRegistry games, DeckStore deckStore, SampleDeckCatalog samples) {
         this.config = config;
+        this.auth = auth;
         this.games = games;
         this.deckStore = deckStore;
         this.samples = samples;
@@ -83,13 +99,21 @@ public final class HttpServer {
         this.onGameStarted = cb;
     }
 
+    /** Zeitpunkt der letzten API-Anfrage (ohne Health-Checks); fuer den Leerlauf-Exit im Server-Modus. */
+    public long lastActivity() {
+        return lastActivity;
+    }
+
     public int start() {
         app = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.jsonMapper(new JavalinJackson(Json.MAPPER, false));
             cfg.http.defaultContentType = "application/json";
+            cfg.http.maxRequestSize = 2_000_000;
             cfg.jetty.modifyWebSocketServletFactory(f -> f.setIdleTimeout(Duration.ofHours(2)));
-            cfg.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
+            if (!config.server()) {
+                cfg.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
+            }
             if (config.uiDir() != null && Files.isDirectory(config.uiDir())) {
                 cfg.staticFiles.add(sf -> {
                     sf.directory = config.uiDir().toAbsolutePath().toString();
@@ -100,30 +124,38 @@ public final class HttpServer {
             }
         });
 
-        app.before("/api/*", this::checkToken);
-        app.before("/img/*", this::checkToken);
+        app.before("/api/*", ctx -> {
+            if (!ctx.path().equals("/api/health")) {
+                lastActivity = System.currentTimeMillis();
+            }
+            auth.filter(ctx);
+        });
+        app.before("/img/*", auth::filter);
         app.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", e.getMessage())));
+        app.exception(GameRegistry.BusyException.class, (e, ctx) -> ctx.status(HttpStatus.CONFLICT).json(Map.of("error", e.getMessage(), "busy", true)));
         app.exception(Exception.class, (e, ctx) -> {
             LOG.error("API-Fehler " + ctx.path(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", String.valueOf(e.getMessage())));
         });
 
-        app.get("/api/health", ctx -> ctx.json(Map.of("ok", true, "version", config.version())));
+        app.get("/api/health", ctx -> ctx.json(Map.of("ok", true, "version", config.version(),
+                "mode", config.server() ? "server" : "local", "games", games.running())));
         app.get("/api/samples", ctx -> ctx.json(samples.list()));
-        app.get("/api/decks", ctx -> ctx.json(deckStore.list()));
+        app.get("/api/decks", ctx -> ctx.json(deckStore.list(Auth.user(ctx).id())));
         app.get("/api/decks/{id}", ctx -> {
+            long userId = Auth.user(ctx).id();
             long id = Long.parseLong(ctx.pathParam("id"));
-            DeckStore.StoredDeck d = deckStore.get(id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
+            DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
             Map<String, Object> out = new LinkedHashMap<>();
             out.put("deck", d);
-            out.put("dck", deckStore.getDck(id).orElse(""));
+            out.put("dck", deckStore.getDck(userId, id).orElse(""));
             ctx.json(out);
         });
-        app.delete("/api/decks/{id}", ctx -> ctx.json(Map.of("deleted", deckStore.delete(Long.parseLong(ctx.pathParam("id"))))));
+        app.delete("/api/decks/{id}", ctx -> ctx.json(Map.of("deleted", deckStore.delete(Auth.user(ctx).id(), Long.parseLong(ctx.pathParam("id"))))));
 
         app.post("/api/games", this::createGame);
         app.get("/api/games/current", ctx -> {
-            var cur = games.current();
+            var cur = games.currentOf(Auth.user(ctx).id());
             if (cur.isPresent()) {
                 ctx.json(Map.of("gameId", cur.get().getId()));
             } else {
@@ -133,9 +165,23 @@ public final class HttpServer {
 
         app.ws("/ws/game/{id}", ws -> {
             ws.onConnect(ctx -> {
-                if (!tokenOk(ctx.queryParam("token"))) {
-                    ctx.closeSession(4401, "token");
-                    return;
+                User user;
+                if (config.server()) {
+                    if (!auth.originOk(ctx.header("Origin"), ctx.header("Host"))) {
+                        ctx.closeSession(4403, "origin");
+                        return;
+                    }
+                    user = auth.resolve(ctx.cookie(Auth.COOKIE)).orElse(null);
+                    if (user == null) {
+                        ctx.closeSession(4401, "login");
+                        return;
+                    }
+                } else {
+                    if (!auth.tokenOk(ctx.queryParam("token"))) {
+                        ctx.closeSession(4401, "token");
+                        return;
+                    }
+                    user = User.LOCAL;
                 }
                 UUID id = UUID.fromString(ctx.pathParam("id"));
                 var host = games.get(id);
@@ -143,8 +189,13 @@ public final class HttpServer {
                     ctx.closeSession(4404, "game");
                     return;
                 }
+                if (host.get().getSetup().userId() != user.id()) {
+                    ctx.closeSession(4403, "seat");
+                    return;
+                }
+                lastActivity = System.currentTimeMillis();
                 Outbox outbox = new Outbox(ctx);
-                sockets.put(ctx, outbox);
+                sockets.put(ctx, new Session(outbox, user.id()));
                 host.get().attach(outbox);
             });
             ws.onMessage(ctx -> onSocketMessage(ctx, ctx.message()));
@@ -156,7 +207,7 @@ public final class HttpServer {
             m.register(app);
         }
 
-        app.start("127.0.0.1", config.port());
+        app.start(config.host(), config.port());
         return app.port();
     }
 
@@ -166,42 +217,72 @@ public final class HttpServer {
         }
     }
 
+    /** Schliesst alle WebSockets eines Nutzers (Einladung rotiert/entfernt) und beendet sein Spiel. */
+    public void closeSessionsOf(long userId) {
+        for (Map.Entry<WsContext, Session> e : sockets.entrySet()) {
+            if (e.getValue().userId() == userId) {
+                try {
+                    e.getKey().closeSession(4401, "revoked");
+                } catch (Exception ignored) {
+                    // egal
+                }
+            }
+        }
+        games.abortOf(userId);
+    }
+
+    /** Schliesst alle WebSockets (Leerlauf-Exit); die UI verbindet sich nach dem Neustart wieder. */
+    public void closeAllSessions() {
+        for (WsContext ctx : sockets.keySet()) {
+            try {
+                ctx.closeSession(4404, "idle");
+            } catch (Exception ignored) {
+                // egal
+            }
+        }
+    }
+
+    public int openSockets() {
+        return sockets.size();
+    }
+
     // ------------------------------------------------------------------ Spiele
 
     private void createGame(Context ctx) throws Exception {
+        User user = Auth.user(ctx);
         JsonNode body = Json.MAPPER.readTree(ctx.body());
         JsonNode deckSpec = body.path("deck");
         Long humanDeckId = "user".equals(deckSpec.path("type").asText()) ? deckSpec.path("id").asLong() : null;
-        LoadedDeck humanDeck = resolveDeck(deckSpec, null);
+        LoadedDeck humanDeck = resolveDeck(user.id(), deckSpec, null);
 
         List<LoadedDeck> bots = new ArrayList<>();
         List<String> usedSamples = new ArrayList<>();
         JsonNode botSpecs = body.path("bots");
         for (int i = 0; i < 3; i++) {
             JsonNode spec = botSpecs.isArray() && botSpecs.size() > i ? botSpecs.get(i) : Json.MAPPER.createObjectNode().put("type", "random");
-            bots.add(resolveDeck(spec, usedSamples));
+            bots.add(resolveDeck(user.id(), spec, usedSamples));
         }
         TempoSettings.Preset tempo = TempoSettings.Preset.valueOf(body.path("tempo").asText("NORMAL").toUpperCase(Locale.ROOT));
-        String name = body.path("playerName").asText("Du");
-        // Test-Situationen (z.B. lange Trigger-Ketten) nur in der Dev-Engine, nie im Release
+        String name = body.path("playerName").asText(config.server() ? user.name() : "Du");
+        // Test-Situationen (z.B. lange Trigger-Ketten) nur in der Dev-Engine, nie im Release oder auf dem Server
         String scenario = body.hasNonNull("scenario") ? body.get("scenario").asText() : null;
-        if (scenario != null && (config.token() != null || !Scenarios.exists(scenario))) {
+        if (scenario != null && (!config.dev() || !Scenarios.exists(scenario))) {
             throw new IllegalArgumentException("Szenario nicht erlaubt: " + scenario);
         }
 
-        GameHost host = games.start(new GameSetup(name, humanDeck, bots, tempo, humanDeckId), onGameFinished,
+        GameHost host = games.start(new GameSetup(name, humanDeck, bots, tempo, humanDeckId, user.id()), onGameFinished,
                 scenario == null ? null : h -> Scenarios.apply(scenario, h.getGame(), h.getHumanId()));
         onGameStarted.started(host, humanDeckId);
         ctx.json(Map.of("gameId", host.getId()));
     }
 
-    private LoadedDeck resolveDeck(JsonNode spec, List<String> usedSamples) throws Exception {
+    private LoadedDeck resolveDeck(long userId, JsonNode spec, List<String> usedSamples) throws Exception {
         String type = spec.path("type").asText("random");
         switch (type) {
             case "user" -> {
                 long id = spec.path("id").asLong();
-                DeckStore.StoredDeck d = deckStore.get(id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
-                String dck = deckStore.getDck(id).orElseThrow();
+                DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
+                String dck = deckStore.getDck(userId, id).orElseThrow();
                 return DeckLoader.fromDckText(dck, d.name(), "user:" + id);
             }
             case "sample" -> {
@@ -239,7 +320,7 @@ public final class HttpServer {
             JsonNode m = Json.MAPPER.readTree(text);
             UUID id = UUID.fromString(ctx.pathParam("id"));
             GameHost host = games.get(id).orElse(null);
-            if (host == null) {
+            if (host == null || !sockets.containsKey(ctx)) {
                 return;
             }
             switch (m.path("t").asText()) {
@@ -295,34 +376,15 @@ public final class HttpServer {
     }
 
     private void closeSocket(WsContext ctx) {
-        Outbox o = sockets.remove(ctx);
-        if (o != null) {
-            o.close();
+        Session s = sockets.remove(ctx);
+        if (s != null) {
+            s.outbox().close();
             try {
                 UUID id = UUID.fromString(ctx.pathParam("id"));
-                games.get(id).ifPresent(h -> h.detach(o));
+                games.get(id).ifPresent(h -> h.detach(s.outbox()));
             } catch (Exception ignored) {
                 // egal
             }
         }
-    }
-
-    // ------------------------------------------------------------------ Auth
-
-    private void checkToken(Context ctx) {
-        if ("OPTIONS".equals(ctx.method().name())) {
-            return;
-        }
-        String t = ctx.header("X-MageLite-Token");
-        if (t == null) {
-            t = ctx.queryParam("token");
-        }
-        if (!tokenOk(t)) {
-            throw new io.javalin.http.UnauthorizedResponse("token");
-        }
-    }
-
-    private boolean tokenOk(String t) {
-        return config.token() == null || config.token().equals(t);
     }
 }

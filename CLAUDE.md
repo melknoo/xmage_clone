@@ -39,7 +39,10 @@ MageLite.cmd                                                 # App starten
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1 # Windows-Installer (braucht JDK 17+)
 
 cd engine; .\gradlew.bat run        # Dev-Engine: Port 7317, kein Token, Daten in engine\run
-cd ui; npm run dev                  # Vite-UI: http://localhost:5173/?port=7317
+cd engine; .\gradlew.bat runServer  # Dev-Engine im Server-Modus (Cookie-Login, Owner-Code DEV-OWNER-CODE)
+cd ui; npm run dev                  # Vite-UI: http://localhost:5173/?port=7317 (direkt) bzw. http://localhost:5173/ (Proxy, Cookies)
+node scripts\e2e-login.mjs          # Server-Modus: Konten/Cookie/Nutzertrennung gegen runServer
+powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32"   # Prompt-API-Stresstest
 node scripts\e2e-flow.mjs [archidekt-url]                     # REST+WS-End-to-End gegen Dev-Engine
@@ -75,6 +78,10 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
 10. **Engine-Jar vor den XMage-Jars auf dem Classpath.** `engine/src/main/java/mage/player/ai/score/GameStateEvaluator2.java`
     ersetzt die gleichnamige XMage-Klasse (FFA-Bewertung). Nie nur `lib/*` (Reihenfolge undefiniert), siehe
     `desktop/src/engine.cjs` → `engineClasspath`. Prüfung: Log „KI-Bewertung: MageLite-FFA aktiv“.
+11. **Nutzerbezug:** Jede Route liest den Nutzer über `Auth.user(ctx).id()` (lokal immer 1, Server-Modus aus dem
+    Cookie) und reicht ihn an `DeckStore`/`ProfileService`/Statistik durch. Neue SQL auf `decks`, `games`,
+    `xp_ledger`, `profile` immer mit `user_id` filtern; ein Spiel gehört `GameSetup.userId()`.
+    Öffentlich ohne Login nur `/api/health` und `/api/auth/login` (Server-Modus). Betrieb: `docs/SERVER.md`.
 
 ## Verifizieren, bevor du „fertig“ sagst
 

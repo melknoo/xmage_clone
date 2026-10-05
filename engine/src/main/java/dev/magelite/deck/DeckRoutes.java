@@ -1,6 +1,8 @@
 package dev.magelite.deck;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.api.Auth;
+import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import io.javalin.Javalin;
@@ -40,15 +42,16 @@ public final class DeckRoutes implements HttpServer.Module {
             LoadedDeck loaded = DeckLoader.fromLists(r.toLists(), "import", "");
             TextDeckParser.Resolved first = r.commanders().get(0);
             Long id = b.hasNonNull("id") ? b.get("id").asLong() : null;
-            long saved = store.save(id, r.name(), r.commanders().stream().map(TextDeckParser.Resolved::name).toList(),
+            long userId = Auth.user(ctx).id();
+            long saved = store.save(userId, id, r.name(), r.commanders().stream().map(TextDeckParser.Resolved::name).toList(),
                     SampleDeckCatalog.colorsOf(r.commanders().stream().map(TextDeckParser.Resolved::name).toList()),
                     first.set(), first.number(), text(b, "source") == null ? "text" : text(b, "source"), text(b, "sourceUrl"),
                     r.toDck(), r.cardCount(), loaded.valid(), loaded.validationErrors());
-            ctx.json(store.get(saved).orElseThrow());
+            ctx.json(store.get(userId, saved).orElseThrow());
         });
         app.get("/api/decks/{id}/text", ctx -> {
             long id = Long.parseLong(ctx.pathParam("id"));
-            String dck = store.getDck(id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
+            String dck = store.getDck(Auth.user(ctx).id(), id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
             ctx.json(Map.of("text", dckToText(dck)));
         });
     }

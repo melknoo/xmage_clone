@@ -1,9 +1,13 @@
 # Plan: Online-Mehrspieler für MageLite (fly.io)
 
-> **Stand 2026-10-02: geplant, noch nicht umgesetzt.** Abgestimmt mit dem Nutzer. Umsetzung in Etappen E1–E5;
-> nach jeder Etappe `docs/STATUS.md` aktualisieren und hier abhaken.
+> **Stand 2026-10-05:** E1 umgesetzt und getestet (`scripts/e2e-login.mjs`, Screenshots). E2 fertig: live unter
+> https://magelite.fly.dev, Leistungsmessung bestanden (2,7 s/Zug Ø, Heap 1,7 GB → performance-2x/4 GB, ein
+> Spiel). Betrieb: `docs/SERVER.md`. Abweichung vom Plan: zusätzlich `--idle-exit-min`
+> (Engine beendet sich nach 10 min ohne Spiel/Anfrage selbst, damit vergessene Tabs keine Kosten erzeugen) und
+> `POST /api/games` → 409, wenn ein anderer Nutzer spielt (statt sein Spiel zu beenden).
+> Umsetzung in Etappen E1–E5; nach jeder Etappe `docs/STATUS.md` aktualisieren und hier abhaken.
 >
-> Fortschritt: [ ] E1 · [ ] E2 · [ ] E3 · [ ] E4 · [ ] E5
+> Fortschritt: [x] E1 · [x] E2 · [ ] E3 · [ ] E4 · [ ] E5
 
 ## Kontext
 

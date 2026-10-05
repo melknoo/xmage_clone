@@ -1,13 +1,17 @@
 package dev.magelite;
 
+import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
+import dev.magelite.auth.AccountService;
+import dev.magelite.auth.AuthRoutes;
 import dev.magelite.boot.CardDbManager;
 import dev.magelite.boot.LogConfig;
 import dev.magelite.deck.DeckRoutes;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.SampleDeckCatalog;
 import dev.magelite.game.BotTuning;
+import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.images.ImageService;
 import dev.magelite.stats.Db;
@@ -24,11 +28,16 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
- * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus).
+ * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus), auf fly im Server-Modus.
  * <p>
  * Args: {@code --port=0 --data=<dir> --vendor=<dir> --ui=<dist> --parent-pid=<pid> --dev}
+ * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10}; Owner-Konto aus
+ * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}.
  * Das Arbeitsverzeichnis muss {@code <data>} sein (XMage oeffnet {@code ./db/cards.h2}).
  * Meldet sich auf stdout mit {@code MAGELITE_READY {"port":..,"token":..}}.
  */
@@ -45,8 +54,12 @@ public final class Main {
         Path data = Path.of(opt.getOrDefault("data", ".")).toAbsolutePath().normalize();
         Path vendor = Path.of(opt.getOrDefault("vendor", System.getProperty("magelite.vendor", "../../vendor/xmage"))).toAbsolutePath().normalize();
         boolean dev = opt.containsKey("dev");
+        boolean server = opt.containsKey("server");
+        String host = opt.getOrDefault("host", "127.0.0.1");
+        int maxGames = Integer.parseInt(opt.getOrDefault("max-games", "1"));
+        int idleExitMin = Integer.parseInt(opt.getOrDefault("idle-exit-min", "0"));
         Files.createDirectories(data.resolve("logs"));
-        LogConfig.configure(data.resolve("logs"), dev);
+        LogConfig.configure(data.resolve("logs"), dev || server); // Server: INFO auf stdout fuer `fly logs`
         Logger log = Logger.getLogger(Main.class);
 
         Path cwd = Path.of("").toAbsolutePath().normalize();
@@ -60,19 +73,32 @@ public final class Main {
         Db db = new Db(data.resolve("magelite.db"));
         DeckStore deckStore = new DeckStore(db);
         SampleDeckCatalog samples = new SampleDeckCatalog(vendor.resolve("sample-decks"));
-        GameRegistry games = new GameRegistry();
+        GameRegistry games = new GameRegistry(server ? maxGames : 1);
         ProfileService profile = new ProfileService(db);
         GameRecorder recorder = new GameRecorder(db, profile);
         games.setRewardHook(recorder::record);
+        AccountService accounts = new AccountService(db);
 
-        String token = dev ? null : randomToken();
+        if (server) {
+            String ownerCode = System.getenv("MAGELITE_OWNER_CODE");
+            if (ownerCode == null || ownerCode.isBlank()) {
+                log.error("Server-Modus ohne MAGELITE_OWNER_CODE - niemand koennte sich anmelden. Abbruch.");
+                System.exit(2);
+            }
+            accounts.ensureOwner(ownerCode, Optional.ofNullable(System.getenv("MAGELITE_OWNER_NAME")).filter(s -> !s.isBlank()).orElse("Owner"));
+        }
+
+        String token = (dev || server) ? null : randomToken();
         Path ui = opt.containsKey("ui") ? Path.of(opt.get("ui")) : null;
-        HttpServer server = new HttpServer(new HttpServer.Config(Integer.parseInt(opt.getOrDefault("port", "0")), token, ui, VERSION),
-                games, deckStore, samples);
-        server.addModule(new ImageService(data.resolve("cache").resolve("images")));
-        server.addModule(new DeckRoutes(deckStore));
-        server.addModule(new StatsRoutes(db, profile));
-        int port = server.start();
+        HttpServer.Config cfg = new HttpServer.Config(Integer.parseInt(opt.getOrDefault("port", "0")), host, token, ui, VERSION, server, dev);
+        Auth auth = new Auth(cfg, accounts);
+        HttpServer httpServer = new HttpServer(cfg, auth, games, deckStore, samples);
+        accounts.setOnRevoke(httpServer::closeSessionsOf);
+        httpServer.addModule(new AuthRoutes(cfg, auth, accounts));
+        httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
+        httpServer.addModule(new DeckRoutes(deckStore));
+        httpServer.addModule(new StatsRoutes(db, profile));
+        int port = httpServer.start();
 
         // Sample-Katalog im Hintergrund vorbereiten
         Thread warmup = new Thread(() -> {
@@ -88,11 +114,16 @@ public final class Main {
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             games.shutdown();
-            server.stop();
+            httpServer.stop();
             db.close();
         }, "shutdown"));
 
-        Optional.ofNullable(opt.get("parent-pid")).map(Long::parseLong).ifPresent(Main::watchParent);
+        if (!server) {
+            Optional.ofNullable(opt.get("parent-pid")).map(Long::parseLong).ifPresent(Main::watchParent);
+        }
+        if (idleExitMin > 0) {
+            watchIdle(httpServer, games, idleExitMin);
+        }
 
         Map<String, Object> ready = new LinkedHashMap<>();
         ready.put("port", port);
@@ -100,7 +131,7 @@ public final class Main {
         ready.put("bootMs", System.currentTimeMillis() - t0);
         System.out.println("MAGELITE_READY " + Json.write(ready));
         System.out.flush();
-        log.info("MageLite-Engine bereit auf Port " + port + " in " + (System.currentTimeMillis() - t0) + " ms");
+        log.info("MageLite-Engine bereit auf " + host + ":" + port + (server ? " (Server-Modus)" : "") + " in " + (System.currentTimeMillis() - t0) + " ms");
     }
 
     private static void watchParent(long pid) {
@@ -120,6 +151,42 @@ public final class Main {
         }, "parent-watchdog");
         t.setDaemon(true);
         t.start();
+    }
+
+    /**
+     * Leerlauf-Exit (fly Auto-Stop): kein laufendes Spiel und seit {@code minutes} keine API-Anfrage mehr -> Prozess
+     * beenden. Offene WebSockets (vergessene Tabs) zaehlen bewusst nicht; sie werden mit 4404 geschlossen, die UI
+     * verbindet sich nach dem naechsten Start neu.
+     * <p>
+     * Verwaiste Spiele (Tab geschlossen, Spiel wartet auf den Menschen) werden nach {@code minutes} ohne verbundenen
+     * Client abgebrochen, sonst hielte das Spiel die Maschine ewig wach.
+     */
+    private static void watchIdle(HttpServer server, GameRegistry games, int minutes) {
+        ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "idle-watchdog");
+            t.setDaemon(true);
+            return t;
+        });
+        long limitMs = minutes * 60_000L;
+        ses.scheduleAtFixedRate(() -> {
+            for (GameHost g : games.runningGames()) {
+                long gone = g.disconnectedForMs();
+                if (gone > limitMs) {
+                    Logger.getLogger(Main.class).warn("Spiel " + g.getId() + " seit " + (gone / 60_000) + " min ohne Spieler - wird abgebrochen");
+                    g.abort();
+                }
+            }
+            if (games.running() > 0) {
+                return;
+            }
+            long idle = System.currentTimeMillis() - server.lastActivity();
+            if (idle < limitMs) {
+                return;
+            }
+            Logger.getLogger(Main.class).info("Leerlauf seit " + (idle / 60_000) + " min, kein Spiel - Engine stoppt (" + server.openSockets() + " offene Verbindungen)");
+            server.closeAllSessions();
+            System.exit(0);
+        }, 1, 1, TimeUnit.MINUTES);
     }
 
     private static String randomToken() {

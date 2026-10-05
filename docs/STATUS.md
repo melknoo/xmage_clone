@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-02. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-05. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -79,8 +79,26 @@ Fallback auf manuelles Klicken.
 
 ## Offene Punkte (priorisiert)
 
-0. **Online-Mehrspieler (geplant, nicht begonnen):** mit Freunden übers Internet spielen, gehostet auf fly.io,
-   Zugang per Einladungscode, ein Konto pro Freund. Plan mit Etappen und Prüfschritten: `docs/ONLINE-PLAN.md`.
+0. **Online (fly.io)** – Plan `docs/ONLINE-PLAN.md`, Betrieb `docs/SERVER.md`.
+   - 2026-10-05 **E1 fertig:** Server-Modus (`--server`, `--host`, `--max-games`), Konten + Einladungscodes
+     (`auth/*`, Cookie `ml_code`, Migration `V2__users.sql`), alle Daten pro Nutzer, Login-/Admin-Screen,
+     Vite-Proxy, `gradlew runServer`, `scripts/e2e-login.mjs` (27/27 grün), Screenshots `steps-server.json`.
+   - 2026-10-05 **E2 vorbereitet:** `Dockerfile`, `.dockerignore`, `fly.toml` (performance-2x/4 GB, Auto-Stop,
+     Volume `/data`), `scripts/deploy-fly.ps1`, Leerlauf-Exit `--idle-exit-min=10`. Lokaler `docker build`
+     (493 MB) und Container-Smoke-Test mit 4 GB Limit grün: erster Start 172 s (Karten-Scan 161 s),
+     Login/Cookie/401 ok, 1,35 GB RAM im Leerlauf.
+   - 2026-10-05 **E2 fertig – live unter https://magelite.fly.dev** (App `magelite`, Volume `magelite_data` fra 3 GB,
+     performance-2x/4 GB, eine Maschine, Auto-Stop + Idle-Exit 10 min). Erster Start auf fly: Karten-Scan 43 s,
+     bereit nach 45 s. Login mit Owner-Code live geprüft (Cookie `Secure`, 401 ohne Cookie).
+     **Leistungsmessung** (BotSpike auf der Maschine, kurz 8 GB): 2 Spiele Blitz bis Zug 40, 0 Fehler,
+     3,9 bzw. 1,5 s/Zug (max 14,2 s), Heap-Spitze 1,7 GB → schneller als lokal (≈ 5 s/Zug); 4 GB und
+     `--max-games=1` bleiben. Owner-Code liegt nur in den fly-Secrets (lokal `engine/run/owner-code.txt`, ungetrackt).
+     Live-Spiel über `wss://` aus Electron geprüft (Starthand-Dialog), fly stoppt die Maschine ~6 min nach der
+     letzten Verbindung, **Kaltstart per Aufruf 5,5 s** (Engine 2,8 s). Zusätzlich bricht die Engine verwaiste
+     Spiele (kein Client > 10 min) ab, damit ein offener Prompt die Maschine nicht wach hält.
+   - Regression lokal (2026-10-05): `test` grün, `humanSpike` 2/2 ohne STALL, `e2e-flow` (Spiel endete durch den
+     bekannten KI-Heap-OOM bei 40 Permanents, Aufzeichnung ok), Autoplay-Screenshot im Lokalmodus ok.
+   - Danach E3 (mehrere Menschen pro Spiel), E4 (Lobby/Tische), E5 (Feinschliff).
 1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
    `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
    Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +
@@ -118,7 +136,10 @@ Fallback auf manuelles Klicken.
 - Kontrollwechsel-Karten (Mindslaver & Co.) sind nur nach dem XMage-Gating-Muster umgesetzt, nicht getestet.
 - Statistik: Spalte `game_card_stats.cast` zählt auch gespielte Länder (Anzeige „gespielt“).
 - Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
-- Es läuft immer nur **ein** Spiel; ein neues Spiel beendet das laufende (`GameRegistry`).
+- Es läuft immer nur **ein** Spiel (`GameRegistry`, `--max-games`, lokal 1): ein neues eigenes Spiel beendet das
+  eigene laufende; im Server-Modus bekommt ein anderer Nutzer 409 „Gerade spielt …“.
+- Server-Modus: ein Spiel pro Nutzer, nur der Besitzer darf sich verbinden; Moxfield-Import im Browser ohne
+  Electron-Fallback (Text-Export einfügen).
 - **Hänger durch verlorene Antwort (XMage-Race) – umgangen 2026-10-02:** `HumanPlayer.waitForResponse` setzt
   `responseOpenedForAnswer = true` *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau
   dazwischen, geht `notifyAll()` verloren und das Spiel wartet ewig. Vorher: 3 STALLs in 9 `humanSpike`-Spielen.

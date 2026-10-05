@@ -1,4 +1,6 @@
-// Verbindung zur lokalen Engine. Port/Token kommen aus Electron (preload) oder der URL.
+// Verbindung zur Engine.
+// Lokal (Electron oder ?port=): http://127.0.0.1:<port> mit Token. Sonst (Server-Modus, Vite-Proxy): dieselbe
+// Origin ohne Token; die Anmeldung laeuft ueber ein Cookie.
 
 declare global {
   interface Window {
@@ -6,12 +8,17 @@ declare global {
   }
 }
 
-function resolveEndpoint(): { base: string; token: string | null } {
+export type EndpointMode = 'local' | 'origin'
+
+function resolveEndpoint(): { base: string; token: string | null; mode: EndpointMode } {
   const params = new URLSearchParams(window.location.search)
   const injected = window.magelite
-  const port = injected?.port ?? Number(params.get('port') ?? 7317)
-  const token = injected?.token ?? params.get('token')
-  return { base: `http://127.0.0.1:${port}`, token }
+  if (injected || params.has('port') || params.has('token')) {
+    const port = injected?.port ?? Number(params.get('port') ?? 7317)
+    const token = injected?.token ?? params.get('token')
+    return { base: `http://127.0.0.1:${port}`, token, mode: 'local' }
+  }
+  return { base: window.location.origin, token: null, mode: 'origin' }
 }
 
 export const endpoint = resolveEndpoint()
@@ -25,7 +32,22 @@ export function wsUrl(path: string): string {
   return apiUrl(path).replace(/^http/, 'ws')
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status = 0,
+    public readonly data: unknown = null,
+  ) {
+    super(message)
+  }
+}
+
+let onUnauthorized: (() => void) | null = null
+
+/** Wird bei jeder 401-Antwort aufgerufen (Server-Modus: Cookie ungueltig -> Login zeigen). */
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  onUnauthorized = fn
+}
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(apiUrl(path), {
@@ -36,7 +58,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const text = await res.text()
   const data = text ? JSON.parse(text) : null
   if (!res.ok) {
-    throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`)
+    if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
+    throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status, data)
   }
   return data as T
 }

@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Eigene Decks des Spielers (SQLite). Gespeichert wird der .dck-Text (XMage-Format).
+ * Eigene Decks eines Nutzers (SQLite); lokal ist das immer Nutzer 1. Gespeichert wird der .dck-Text (XMage-Format).
  */
 public final class DeckStore {
 
@@ -26,23 +26,26 @@ public final class DeckStore {
         this.db = db;
     }
 
-    public List<StoredDeck> list() {
+    public List<StoredDeck> list(long userId) {
         return db.with(c -> {
             List<StoredDeck> out = new ArrayList<>();
-            try (Statement st = c.createStatement();
-                 ResultSet rs = st.executeQuery("SELECT * FROM decks ORDER BY updated_at DESC")) {
-                while (rs.next()) {
-                    out.add(read(rs));
+            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM decks WHERE user_id = ? ORDER BY updated_at DESC")) {
+                ps.setLong(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(read(rs));
+                    }
                 }
             }
             return out;
         });
     }
 
-    public Optional<StoredDeck> get(long id) {
+    public Optional<StoredDeck> get(long userId, long id) {
         return db.with(c -> {
-            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM decks WHERE id = ?")) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT * FROM decks WHERE id = ? AND user_id = ?")) {
                 ps.setLong(1, id);
+                ps.setLong(2, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? Optional.of(read(rs)) : Optional.<StoredDeck>empty();
                 }
@@ -50,10 +53,11 @@ public final class DeckStore {
         });
     }
 
-    public Optional<String> getDck(long id) {
+    public Optional<String> getDck(long userId, long id) {
         return db.with(c -> {
-            try (PreparedStatement ps = c.prepareStatement("SELECT dck FROM decks WHERE id = ?")) {
+            try (PreparedStatement ps = c.prepareStatement("SELECT dck FROM decks WHERE id = ? AND user_id = ?")) {
                 ps.setLong(1, id);
+                ps.setLong(2, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? Optional.of(rs.getString(1)) : Optional.<String>empty();
                 }
@@ -61,17 +65,18 @@ public final class DeckStore {
         });
     }
 
-    public long save(Long id, String name, List<String> commanders, String colors, String commanderSet, String commanderNum,
+    public long save(long userId, Long id, String name, List<String> commanders, String colors, String commanderSet, String commanderNum,
                      String source, String sourceUrl, String dck, int cardCount, boolean valid, String validation) {
         long now = System.currentTimeMillis();
         return db.with(c -> {
             if (id == null) {
                 try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, created_at, updated_at) "
-                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, created_at, updated_at, user_id) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
                     bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation);
                     ps.setLong(12, now);
                     ps.setLong(13, now);
+                    ps.setLong(14, userId);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -80,20 +85,24 @@ public final class DeckStore {
                 }
             }
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, updated_at=? WHERE id=?")) {
+                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, updated_at=? WHERE id=? AND user_id=?")) {
                 bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation);
                 ps.setLong(12, now);
                 ps.setLong(13, id);
-                ps.executeUpdate();
+                ps.setLong(14, userId);
+                if (ps.executeUpdate() == 0) {
+                    throw new IllegalArgumentException("Deck nicht gefunden");
+                }
                 return id;
             }
         });
     }
 
-    public boolean delete(long id) {
+    public boolean delete(long userId, long id) {
         return db.with(c -> {
-            try (PreparedStatement ps = c.prepareStatement("DELETE FROM decks WHERE id = ?")) {
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM decks WHERE id = ? AND user_id = ?")) {
                 ps.setLong(1, id);
+                ps.setLong(2, userId);
                 return ps.executeUpdate() > 0;
             }
         });

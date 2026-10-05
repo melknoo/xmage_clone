@@ -57,7 +57,9 @@ public final class GameRecorder {
                 int humanTurns = sink == null ? 0 : sink.humanTurns();
                 boolean earlyConcede = host.isHumanConceded() && humanTurns < 3;
                 Long deckId = setup.humanDeckId();
+                long userId = setup.userId();
                 String tempo = setup.tempo().name();
+                ProfileService.ensure(c, userId, setup.humanName());
                 long now = System.currentTimeMillis();
 
                 // ---- XP
@@ -73,7 +75,7 @@ public final class GameRecorder {
                     if (survive > 0) {
                         parts.add(new XpPart("turns", humanTurns + " eigene Züge", survive));
                     }
-                    if (won && !wonToday(c)) {
+                    if (won && !wonToday(c, userId)) {
                         parts.add(new XpPart("firstWin", "Erster Sieg des Tages", 100));
                     }
                     if (deckId != null && !playedDeckBefore(c, deckId)) {
@@ -81,7 +83,7 @@ public final class GameRecorder {
                     }
                     int raw = parts.stream().mapToInt(XpPart::amount).sum();
                     double tf = Progression.tempoFactor(tempo);
-                    int streak = won ? winStreak(c) + 1 : 0;
+                    int streak = won ? winStreak(c, userId) + 1 : 0;
                     double sf = Math.min(1.5, 1 + 0.1 * Math.max(0, streak - 1));
                     xp = (int) Math.round(raw * tf * sf);
                     if (tf != 1.0) {
@@ -94,7 +96,7 @@ public final class GameRecorder {
                 }
 
                 // ---- Spiel speichern
-                try (PreparedStatement ps = c.prepareStatement("INSERT INTO games (id, started_at, ended_at, duration_ms, turns, deck_id, deck_name, commander, result, placement, tempo, mulligans, xp_awarded, end_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO games (id, started_at, ended_at, duration_ms, turns, deck_id, deck_name, commander, result, placement, tempo, mulligans, xp_awarded, end_reason, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                     ps.setString(1, gameId);
                     ps.setLong(2, now - over.durationMs());
                     ps.setLong(3, now);
@@ -113,6 +115,7 @@ public final class GameRecorder {
                     ps.setInt(12, me == null ? 0 : me.mulligans());
                     ps.setInt(13, xp);
                     ps.setString(14, over.error() != null ? "error" : host.isHumanConceded() ? "concede" : "normal");
+                    ps.setLong(15, userId);
                     ps.executeUpdate();
                 }
                 int seat = 0;
@@ -162,10 +165,10 @@ public final class GameRecorder {
                 }
 
                 // ---- XP verbuchen
-                long before = profile.xpTotal(c);
+                long before = profile.xpTotal(c, userId);
                 Progression.Level lvBefore = Progression.levelOf(before);
                 for (XpPart p : parts) {
-                    try (PreparedStatement ps = c.prepareStatement("INSERT INTO xp_ledger (game_id, deck_id, source, amount, ts) VALUES (?,?,?,?,?)")) {
+                    try (PreparedStatement ps = c.prepareStatement("INSERT INTO xp_ledger (game_id, deck_id, source, amount, ts, user_id) VALUES (?,?,?,?,?,?)")) {
                         ps.setString(1, gameId);
                         if (deckId == null) {
                             ps.setNull(2, java.sql.Types.INTEGER);
@@ -175,11 +178,12 @@ public final class GameRecorder {
                         ps.setString(3, p.source());
                         ps.setInt(4, p.amount());
                         ps.setLong(5, now);
+                        ps.setLong(6, userId);
                         ps.executeUpdate();
                     }
                 }
                 long after = before + xp;
-                profile.setXpTotal(c, after);
+                profile.setXpTotal(c, userId, after);
                 Progression.Level lv = Progression.levelOf(after);
 
                 Integer mGained = null, mLevel = null, mBefore = null, mXp = null, mNext = null;
@@ -217,10 +221,11 @@ public final class GameRecorder {
         }
     }
 
-    private static boolean wonToday(Connection c) throws SQLException {
+    private static boolean wonToday(Connection c, long userId) throws SQLException {
         long start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM games WHERE result = 'win' AND ended_at >= ? LIMIT 1")) {
+        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM games WHERE result = 'win' AND ended_at >= ? AND user_id = ? LIMIT 1")) {
             ps.setLong(1, start);
+            ps.setLong(2, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
@@ -237,12 +242,14 @@ public final class GameRecorder {
     }
 
     /** Anzahl Siege in Folge vor diesem Spiel. */
-    static int winStreak(Connection c) throws SQLException {
+    static int winStreak(Connection c, long userId) throws SQLException {
         int n = 0;
-        try (PreparedStatement ps = c.prepareStatement("SELECT result FROM games WHERE end_reason != 'error' ORDER BY ended_at DESC LIMIT 50");
-             ResultSet rs = ps.executeQuery()) {
-            while (rs.next() && "win".equals(rs.getString(1))) {
-                n++;
+        try (PreparedStatement ps = c.prepareStatement("SELECT result FROM games WHERE end_reason != 'error' AND user_id = ? ORDER BY ended_at DESC LIMIT 50")) {
+            ps.setLong(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next() && "win".equals(rs.getString(1))) {
+                    n++;
+                }
             }
         }
         return n;

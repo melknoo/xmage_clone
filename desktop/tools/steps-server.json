@@ -1,0 +1,22 @@
+{
+  "url": "http://localhost:5173/",
+  "timeout": 240000,
+  "steps": [
+    { "waitFor": "#root form input", "timeout": 60000 },
+    { "shot": "../../engine/run/shot-server-login.png" },
+    { "js": "location.href = 'http://localhost:5173/#invite=DEV-OWNER-CODE'; location.reload()" },
+    { "waitFor": "#root nav", "timeout": 60000 },
+    { "wait": 1500 },
+    { "shot": "../../engine/run/shot-server-home.png" },
+    { "js": "fetch('/api/admin/invites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Anna'})}).then(r=>r.json()).then(j=>j.code)" },
+    { "js": "window.__ml.nav.getState().go('admin')" },
+    { "wait": 1500 },
+    { "shot": "../../engine/run/shot-server-admin.png" },
+    { "js": "fetch('/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
+    { "wait": 6000 },
+    { "jsFile": "autoplay.js" },
+    { "wait": 30000 },
+    { "js": "(() => { const s = window.__ml.game.getState().state; return s && ('Zug ' + s.turn + ' ' + s.step + ' conn=' + window.__ml.game.getState().conn) })()" },
+    { "shot": "../../engine/run/shot-server-game.png" }
+  ]
+}

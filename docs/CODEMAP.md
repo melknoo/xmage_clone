@@ -17,15 +17,20 @@ Electron (desktop/src/main.cjs)
 - Arbeitsverzeichnis der Engine = Datenordner: XMage öffnet die Karten-DB immer relativ als `./db/cards.h2`.
 - Die Engine beendet sich selbst, wenn der Electron-Prozess weg ist (Parent-Watchdog in `Main`).
 - Dev: `gradlew run` → Port 7317, `--dev` (kein Token, Konsolen-Log), Daten in `engine/run`.
+- **Server-Modus** (fly.io, `docs/SERVER.md`): `java … dev.magelite.Main --server --host=0.0.0.0 --port=8080
+  --data=/data --max-games=1 --idle-exit-min=10`. Kein Token; Login per Cookie `ml_code` (Einladungscode), die UI
+  spricht dieselbe Origin an (`wss://`). Dev: `gradlew runServer` + Vite-Proxy (`http://localhost:5173/` ohne `?port=`).
 
 ## Engine (`engine/src/main/java/dev/magelite`)
 
 | Paket/Datei | Aufgabe |
 |---|---|
-| `Main` | Argumente, Logging, Karten-DB, SQLite, Module registrieren, READY-Zeile, Watchdog |
+| `Main` | Argumente (`--server`, `--host`, `--max-games`, `--idle-exit-min`), Logging, Karten-DB, SQLite, Owner-Konto aus `MAGELITE_OWNER_CODE`, Module registrieren, READY-Zeile, Parent-Watchdog (lokal), Leerlauf-Exit + Abbruch verwaister Spiele (`GameHost.disconnectedForMs`, Server) |
+| `api/Auth` | Before-Handler für `/api/*`, `/img/*`: lokal Token → `User.LOCAL`; Server Cookie → SHA-256 → Konto; Login-Rate-Limit, Origin-Prüfung für WS |
+| `auth/User`, `InviteCodes`, `AccountService`, `AuthRoutes` | Nutzer-Record (lokal immer 1); Codes erzeugen/normalisieren/hashen; Konten (anlegen, rotieren, entfernen, Owner-Bootstrap, `last_seen`); `/api/me`, `/api/auth/*`, `/api/admin/invites*` |
 | `boot/CardDbManager` | Seed-DB kopieren (falls vorhanden), sonst/bei Bedarf `CardScanner.scan()`; setzt `CardScanner.scanned` |
 | `boot/LogConfig` | log4j-Konfiguration (KI-Logs auf WARN, Datei `logs/engine.log`) |
-| `api/HttpServer` | Javalin: Routen, Token-Check, `POST /api/games`, WebSocket-Handling, Module |
+| `api/HttpServer` | Javalin: Routen, Auth-Filter, `POST /api/games` (409 bei belegtem Tisch), WebSocket-Handling (Cookie/Origin, nur der Besitzer des Spiels), Sitzungen pro Nutzer schließen, Module |
 | `api/Outbox` | sendet pro WS-Verbindung auf eigenem Thread; aufeinanderfolgende States werden zusammengefasst |
 | `api/Json` | gemeinsamer Jackson-`ObjectMapper` |
 | `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität) |
@@ -39,7 +44,7 @@ Electron (desktop/src/main.cjs)
 | `game/MageLiteMatch` | Commander-FFA-Match (40 Leben, London-Mulligan, Rollback aus) |
 | `game/TrackingLondonMulligan` | zählt Mulligans; Copy kopiert private Felder per Reflection |
 | `game/HumanSettings` | `UserData` für den Menschen (Stopps, Auto-Pass nach Zauber …) |
-| `game/GameRegistry`, `GameSetup` | aktuelles Spiel verwalten; Spielkonfiguration (inkl. `humanDeckId`) |
+| `game/GameRegistry`, `GameSetup` | laufende Spiele (eins pro Nutzer, insgesamt `maxGames`; voll → `BusyException`/409); Spielkonfiguration (inkl. `humanDeckId`, `userId`) |
 | `view/GameViewMapper` | XMage-`GameView` + Spielzustand → `StateDto` (Sitzordnung = echte Zugfolge aus `PlayerList`, Commander-Steuer/-Schaden, spielbare Objekte, Stapel-Ziele mit Namen) |
 | `view/RichText` | XMage-HTML (Log/Prompts) → sichere Segmente `{text}`/`{obj,text,color}`/`{br}` |
 | `view/dto/*` | DTOs: `StateDto`, `PlayerDto`, `CardDto`, `PermanentDto`, `CommandDto`, `PromptDto`, `TargetRefDto`, `Messages` |
@@ -117,7 +122,11 @@ Client → Server:
 
 | Methode | Pfad | Zweck |
 |---|---|---|
-| GET | `/api/health` | Lebenszeichen |
+| GET | `/api/health` | Lebenszeichen `{ok, version, mode, games}`; im Server-Modus ohne Login |
+| GET | `/api/me` | `{mode: local\|server, user{id,name,admin}}` |
+| POST | `/api/auth/login`, `/api/auth/logout` | `{code}` → Cookie `ml_code` (Server-Modus; 401 falsch, 429 Rate-Limit) |
+| GET/POST | `/api/admin/invites` | Admin: Konten auflisten / anlegen `{name}` → `{id,name,code}` (Code nur einmal) |
+| POST/DELETE | `/api/admin/invites/{id}/rotate`, `/api/admin/invites/{id}` | neuer Code / Konto entfernen (schließt dessen WebSockets, beendet sein Spiel) |
 | GET | `/api/samples` | Sample-Decks (`id` = relativer Pfad) |
 | GET/DELETE | `/api/decks`, `/api/decks/{id}` | eigene Decks |
 | GET | `/api/decks/{id}/text` | Deck als bearbeitbarer Text |
@@ -125,24 +134,27 @@ Client → Server:
 | POST | `/api/decks/url` | Import `{url, json?}`; 409 `{blocked:true, apiUrl}` wenn geblockt |
 | POST | `/api/decks` | speichern `{id?, name, text, commanders?, source?, sourceUrl?}` |
 | POST | `/api/games` | Spiel starten `{deck, bots[3], tempo}`; Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
-| GET | `/api/games/current` | laufendes Spiel (für Reconnect) |
+| GET | `/api/games/current` | eigenes laufendes Spiel (für Reconnect); fremdes → 404 |
 | GET/PUT | `/api/profile` | Held; PUT `{name}` |
 | GET | `/api/stats/overview`, `/api/stats/decks`, `/api/stats/decks/{id}/cards`, `/api/history?limit=` | Statistik |
 | GET | `/img/card/{set}/{num}?size=&face=&name=`, `/img/token?name=&set=&n=&size=`, `/img/named?name=&size=` | Bilder |
 
-### SQLite (`magelite.db`, Migration `V1__init.sql`)
+### SQLite (`magelite.db`, Migrationen `V1__init.sql`, `V2__users.sql`)
 
-`profile` (id=1, name, xp_total) · `decks` (dck-Text, commanders, colors, valid, mastery_xp) · `games` (Ergebnis, Platz,
-Tempo, Mulligans, XP, end_reason) · `game_seats` · `game_card_stats` (pro Spiel+Karte: opening, drawn, cast,
-first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: Datei `V2__….sql` anlegen **und** in
-`Db.MIGRATIONS` eintragen.
+`users` (id, name, code_hash, is_admin, last_seen; 1 = lokal) · `profile` (id = Nutzer-id, name, xp_total) · `decks`
+(dck-Text, commanders, colors, valid, mastery_xp, `user_id`) · `games` (Ergebnis, Platz, Tempo, Mulligans, XP,
+end_reason, `user_id`) · `game_seats` · `game_card_stats` (pro Spiel+Karte: opening, drawn, cast, first_cast_turn) ·
+`xp_ledger` (`user_id`) · `settings` (noch ungenutzt). Neue Migration: Datei `V3__….sql` anlegen **und** in
+`Db.MIGRATIONS` eintragen (Splitter `;` + Zeilenumbruch, keine `;` in Kommentaren).
 
 ## UI (`ui/src`)
 
 | Datei | Aufgabe |
 |---|---|
-| `main.tsx`, `App.tsx` | Einstieg, Engine-Wartebildschirm, Navigation, Reconnect zum laufenden Spiel; im Dev-Modus `window.__ml = {game, nav}` |
-| `api/client.ts` | Port/Token (Preload oder URL), `api.get/post/put/del`, `cardImageUrl()` |
+| `main.tsx`, `App.tsx` | Einstieg, Engine-Wartebildschirm (Server: bis 3 min „Server wird gestartet“), `#invite=`-Login, `/api/me`-Gate → `LoginScreen`, Navigation (Server: „Einladungen“ für Admins, „Abmelden“), Reconnect zum laufenden Spiel; im Dev-Modus `window.__ml = {game, nav}` |
+| `api/client.ts` | Endpoint: lokal (`window.magelite` oder `?port=`) → `http://127.0.0.1:<port>` + Token; sonst `location.origin` ohne Token (Cookie). `api.get/post/put/del`, `ApiError.status`, 401-Hook, `cardImageUrl()` |
+| `store/auth.ts` | `mode` (local/server), `me`, `status` (ok/login), `login(code)`, `logout()`, `takeInviteFromUrl()` |
+| `screens/LoginScreen.tsx`, `AdminScreen.tsx` | Code-Eingabe; Einladungen anlegen (Code + Link einmalig), rotieren, entfernen, zuletzt gesehen |
 | `api/types.ts` | TypeScript-Typen des Protokolls (bei Änderungen an DTOs mitziehen!) |
 | `store/game.ts` | Zustand-Store: WebSocket, State, Prompt, Log, Toasts, `answer()`, `action()`, Tempo, Auto-Mana |
 | `store/nav.ts` | aktueller Screen, letzte Spielkonfiguration (localStorage) |
@@ -171,8 +183,12 @@ first_cast_turn) · `xp_ledger` · `settings` (noch ungenutzt). Neue Migration: 
 | `src/preload.cjs` | `window.magelite = {port, token, fetchText}` |
 | `tools/shot.cjs`, `tools/autoplay.js`, `tools/steps-autoplay.json` | Screenshot-Automatisierung + In-Page-Autopilot für UI-Tests |
 | `tools/steps-swarm.json`, `tools/swarm-pilot.js` | Szenario `swarm` (Dev-Engine): Stapel ×N, Shift-Markieren, Mehrfach-Angriff, Pfeile, Verlauf ×N |
+| `tools/steps-server.json` | Server-Modus über den Vite-Proxy: Login-Screen, `#invite=`-Login, Einladungen, Spiel |
 
-## Skripte (`scripts/`)
+## Skripte (`scripts/`) und Server-Dateien
 
 `build.ps1` (alles bauen, prüft Java/Node) · `import-xmage.ps1` (XMage-Distribution → `vendor/xmage`) ·
-`bootstrap-gradle.ps1` (Wrapper neu erzeugen) · `e2e-flow.mjs` (REST+WS-Test).
+`bootstrap-gradle.ps1` (Wrapper neu erzeugen) · `e2e-flow.mjs` (REST+WS-Test) · `e2e-login.mjs` (Server-Modus:
+Konten, Cookie, Nutzertrennung) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
+Repo-Root: `Dockerfile` (UI → Engine `installDist` → JRE 17, Engine-Jar vor `lib/*`), `.dockerignore`, `fly.toml`
+(performance-2x/4 GB, Auto-Stop, Volume `/data`, Health-Grace 300 s). Betrieb: `docs/SERVER.md`.

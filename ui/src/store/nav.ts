@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { DeckSpec, Tempo } from '../api/types'
 
-export type Screen = 'home' | 'decks' | 'play' | 'game' | 'stats'
+export type Screen = 'home' | 'decks' | 'play' | 'game' | 'stats' | 'admin'
 
 export interface LastSetup {
   deck: DeckSpec

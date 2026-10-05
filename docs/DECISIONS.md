@@ -94,3 +94,28 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - **`reactInCombat`** (nur Normal) – trotz `fastOpponentTurns` in fremden Kampfschritten rechnen, wenn eine
     Spontanaktion möglich ist.
   - **MCTS** (`ComputerPlayerMCTS`) nur in der Arena gemessen, nicht im Produkt (siehe `STATUS.md`).
+  - **Sperre gegen gestapelte Suchen** (`MageLiteBot.SimPool`): XMage bricht eine Suche nach der Denkzeit per
+    Interrupt ab. Einzelne Schritte prüfen den Interrupt aber nicht, etwa „alle Zielkombinationen einer
+    Opfer-Fähigkeit erzeugen“, und laufen weiter. In der Arena stapelten sich solche Läufe bis zum
+    `OutOfMemoryError`. Darum gilt:
+    - Vor jeder Suche wartet der Bot höchstens seine Denkzeit lang, bis der statische Simulations-Pool von
+      `ComputerPlayer6` leer ist (per Reflection).
+    - Läuft dann noch etwas, passt er ohne Suche.
+    - Eine *einzelne* ausufernde Suche kann den Heap trotzdem füllen (XMage-Problem, siehe `STATUS.md`).
+
+- **Online-Betrieb (2026-10-05, Etappen E1/E2 aus `ONLINE-PLAN.md`):**
+  - **fly.io statt Heim-Laptop:** die XMage-KI rechnet single-threaded mit Zeitbudget; `performance-2x`/4 GB mit
+    Auto-Stop kostet nur waehrend gespielt wird (ca. 0,10 $/h). Shared-CPU-Maschinen sind gedrosselt.
+  - **Cookie statt Token:** im Server-Modus geht der Einladungscode als HttpOnly-Cookie mit (auch bei `<img>` und
+    WebSocket), Bild-URLs bleiben ohne Token und damit browser-cachebar. Lokal bleibt das Zufallstoken.
+  - **Code im Cookie, Hash in der DB:** Rotieren/Entfernen wirkt sofort, weil jede Anfrage neu hasht; keine
+    Session-Tabelle noetig.
+  - **Ein `User`-Record in beiden Modi:** lokal immer Nutzer 1. So bleibt der lokale Modus bitgleich und die
+    Routen haben genau einen Pfad (`Auth.user(ctx).id()`).
+  - **Leerlauf-Exit in der Engine** (`--idle-exit-min`) zusaetzlich zu flys Auto-Stop: ein vergessener Tab haelt
+    per WebSocket-Ping die Verbindung offen und damit die Maschine am Laufen. Die Engine beendet sich, wenn kein
+    Spiel laeuft und N Minuten keine API-Anfrage kam; die UI verbindet sich nach dem naechsten Start neu.
+  - **409 statt Abbruch:** startet Nutzer B ein Spiel, waehrend A spielt, wird B abgewiesen. Vorher beendete ein
+    neues Spiel immer das laufende (nur sinnvoll bei einem Nutzer).
+  - **Owner aus fly-Secrets** (`MAGELITE_OWNER_CODE`): kein Admin-Passwort im Repo; `ensureOwner` aktualisiert den
+    Hash des vorhandenen Admins, so laesst sich der Code ueber die Secrets rotieren.
