@@ -128,7 +128,8 @@ Fallback auf manuelles Klicken.
 - **KI-Endlosrekursion beim Blocken:** `ComputerPlayer6.declareBlockers` → `replaceEvent` → `ChooseBlockersEffect`
   → `Combat.selectBlockers` → derselbe Bot → … → `StackOverflowError`, Spiel bricht ab („Spiel abgebrochen“).
   Tritt bei Karten auf, mit denen ein Spieler die Blocker eines anderen bestimmt. 1× in 6 `humanSpike`-Spielen
-  (2026-10-02). Idee: Rekursionssperre in `MageLiteBot.selectBlockers`.
+  (2026-10-02). **Behoben:** Rekursionssperre + eigene Logik in `MageLiteBot.selectBlockers`/`chooseBlockersByEffect`
+  (Regressionstest `gradlew blockerSpike`).
 - `desktop/tools/shot.cjs`: Das versteckte Fenster zeichnet manchmal verzögert – bei verdächtigen Bildern
   nochmal mit längerer Wartezeit aufnehmen.
 - **Neue Karten fehlen (Stand 2026-10-02):** XMage nimmt Karten aus der `unfinished`-Liste eines Sets nicht in die DB

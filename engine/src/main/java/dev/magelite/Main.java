@@ -7,6 +7,7 @@ import dev.magelite.boot.LogConfig;
 import dev.magelite.deck.DeckRoutes;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.SampleDeckCatalog;
+import dev.magelite.game.BotTuning;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.images.ImageService;
 import dev.magelite.stats.Db;
@@ -54,6 +55,7 @@ public final class Main {
         }
 
         CardDbManager.ensure(vendor.resolve("db/cards.h2.mv.db"));
+        BotTuning.checkFfaEvaluator();
 
         Db db = new Db(data.resolve("magelite.db"));
         DeckStore deckStore = new DeckStore(db);

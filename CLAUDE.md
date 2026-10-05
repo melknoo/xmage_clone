@@ -72,6 +72,9 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
    `require('electron')` nur ein Pfad-String.
 9. **Windows PowerShell 5.1:** stderr von Programmen (z. B. `java -version 2>&1`) wird mit
    `ErrorActionPreference=Stop` zum Abbruch → über `cmd /c "… 2>&1"` umleiten. Skripte ASCII-only halten (ANSI-Lesart).
+10. **Engine-Jar vor den XMage-Jars auf dem Classpath.** `engine/src/main/java/mage/player/ai/score/GameStateEvaluator2.java`
+    ersetzt die gleichnamige XMage-Klasse (FFA-Bewertung). Nie nur `lib/*` (Reihenfolge undefiniert), siehe
+    `desktop/src/engine.cjs` → `engineClasspath`. Prüfung: Log „KI-Bewertung: MageLite-FFA aktiv“.
 
 ## Verifizieren, bevor du „fertig“ sagst
 

@@ -21,6 +21,22 @@ function resolvePaths(app) {
   return { engineLib, vendor, ui, java }
 }
 
+/**
+ * Engine-Jar explizit VOR lib/*: es enthaelt Ersatzklassen fuer XMage (mage.player.ai.score.GameStateEvaluator2),
+ * die vor den gleichnamigen Klassen aus den XMage-Jars geladen werden muessen. Die Reihenfolge innerhalb von
+ * lib/* ist nicht festgelegt.
+ */
+function engineClasspath(engineLib) {
+  const all = path.join(engineLib, '*')
+  let jars = []
+  try {
+    jars = fs.readdirSync(engineLib).filter((f) => /^magelite-engine.*\.jar$/.test(f))
+  } catch {
+    return all
+  }
+  return [...jars.map((f) => path.join(engineLib, f)), all].join(path.delimiter)
+}
+
 class Engine {
   constructor(app, log) {
     this.app = app
@@ -42,7 +58,7 @@ class Engine {
       '-Djava.awt.headless=true',
       '-Dfile.encoding=UTF-8',
       '-cp',
-      path.join(engineLib, '*'),
+      engineClasspath(engineLib),
       'dev.magelite.Main',
       '--port=0',
       `--data=${dataDir}`,

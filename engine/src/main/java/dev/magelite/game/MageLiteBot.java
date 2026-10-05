@@ -3,6 +3,7 @@ package dev.magelite.game;
 import mage.abilities.Ability;
 import mage.abilities.ActivatedAbility;
 import mage.abilities.mana.ManaAbility;
+import mage.constants.PhaseStep;
 import mage.constants.RangeOfInfluence;
 import mage.game.Game;
 import mage.game.permanent.Permanent;
@@ -82,7 +83,8 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
         if (tempo.fastOpponentTurns()
                 && isGameUnderControl()
                 && !getId().equals(game.getActivePlayerId())
-                && game.getStack().isEmpty()) {
+                && game.getStack().isEmpty()
+                && !reactInCombat(game)) {
             actionCache.clear();
             return quickPass(game);
         }
@@ -123,6 +125,21 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
             quickPassing = false;
         }
         return false;
+    }
+
+    /**
+     * Fremder Kampf (Angreifer/Blocker erklaert) und wir haben eine Spontanaktion -> trotz fastOpponentTurns normal
+     * rechnen (Kampftricks, Removal auf Angreifer). Kostet nur Zeit, wenn wirklich etwas spielbar ist.
+     */
+    private boolean reactInCombat(Game game) {
+        if (!tempo.reactInCombat() || !BotTuning.enabled(getId(), BotTuning.Lever.REACT_IN_COMBAT)) {
+            return false;
+        }
+        PhaseStep step = game.getTurnStepType();
+        if (step != PhaseStep.DECLARE_ATTACKERS && step != PhaseStep.DECLARE_BLOCKERS) {
+            return false;
+        }
+        return hasNonManaAction(game);
     }
 
     /** Merkliste fuer den aktuellen Stapel; leer, sobald der Stapel leer ist oder Zug/Schritt wechselt. */
@@ -168,7 +185,11 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
 
     @Override
     public void selectAttackers(Game game, UUID attackingPlayerId) {
-        super.selectAttackers(game, attackingPlayerId);
+        if (!game.isSimulation() && isGameUnderControl() && BotTuning.enabled(getId(), BotTuning.Lever.FFA_ATTACK)) {
+            FfaAttack.declareAttackers(this, game);
+        } else {
+            super.selectAttackers(game, attackingPlayerId);
+        }
         if (!game.isSimulation()) {
             afterAction(game, tempo.combatDelayMs());
         }

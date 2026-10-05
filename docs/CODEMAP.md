@@ -7,7 +7,7 @@ Wie die Implementierung aufgebaut ist. Die ursprüngliche Analyse mit vielen XMa
 
 ```
 Electron (desktop/src/main.cjs)
-  ├─ spawn: java -cp engine/lib/* dev.magelite.Main --port=0 --data=%APPDATA%\MageLite\engine --vendor=… --ui=… --parent-pid=…
+  ├─ spawn: java -cp engine/lib/magelite-engine-*.jar;engine/lib/* dev.magelite.Main --port=0 --data=%APPDATA%\MageLite\engine --vendor=… --ui=… --parent-pid=…
   │         stdout-Zeile "MAGELITE_READY {port, token, bootMs}" → Fenster lädt http://127.0.0.1:<port>/?port=…&token=…
   └─ BrowserWindow (React-UI aus ui/dist, von der Engine ausgeliefert)
         ├─ REST  /api/*, /img/*         (Token als Query oder Header X-MageLite-Token)
@@ -31,7 +31,9 @@ Electron (desktop/src/main.cjs)
 | `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität) |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
 | `game/AutoPayer` | Planer fürs automatische Bezahlen von Manakosten |
-| `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, `fastStack`, Denkzeit, Pausen nur nach echten Aktionen, Hooks) |
+| `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, `fastStack`, `reactInCombat`, Denkzeit, Pausen nur nach echten Aktionen, Hooks); Angriffe über `FfaAttack` |
+| `game/FfaAttack` | Angriffe im FFA: Lethal gegen irgendeinen Gegner, „sicher“ pro Verteidiger, Ziel nach Schaden/Leben × Bedrohung, Blocker gegen Gegenschlag zurückhalten |
+| `game/BotTuning` | KI-Verbesserungen pro Spieler-ID abschaltbar (`FFA_EVAL`, `FFA_ATTACK`, `REACT_IN_COMBAT`, für die Arena), Gewichte, Start-Selbstprüfung der Bewertung |
 | `game/TempoSettings` | Presets BLITZ/NORMAL/BEDACHT/MAX, live änderbar (von allen Bot-Kopien geteilt) |
 | `game/StackSig` | Signatur des obersten Stapelobjekts (Controller, Quellname, Regeltext, Ziele): „gleiche Trigger“ erkennen |
 | `game/MageLiteMatch` | Commander-FFA-Match (40 Leben, London-Mulligan, Rollback aus) |
@@ -54,7 +56,13 @@ Electron (desktop/src/main.cjs)
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
 | `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung; `--scenario=swarm` misst Trigger-Ketten und testet den Mehrfach-Angriff) |
+| `spike/BotArena` | KI-Vergleich A vs B (je 2 Sitze, Spiegel-Spiele mit getauschten Seiten): Siege, Platzierungspunkte, ms/Zug, CSV in `run/arena/` (`gradlew botArena`) |
 | `spike/Scenarios` | Test-Situationen per `game.cheat` vor dem Start (`swarm`: 16 Scute Swarm + Länder); in der Engine nur mit `--dev` (`POST /api/games {scenario}`) |
+
+**XMage-Ersatzklasse** (`engine/src/main/java/mage/player/ai/score/GameStateEvaluator2.java`): gleicher Name wie im
+XMage-Jar, API identisch. Bewertet gegen **alle** Gegner statt nur den ersten. Greift nur, weil das Engine-Jar auf dem
+Classpath vor den XMage-Jars steht (`desktop/src/engine.cjs` → `engineClasspath`, Gradle von selbst). `Main` prüft das
+beim Start (`BotTuning.checkFfaEvaluator`, Log „KI-Bewertung: …“).
 
 ### Lebenszyklus eines Prompts
 

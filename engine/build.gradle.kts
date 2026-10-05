@@ -85,6 +85,18 @@ tasks.register<JavaExec>("blockerSpike") {
     doFirst { runDir.asFile.mkdirs() }
 }
 
+// KI-Vergleich: zwei Bot-Varianten (je 2 Sitze) spielen gegeneinander, Ergebnis + CSV in run/arena
+tasks.register<JavaExec>("botArena") {
+    group = "magelite"
+    description = "Bot-Arena: KI-Variante A vs B (Siege, Platzierungspunkte, Tempo)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.magelite.spike.BotArena")
+    jvmArgs = jvmArgsCommon
+    workingDir = runDir.asFile
+    args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
+    doFirst { runDir.asFile.mkdirs() }
+}
+
 tasks.test {
     useJUnitPlatform()
     workingDir = runDir.asFile

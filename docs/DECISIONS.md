@@ -74,3 +74,23 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   (`--dev`) ohne Token.
 - **Git-Identität im Repo:** `melknoo` / `melknoo@users.noreply.github.com` (lokal gesetzt), damit keine private
   Mailadresse in öffentlichen Commits landet.
+- **Stärkere Bots ohne LLM (2026-10-05, Nutzerwunsch):** Die XMage-KI ist für 2 Spieler gebaut. Drei Hebel für
+  Commander FFA, jeder pro Bot abschaltbar (`BotTuning`, für die Arena):
+  - **FFA-Bewertung** – `GameStateEvaluator2` bewertete nur gegen den *ersten* Gegner der Sitzliste. Fiel der in
+    einer Simulation auf 0 Leben, galt das als Partiesieg. Neu:
+    `eigener Score − (w · stärkster Gegner + (1 − w) · Σ Gegner / Gegnerzahl) + Bonus je ausgeschiedenem Gegner`
+    (`w = 0,5`, Bonus 5000; 20 Leben ≈ 10000).
+    - Die Klasse ist `final`, die Methode `static`, und `ComputerPlayer6/7` rufen sie direkt auf. Deshalb liegt in
+      der Engine eine **gleichnamige Ersatzklasse**, die vor dem Jar geladen wird (Nutzerentscheidung). Die Jars
+      bleiben unverändert.
+    - Electron nennt das Engine-Jar deshalb ausdrücklich vor `lib/*`, und `Main` prüft das beim Start.
+    - Mehr Suchtiefe hilft nicht: XMage begrenzt auf 5000 Knoten und wirft ab 5100 einen Fehler.
+  - **FFA-Angriffe** (`FfaAttack`) – `ComputerPlayer6.declareAttackers` schickte alle Angreifer an den ersten
+    Gegner und prüfte sie nur gegen dessen Blocker. Neu:
+    - Lethal gegen irgendeinen Gegner.
+    - Sicherheit pro Verteidiger.
+    - Ziel nach „Anteil an seinem Leben × Bedrohung“.
+    - Blocker gegen einen tödlichen Gegenschlag zurückhalten.
+  - **`reactInCombat`** (nur Normal) – trotz `fastOpponentTurns` in fremden Kampfschritten rechnen, wenn eine
+    Spontanaktion möglich ist.
+  - **MCTS** (`ComputerPlayerMCTS`) nur in der Arena gemessen, nicht im Produkt (siehe `STATUS.md`).
