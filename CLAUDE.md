@@ -42,6 +42,8 @@ cd engine; .\gradlew.bat run        # Dev-Engine: Port 7317, kein Token, Daten i
 cd engine; .\gradlew.bat runServer  # Dev-Engine im Server-Modus (Cookie-Login, Owner-Code DEV-OWNER-CODE)
 cd ui; npm run dev                  # Vite-UI: http://localhost:5173/?port=7317 (direkt) bzw. http://localhost:5173/ (Proxy, Cookies)
 node scripts\e2e-login.mjs          # Server-Modus: Konten/Cookie/Nutzertrennung gegen runServer
+node scripts\e2e-online.mjs         # Server-Modus: 2 Menschen in einem Spiel (Routing, Aufgeben, Belohnung je Nutzer)
+cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32"   # Prompt-API-Stresstest

@@ -15,9 +15,10 @@ public final class Messages {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record Hello(String t, int protocol, UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo) {
-        public Hello(UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo) {
-            this("hello", 1, gameId, myPlayerId, seats, tempo);
+    /** {@code host}: dieser Sitz ist der Gastgeber (erster Mensch) und darf das Tempo stellen */
+    public record Hello(String t, int protocol, UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo, boolean host) {
+        public Hello(UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo, boolean host) {
+            this("hello", 2, gameId, myPlayerId, seats, tempo, host);
         }
     }
 

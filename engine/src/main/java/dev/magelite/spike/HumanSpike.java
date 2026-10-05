@@ -37,7 +37,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --verbose --dumpJson=datei --scenario=swarm
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm
+ * <p>
+ * {@code --humans=N}: N automatische Test-Menschen mit eigenem Sitz und eigenem Autopiloten in einem Spiel (Routing-Test).
  * <p>
  * {@code --scenario=swarm}: lange Trigger-Ketten (siehe {@link Scenarios}). Der Test-Spieler spielt dann nur Laender,
  * passt sonst und misst, wie lange jede Kette auf dem Stapel braucht. Beim ersten Angriff greift er per
@@ -51,6 +53,7 @@ public final class HumanSpike {
         Map<String, String> opt = parseArgs(args);
         int games = Integer.parseInt(opt.getOrDefault("games", "1"));
         int turnCap = Integer.parseInt(opt.getOrDefault("turnCap", "24"));
+        int humans = Math.max(1, Math.min(4, Integer.parseInt(opt.getOrDefault("humans", "1"))));
         long seed = Long.parseLong(opt.getOrDefault("seed", String.valueOf(System.nanoTime())));
         boolean verbose = opt.containsKey("verbose");
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
@@ -81,7 +84,7 @@ public final class HumanSpike {
                     break;
                 }
             }
-            boolean ok = runGame(g, decks, preset, turnCap, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario);
+            boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario);
             if (!ok) {
                 failures++;
             }
@@ -90,9 +93,21 @@ public final class HumanSpike {
         System.exit(failures > 0 ? 1 : 0);
     }
 
-    private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, Random rnd,
+    /** Nachricht an einen Sitz (Test-Inbox). */
+    private record In(GameHost.HumanSeat seat, Object msg) {
+    }
+
+    private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, int humans, Random rnd,
                                    boolean verbose, String dumpJson, String scenario) throws Exception {
-        GameSetup setup = new GameSetup("Tester", decks.get(0), decks.subList(1, 4), preset, null);
+        List<GameSetup.SeatSpec> specs = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            if (i < humans) {
+                specs.add(GameSetup.SeatSpec.human(i + 1, i == 0 ? "Tester" : "Tester " + (i + 1), decks.get(i), null));
+            } else {
+                specs.add(GameSetup.SeatSpec.bot(decks.get(i)));
+            }
+        }
+        GameSetup setup = new GameSetup(specs, preset);
         GameHost host = GameHost.create(setup);
         host.getTempo().setActionDelayMs(0);
         host.getTempo().setCombatDelayMs(0);
@@ -105,39 +120,45 @@ public final class HumanSpike {
             Scenarios.apply(scenario, host.getGame(), host.getHumanId());
         }
 
-        out("Spiel %d: Ich=%s vs %s", nr, decks.get(0).name(), decks.subList(1, 4).stream().map(LoadedDeck::name).toList());
+        out("Spiel %d: Menschen=%s vs Bots=%s", nr, decks.subList(0, humans).stream().map(LoadedDeck::name).toList(),
+                decks.subList(humans, 4).stream().map(LoadedDeck::name).toList());
 
-        LinkedBlockingQueue<Object> inbox = new LinkedBlockingQueue<>();
+        LinkedBlockingQueue<In> inbox = new LinkedBlockingQueue<>();
         AtomicLong lastMsgAt = new AtomicLong(System.currentTimeMillis());
         AtomicLong bytes = new AtomicLong();
         AtomicLong states = new AtomicLong();
         java.io.PrintWriter dump = dumpJson == null ? null : new java.io.PrintWriter(Files.newBufferedWriter(Path.of(dumpJson)));
         java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
-        host.attach(msg -> {
-            if (msg instanceof Messages.Activity a) {
-                // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
-                recovered.set(a.recovered());
-                return;
-            }
-            lastMsgAt.set(System.currentTimeMillis());
-            if (msg instanceof StateDto) {
-                states.incrementAndGet();
-            }
-            try {
-                String json = JSON.writeValueAsString(msg);
-                bytes.addAndGet(json.length());
-                if (dump != null) {
-                    synchronized (dump) {
-                        dump.println(json);
-                    }
+        Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
+        for (GameHost.HumanSeat seat : host.seats()) {
+            drivers.put(seat, new Driver(host, seat, rnd, verbose, scenario != null));
+            host.attach(seat, msg -> {
+                if (msg instanceof Messages.Activity a) {
+                    // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
+                    recovered.set(a.recovered());
+                    return;
                 }
-            } catch (Exception e) {
-                out("JSON-Fehler: %s", e);
-            }
-            inbox.add(msg);
-        });
-
-        Driver driver = new Driver(host, rnd, verbose, scenario != null);
+                lastMsgAt.set(System.currentTimeMillis());
+                if (msg instanceof StateDto) {
+                    states.incrementAndGet();
+                }
+                try {
+                    String json = JSON.writeValueAsString(msg);
+                    bytes.addAndGet(json.length());
+                    if (dump != null) {
+                        synchronized (dump) {
+                            dump.println(json);
+                        }
+                    }
+                } catch (Exception e) {
+                    out("JSON-Fehler: %s", e);
+                }
+                inbox.add(new In(seat, msg));
+            });
+        }
+        GameHost.HumanSeat firstSeat = host.firstSeat();
+        Driver driver = drivers.get(firstSeat);
+        Map<GameHost.HumanSeat, Messages.GameOver> overs = new java.util.LinkedHashMap<>();
         ChainMeter chains = new ChainMeter();
         host.start();
         long t0 = System.currentTimeMillis();
@@ -145,7 +166,9 @@ public final class HumanSpike {
         Messages.GameOver over = null;
         TurnOrderCheck turnOrder = new TurnOrderCheck();
         while (over == null) {
-            Object msg = inbox.poll(500, TimeUnit.MILLISECONDS);
+            In in = inbox.poll(500, TimeUnit.MILLISECONDS);
+            Object msg = in == null ? null : in.msg();
+            Driver d = in == null ? null : drivers.get(in.seat());
             if (msg == null) {
                 if (System.currentTimeMillis() - lastMsgAt.get() > 90_000) {
                     out("!!! STALL: 90 s keine Nachricht. Offener Prompt: %s", driver.lastPrompt == null ? "-" : driver.lastPrompt.kind + " " + driver.lastPrompt.messageText);
@@ -158,13 +181,18 @@ public final class HumanSpike {
                 continue;
             }
             if (msg instanceof StateDto s) {
-                driver.state = s;
-                turnOrder.accept(s);
-                chains.accept(s);
+                d.state = s;
+                if (d == driver) {
+                    turnOrder.accept(s);
+                    chains.accept(s);
+                }
             } else if (msg instanceof PromptDto p) {
-                driver.handle(p);
+                d.handle(p);
             } else if (msg instanceof Messages.GameOver g) {
-                over = g;
+                overs.put(in.seat(), g);
+                if (overs.size() == drivers.size()) {
+                    over = overs.get(firstSeat);
+                }
             } else if (msg instanceof Messages.Toast t && verbose) {
                 out("  TOAST %s", t.rich());
             }
@@ -187,6 +215,22 @@ public final class HumanSpike {
         }
         out("  Aktionen: Laender=%d Zauber/Faehigkeiten=%d Angriffe=%d Mana-Klicks=%d Passes=%d",
                 driver.lands, driver.casts, driver.attacks, driver.manaClicks, driver.passes);
+        for (Map.Entry<GameHost.HumanSeat, Driver> e : drivers.entrySet()) {
+            if (e.getValue() != driver) {
+                Driver o = e.getValue();
+                Messages.GameOver og = overs.get(e.getKey());
+                out("  %s: Prompts=%s Laender=%d Zauber=%d Passes=%d | gameOver=%s reward=%s", e.getKey().name(), o.kinds, o.lands, o.casts, o.passes,
+                        og == null ? "FEHLT" : og.result(), og == null || og.reward() == null ? "-" : "ja");
+            }
+        }
+        boolean allOver = overs.size() == drivers.size();
+        if (!allOver) {
+            out("  FEHLER: nicht jeder Sitz hat ein gameOver bekommen (%d/%d)", overs.size(), drivers.size());
+        }
+        boolean promptsEverywhere = drivers.values().stream().allMatch(x -> !x.kinds.isEmpty());
+        if (!promptsEverywhere) {
+            out("  FEHLER: ein Sitz hat keinen einzigen Prompt bekommen");
+        }
         if (driver.landsOnly) {
             out("  Mehrfach-Angriff: %s", driver.macroResult == null ? "NICHT GETESTET" : driver.macroResult);
         }
@@ -200,7 +244,7 @@ public final class HumanSpike {
             out("  FEHLER: Zugfolge weicht %dx von der Sitzordnung ab", turnOrder.errors);
         }
         boolean macroOk = !driver.landsOnly || (driver.macroResult != null && driver.macroResult.startsWith("OK"));
-        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk;
+        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && allOver && promptsEverywhere;
     }
 
     /**
@@ -306,6 +350,7 @@ public final class HumanSpike {
      */
     private static final class Driver {
         final GameHost host;
+        final GameHost.HumanSeat seat;
         final Random rnd;
         final boolean verbose;
         /** Szenario-Modus: nur Laender spielen, sonst passen, nicht angreifen */
@@ -324,8 +369,9 @@ public final class HumanSpike {
         UUID macroDefender;
         String macroResult;
 
-        Driver(GameHost host, Random rnd, boolean verbose, boolean landsOnly) {
+        Driver(GameHost host, GameHost.HumanSeat seat, Random rnd, boolean verbose, boolean landsOnly) {
             this.host = host;
+            this.seat = seat;
             this.rnd = rnd;
             this.verbose = verbose;
             this.landsOnly = landsOnly;
@@ -344,7 +390,7 @@ public final class HumanSpike {
                 out("  [T%s %s] %s '%s' -> %s", state == null ? "?" : state.turn, state == null ? "" : state.step, p.kind,
                         trim(p.messageText, 70), describe(r));
             }
-            if (!host.respond(p.id, r)) {
+            if (!host.respond(seat, p.id, r)) {
                 out("  !! Antwort abgelehnt fuer Prompt %d", p.id);
             }
         }
@@ -427,9 +473,9 @@ public final class HumanSpike {
                 macroDefender = s.players.stream().filter(pl -> !pl.me && !pl.lost).map(pl -> pl.id).findFirst().orElse(null);
                 macroIds = new ArrayList<>(p.possibleAttackers);
                 lastPrompt = p;
-                if (!host.combat(macroIds, macroDefender)) {
+                if (!host.combat(seat, macroIds, macroDefender)) {
                     macroResult = "FEHLER: combat() abgelehnt";
-                    host.respond(p.id, GameHost.Response.ofBool(true));
+                    host.respond(seat, p.id, GameHost.Response.ofBool(true));
                 }
                 return true;
             }
@@ -447,7 +493,7 @@ public final class HumanSpike {
                 macroResult = (ok == macroIds.size() ? "OK " : "FEHLER ") + ok + "/" + macroIds.size() + " greifen an";
                 attacks += ok;
                 lastPrompt = p;
-                host.respond(p.id, GameHost.Response.ofBool(true));
+                host.respond(seat, p.id, GameHost.Response.ofBool(true));
                 return true;
             }
             return false;

@@ -27,6 +27,7 @@ import mage.game.permanent.Permanent;
 import mage.game.stack.Spell;
 import mage.game.stack.StackObject;
 import mage.players.Player;
+import mage.players.PlayerImpl;
 import mage.players.PlayerList;
 import mage.target.Target;
 import mage.target.targetpointer.TargetPointer;
@@ -347,7 +348,13 @@ public final class GameViewMapper {
         }
         Map<UUID, Integer> all = new LinkedHashMap<>();
         Set<UUID> actions = new LinkedHashSet<>();
-        for (ActivatedAbility ability : source.getPlayable(game, true)) {
+        // hideDuplicatedAbilities=false (gibt es nur an PlayerImpl): sonst dedupliziert XMage per Regeltext
+        // ("{T}: Add {G}.") ueber alle Objekte hinweg - dann ist nur das erste Land je Manafarbe bzw. nur eine
+        // von zwei gleichen Handkarten spielbar
+        List<ActivatedAbility> abilities = source instanceof PlayerImpl impl
+                ? impl.getPlayable(game, true, Zone.ALL, false)
+                : source.getPlayable(game, true);
+        for (ActivatedAbility ability : abilities) {
             UUID sourceId = ability.getSourceId();
             if (sourceId == null) {
                 continue;

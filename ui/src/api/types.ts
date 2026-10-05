@@ -227,6 +227,8 @@ export interface Hello {
   myPlayerId: UUID
   seats: Seat[]
   tempo: string
+  /** Gastgeber (erster Mensch): darf das Tempo stellen; fehlt bei alten Engines */
+  host?: boolean
 }
 
 export interface LogEntry {
@@ -281,7 +283,7 @@ export interface GameOver {
 /** Herzschlag der Engine (1/s): was gerade passiert, CPU-Last in % eines Kerns (-1 = unbekannt). */
 export interface Activity {
   t: 'activity'
-  mode: 'you' | 'bot' | 'engine' | 'idle' | 'stuck'
+  mode: 'you' | 'bot' | 'human' | 'engine' | 'idle' | 'stuck'
   who?: string
   cpu: number
   idleMs: number

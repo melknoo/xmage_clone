@@ -76,6 +76,13 @@ Fallback auf manuelles Klicken.
   - Geprüft: `test` 8/8, `humanSpike` 2/2 ohne STALL, `blockerSpike` 2/2, Szenario Blitz/Normal mit Mehrfach-Angriff
     16/16 bzw. 15/15, `tsc`, Screenshots (`steps-swarm.json`, `steps-autoplay.json`).
   - Nicht visuell geprüft: Mehrfach-**Block**; nur der Engine-Pfad ist identisch zum Angriff.
+- 2026-10-05 behoben: **Länder beim Bezahlen teils nicht anklickbar.** `GameViewMapper.playable` nutzte
+  `getPlayable(game, true)` = `hideDuplicatedAbilities=true`. XMage dedupliziert dann per Regeltext über alle Objekte
+  hinweg: nur das erste Land mit „{T}: Add {G}.“ war spielbar. Ein Tri-Land schluckte so z. B. Forest + Godless Shrine,
+  ebenso 2. Forest, 2. gleiche Handkarte und die Auswahl von Auto-Mana. Jetzt `PlayerImpl.getPlayable(…, Zone.ALL, false)`
+  wie XMages `getPlayableObjects`. Geprüft: `compileJava`, `test`, `humanSpike` 2/2 + 2/2 ohne STALL, Dump-Auswertung
+  (35 Prioritäts-States: 0 ungetappte eigene Länder fehlen, 2× Mountain beide spielbar). Nicht visuell geprüft: Die
+  Dev-Engine startet gerade nicht (uncommittete `V3__games_per_user.sql`: SQLite „near ','“).
 
 ## Offene Punkte (priorisiert)
 
@@ -98,7 +105,14 @@ Fallback auf manuelles Klicken.
      Spiele (kein Client > 10 min) ab, damit ein offener Prompt die Maschine nicht wach hält.
    - Regression lokal (2026-10-05): `test` grün, `humanSpike` 2/2 ohne STALL, `e2e-flow` (Spiel endete durch den
      bekannten KI-Heap-OOM bei 40 Permanents, Aufzeichnung ok), Autoplay-Screenshot im Lokalmodus ok.
-   - Danach E3 (mehrere Menschen pro Spiel), E4 (Lobby/Tische), E5 (Feinschliff).
+   - 2026-10-05 **E3 (Engine-Kern) umgesetzt:** `GameHost` mit `HumanSeat` pro Mensch (1–4 Menschen + Bots),
+     Prompt gehört einem Sitz, State pro Sitz, `leave` = nur eigener Sitz, Belohnung/`games`-Zeile pro Nutzer
+     (Migration `V3__games_per_user.sql`: `games` PK `(id,user_id)`, `game_card_stats` mit `user_id`),
+     `StatsSink` pro Spieler, `hello.host` (Tempo nur Gastgeber), Status „Warte auf <Mensch>“, Activity `human`.
+     Tests: `humanSpike --humans=2` (17,8 s) und `--humans=4` (24 Züge, 27,6 s) 0 fehlgeschlagen, Standard 1 Mensch
+     2/2, `scripts/e2e-online.mjs`. Weitere Menschen kommen bis zur Lobby nur über das Dev-Feld `humans` in
+     `POST /api/games`.
+   - Danach E4 (Lobby/Tische), E5 (Feinschliff).
 1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
    `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
    Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +

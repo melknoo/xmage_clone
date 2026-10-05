@@ -2,15 +2,17 @@ package dev.magelite.game;
 
 import org.apache.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Laufende/zuletzt beendete Spiele. Jedes Spiel gehoert einem Nutzer ({@link GameSetup#userId()}). Ein Nutzer
- * hat hoechstens ein laufendes Spiel; startet er ein neues, wird sein altes beendet. Insgesamt laufen hoechstens
- * {@code maxGames} Spiele (lokal 1) - ist die Grenze erreicht, wirft {@link #start} eine {@link BusyException}.
+ * Laufende/zuletzt beendete Spiele. Jedes Spiel hat einen oder mehrere menschliche Sitze ({@link GameSetup#humans()}).
+ * Ein Nutzer sitzt hoechstens in einem laufenden Spiel; startet er ein neues, wird sein altes beendet. Insgesamt
+ * laufen hoechstens {@code maxGames} Spiele (lokal 1) - ist die Grenze erreicht, wirft {@link #start} eine
+ * {@link BusyException}.
  */
 public final class GameRegistry {
 
@@ -26,7 +28,7 @@ public final class GameRegistry {
     private final Map<UUID, GameHost> games = new ConcurrentHashMap<>();
     private final int maxGames;
 
-    private volatile java.util.function.BiFunction<GameHost, dev.magelite.view.dto.Messages.GameOver, Object> rewardHook;
+    private volatile GameHost.RewardHook rewardHook;
 
     public GameRegistry() {
         this(1);
@@ -36,7 +38,7 @@ public final class GameRegistry {
         this.maxGames = Math.max(1, maxGames);
     }
 
-    public void setRewardHook(java.util.function.BiFunction<GameHost, dev.magelite.view.dto.Messages.GameOver, Object> hook) {
+    public void setRewardHook(GameHost.RewardHook hook) {
         this.rewardHook = hook;
     }
 
@@ -48,10 +50,11 @@ public final class GameRegistry {
     public synchronized GameHost start(GameSetup setup, java.util.function.Consumer<GameHost> onFinished,
                                        java.util.function.Consumer<GameHost> beforeStart) throws Exception {
         games.values().removeIf(g -> !g.isRunning());
-        // eigenes altes Spiel beenden (ein Tisch pro Nutzer); es laeuft asynchron aus und zaehlt nicht mehr
+        // alte Spiele der beteiligten Nutzer beenden (ein Tisch pro Nutzer); sie laufen asynchron aus und zaehlen nicht mehr
         for (var it = games.values().iterator(); it.hasNext(); ) {
             GameHost old = it.next();
-            if (old.getSetup().userId() == setup.userId()) {
+            boolean overlap = setup.humans().stream().anyMatch(h -> old.getSetup().hasUser(h.userId()));
+            if (overlap) {
                 LOG.info("Beende laufendes Spiel " + old.getId());
                 old.abort();
                 it.remove();
@@ -76,9 +79,9 @@ public final class GameRegistry {
         return Optional.ofNullable(games.get(id));
     }
 
-    /** Laufendes Spiel eines Nutzers. */
+    /** Laufendes Spiel, in dem der Nutzer sitzt. */
     public Optional<GameHost> currentOf(long userId) {
-        return games.values().stream().filter(g -> g.isRunning() && g.getSetup().userId() == userId).findFirst();
+        return games.values().stream().filter(g -> g.isRunning() && g.getSetup().hasUser(userId)).findFirst();
     }
 
     /** Anzahl laufender Spiele. */
@@ -87,13 +90,14 @@ public final class GameRegistry {
     }
 
     /** Laufende Spiele. */
-    public java.util.List<GameHost> runningGames() {
+    public List<GameHost> runningGames() {
         return games.values().stream().filter(GameHost::isRunning).toList();
     }
 
-    /** Beendet das laufende Spiel eines Nutzers (z.B. nach Entzug der Einladung). */
+    /** Der Nutzer gibt in seinem laufenden Spiel auf (z.B. nach Entzug der Einladung). */
     public void abortOf(long userId) {
-        games.values().stream().filter(g -> g.isRunning() && g.getSetup().userId() == userId).forEach(GameHost::abort);
+        games.values().stream().filter(g -> g.isRunning() && g.getSetup().hasUser(userId))
+                .forEach(g -> g.seatOf(userId).ifPresent(g::leave));
     }
 
     public void shutdown() {

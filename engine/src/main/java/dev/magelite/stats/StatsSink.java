@@ -1,18 +1,21 @@
 package dev.magelite.stats;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Sammelt Spiel-Statistiken des menschlichen Spielers (pro Spiel, threadsicher).
+ * Sammelt Spiel-Statistiken eines menschlichen Spielers (pro Spiel und Spieler, threadsicher).
  * Wird vom {@link StatsWatcher} gefuellt; der Watcher selbst darf keinen Zustand halten,
  * weil XMage Watcher fuer AI-Simulationen kopiert.
  */
 public final class StatsSink {
 
-    private static final Map<UUID, StatsSink> SINKS = new ConcurrentHashMap<>();
+    /** Spiel-id -> (Spieler-id -> Sink) */
+    private static final Map<UUID, Map<UUID, StatsSink>> SINKS = new ConcurrentHashMap<>();
 
     public static final class CardStat {
         public boolean opening;
@@ -41,12 +44,19 @@ public final class StatsSink {
 
     public static StatsSink register(UUID gameId, UUID humanId) {
         StatsSink s = new StatsSink(humanId);
-        SINKS.put(gameId, s);
+        SINKS.computeIfAbsent(gameId, g -> new ConcurrentHashMap<>()).put(humanId, s);
         return s;
     }
 
-    public static StatsSink of(UUID gameId) {
-        return SINKS.get(gameId);
+    public static StatsSink of(UUID gameId, UUID humanId) {
+        Map<UUID, StatsSink> m = SINKS.get(gameId);
+        return m == null ? null : m.get(humanId);
+    }
+
+    /** Alle Sinks eines Spiels (ein Mensch oder mehrere). */
+    public static Collection<StatsSink> all(UUID gameId) {
+        Map<UUID, StatsSink> m = SINKS.get(gameId);
+        return m == null ? List.of() : m.values();
     }
 
     public static void unregister(UUID gameId) {

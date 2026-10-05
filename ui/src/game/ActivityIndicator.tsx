@@ -39,6 +39,9 @@ export function ActivityLine({ fallback }: { fallback: ReactNode }) {
   } else if (a.mode === 'bot') {
     label = working ? `${a.who ?? 'Bot'} rechnet …` : `Warte auf ${a.who ?? 'Bot'} …`
     tone = working ? 'work' : 'wait'
+  } else if (a.mode === 'human') {
+    label = `${a.who ?? 'Mitspieler'} ist dran …`
+    tone = 'wait'
   } else if (a.mode === 'engine') {
     label = 'Engine arbeitet …'
     tone = 'work'

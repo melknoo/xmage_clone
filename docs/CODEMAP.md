@@ -33,7 +33,7 @@ Electron (desktop/src/main.cjs)
 | `api/HttpServer` | Javalin: Routen, Auth-Filter, `POST /api/games` (409 bei belegtem Tisch), WebSocket-Handling (Cookie/Origin, nur der Besitzer des Spiels), Sitzungen pro Nutzer schließen, Module |
 | `api/Outbox` | sendet pro WS-Verbindung auf eigenem Thread; aufeinanderfolgende States werden zusammengefasst |
 | `api/Json` | gemeinsamer Jackson-`ObjectMapper` |
-| `game/GameHost` | **Herzstück**: ein Spiel (1 Mensch + 3 Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität) |
+| `game/GameHost` | **Herzstück**: ein Spiel (1–4 Menschen, Rest Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität). Pro Mensch ein `HumanSeat` (Sink, eigener State, Auto-Pay-Zustand, gepasste Trigger, Aufgabe); der eine offene Prompt gehört `promptSeat`, nur der Besitzer darf antworten; `leave(seat)` = nur dieser Sitz gibt auf, ohne Menschen geben die Bots auf |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
 | `game/AutoPayer` | Planer fürs automatische Bezahlen von Manakosten |
 | `game/MageLiteBot` | `ComputerPlayerControllableProxy` + Tempo (`fastOpponentTurns`, `fastStack`, `reactInCombat`, Denkzeit, Pausen nur nach echten Aktionen, Hooks); Angriffe über `FfaAttack` |
@@ -44,7 +44,7 @@ Electron (desktop/src/main.cjs)
 | `game/MageLiteMatch` | Commander-FFA-Match (40 Leben, London-Mulligan, Rollback aus) |
 | `game/TrackingLondonMulligan` | zählt Mulligans; Copy kopiert private Felder per Reflection |
 | `game/HumanSettings` | `UserData` für den Menschen (Stopps, Auto-Pass nach Zauber …) |
-| `game/GameRegistry`, `GameSetup` | laufende Spiele (eins pro Nutzer, insgesamt `maxGames`; voll → `BusyException`/409); Spielkonfiguration (inkl. `humanDeckId`, `userId`) |
+| `game/GameRegistry`, `GameSetup` | laufende Spiele (ein Sitz pro Nutzer, insgesamt `maxGames`; voll → `BusyException`/409); `GameSetup(seats, tempo)` mit `SeatSpec.human(userId, name, deck, deckId)` / `SeatSpec.bot(deck)` in Tischreihenfolge, Komfort-Konstruktor 1 Mensch + 3 Bots |
 | `view/GameViewMapper` | XMage-`GameView` + Spielzustand → `StateDto` (Sitzordnung = echte Zugfolge aus `PlayerList`, Commander-Steuer/-Schaden, spielbare Objekte, Stapel-Ziele mit Namen) |
 | `view/RichText` | XMage-HTML (Log/Prompts) → sichere Segmente `{text}`/`{obj,text,color}`/`{br}` |
 | `view/dto/*` | DTOs: `StateDto`, `PlayerDto`, `CardDto`, `PermanentDto`, `CommandDto`, `PromptDto`, `TargetRefDto`, `Messages` |
@@ -56,8 +56,8 @@ Electron (desktop/src/main.cjs)
 | `deck/SampleDeckCatalog` | mitgelieferte Decks textuell lesen, Farben aus der Karten-DB |
 | `images/ImageService` | `/img/card`, `/img/token`, `/img/named`: Scryfall-Proxy mit Disk-Cache, Drossel 110 ms, 404-Merker 7 Tage |
 | `stats/Db` | SQLite-Verbindung + Migrationen (`resources/db/migrations/V*.sql`, Liste in `Db.MIGRATIONS`) |
-| `stats/StatsWatcher`, `StatsSink` | Spielereignisse des Menschen erfassen (Starthand, gezogen, gewirkt, Länder, Schaden, eigene Züge) |
-| `stats/GameRecorder` | Spiel einmalig speichern, XP/Meisterschaft vergeben → `Reward` im `gameOver` |
+| `stats/StatsWatcher`, `StatsSink` | Spielereignisse jedes Menschen erfassen (ein Sink pro Spiel **und** Spieler; Starthand, gezogen, gewirkt, Länder, Schaden, eigene Züge) |
+| `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
 | `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung; `--scenario=swarm` misst Trigger-Ketten und testet den Mehrfach-Angriff) |
@@ -93,13 +93,13 @@ Server → Client:
 
 | `t` | Inhalt |
 |---|---|
-| `hello` | `gameId`, `myPlayerId`, `seats[]` (Name, Deck, Commander), `tempo` |
+| `hello` | `gameId`, `myPlayerId`, `seats[]` (Name, Deck, Commander, `human`), `tempo`, `host` (Gastgeber darf das Tempo stellen; Protokoll 2) |
 | `state` | `StateDto`: `seq`, `turn`, `phase`, `step`, `activePlayerId`, `players[]` (beginnend mit mir, dann in Zugfolge; `topCard` = oberste Bibliothekskarte, wenn aufgedeckt oder für mich einsehbar, dann `topCardPrivate`), `hand`, `stack` (mit `targets`/`targetRefs`), `combat`, `revealed`, `lookedAt`, `playable` (id → Anzahl), `actions` (ids mit Nicht-Mana-Aktion) |
 | `prompt` | `PromptDto`: `id`, `kind`, `message` (Segmente), `messageText`, Buttons, je nach Art `mode`/`possibleAttackers`/`targets`/`chosen`/`cards`/`choices`/`choice`/`min`/`max`/`items`/`pile1`/`pile2`/`mulligan`/`defenderPick` |
 | `promptClosed` | `id` |
 | `log` | `entries[]` mit `turn`, `active` (Name des aktiven Spielers), `kind` (INFO/STATUS), `rich`; nach Reconnect kommt der Verlauf komplett neu (Client leert ihn bei `hello`) |
-| `status` | `thinking` (Bot-id), `waitingFor` |
-| `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/engine/idle/stuck), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
+| `status` | `thinking` (Bot-id), `waitingFor` (Bot- oder Mitspieler-Name; null = niemand mehr) |
+| `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/human/engine/idle/stuck; `human` = ein anderer Mensch ist dran), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
 | `toast` | `level`, `rich` |
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
 | `error`, `pong` | |
@@ -115,7 +115,8 @@ Client → Server:
 | `combat` | Mehrfach-Angriff/-Block beim offenen Angriffs-/Block-Prompt: `ids` (markierte Kreaturen), `target` (Spieler/Planeswalker bzw. Angreifer) |
 | `settings` | `autoPay`, `autoPass` (bool) |
 | `autoPass` | `on` |
-| `leave` | Spiel beenden (alle geben auf) |
+| `leave` | eigener Sitz gibt auf; sind keine Menschen mehr im Spiel, geben auch die Bots auf |
+| `tempo` | nur vom Gastgeber (`hello.host`) angenommen |
 | `ping` | → `pong` |
 
 ### REST
@@ -133,19 +134,20 @@ Client → Server:
 | POST | `/api/decks/parse` | Vorschau `{text, name?, commanders?}` |
 | POST | `/api/decks/url` | Import `{url, json?}`; 409 `{blocked:true, apiUrl}` wenn geblockt |
 | POST | `/api/decks` | speichern `{id?, name, text, commanders?, source?, sourceUrl?}` |
-| POST | `/api/games` | Spiel starten `{deck, bots[3], tempo}`; Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
+| POST | `/api/games` | Spiel starten `{deck, bots[], tempo, humans?: [{userId, name?, deck?}]}` (weitere Menschen bis zur Lobby nur in der Dev-Engine; freie Plätze bis 4 werden mit Bots gefüllt); Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
 | GET | `/api/games/current` | eigenes laufendes Spiel (für Reconnect); fremdes → 404 |
 | GET/PUT | `/api/profile` | Held; PUT `{name}` |
 | GET | `/api/stats/overview`, `/api/stats/decks`, `/api/stats/decks/{id}/cards`, `/api/history?limit=` | Statistik |
 | GET | `/img/card/{set}/{num}?size=&face=&name=`, `/img/token?name=&set=&n=&size=`, `/img/named?name=&size=` | Bilder |
 
-### SQLite (`magelite.db`, Migrationen `V1__init.sql`, `V2__users.sql`)
+### SQLite (`magelite.db`, Migrationen `V1__init.sql`, `V2__users.sql`, `V3__games_per_user.sql`)
 
 `users` (id, name, code_hash, is_admin, last_seen; 1 = lokal) · `profile` (id = Nutzer-id, name, xp_total) · `decks`
-(dck-Text, commanders, colors, valid, mastery_xp, `user_id`) · `games` (Ergebnis, Platz, Tempo, Mulligans, XP,
-end_reason, `user_id`) · `game_seats` · `game_card_stats` (pro Spiel+Karte: opening, drawn, cast, first_cast_turn) ·
-`xp_ledger` (`user_id`) · `settings` (noch ungenutzt). Neue Migration: Datei `V3__….sql` anlegen **und** in
-`Db.MIGRATIONS` eintragen (Splitter `;` + Zeilenumbruch, keine `;` in Kommentaren).
+(dck-Text, commanders, colors, valid, mastery_xp, `user_id`) · `games` (PK `(id, user_id)`: Ergebnis, Platz, Tempo,
+Mulligans, XP, end_reason je Mensch) · `game_seats` (pro Spiel einmal) · `game_card_stats` (PK `(game_id, user_id,
+card_name)`: opening, drawn, cast, first_cast_turn) · `xp_ledger` (`user_id`) · `settings` (noch ungenutzt).
+Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neue Migration: Datei `V4__….sql` anlegen
+**und** in `Db.MIGRATIONS` eintragen (Splitter `;` + Zeilenumbruch, keine `;` in Kommentaren).
 
 ## UI (`ui/src`)
 

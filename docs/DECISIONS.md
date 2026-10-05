@@ -119,3 +119,15 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
     neues Spiel immer das laufende (nur sinnvoll bei einem Nutzer).
   - **Owner aus fly-Secrets** (`MAGELITE_OWNER_CODE`): kein Admin-Passwort im Repo; `ensureOwner` aktualisiert den
     Hash des vorhandenen Admins, so laesst sich der Code ueber die Secrets rotieren.
+- **Mehrere Menschen in einem Spiel (E3, 2026-10-05):**
+  - **Ein `HumanSeat` pro Mensch im `GameHost`**, kein zweiter Host und keine Spielkopie: XMage ist single-threaded,
+    es gibt immer hoechstens einen offenen Prompt. Er bekommt einen Besitzer (`promptSeat`); nur dieser darf
+    antworten. States werden pro Sitz gebaut (eigene Hand, eigene spielbare Objekte nur fuer den Prompt-Besitzer).
+  - **Aufgeben = Zuschauen:** `leave` laesst nur den eigenen Sitz aufgeben; das Spiel laeuft fuer die anderen weiter,
+    das `gameOver` mit Belohnung kommt am Ende. Erst wenn kein Mensch mehr im Spiel ist, geben die Bots auf (kein
+    reines Bot-Spiel auf dem Server). Lokal (ein Mensch) bleibt es damit wie bisher: Aufgeben beendet das Spiel.
+  - **Tempo nur vom Gastgeber** (erster Mensch, `hello.host`): sonst stellen sich Mitspieler gegenseitig das Tempo um.
+  - **Statistik je Nutzer:** `games` und `game_card_stats` haben den Nutzer im Schluessel (V3), `game_seats` bleibt
+    pro Spiel. Jeder bekommt XP auf seinen Helden und Meisterschaft auf sein Deck; ein `StatsSink` pro Spieler.
+  - Weitere Menschen kommen bis zur Lobby (E4) nur ueber ein Dev-Feld in `POST /api/games`; auf dem Server ist
+    der Weg geschlossen.

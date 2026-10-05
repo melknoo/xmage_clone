@@ -30,10 +30,12 @@ public class StatsWatcher extends Watcher {
         if (game.isSimulation()) {
             return;
         }
-        StatsSink sink = StatsSink.of(game.getId());
-        if (sink == null) {
-            return;
+        for (StatsSink sink : StatsSink.all(game.getId())) {
+            track(sink, event, game);
         }
+    }
+
+    private static void track(StatsSink sink, GameEvent event, Game game) {
         UUID human = sink.humanId();
         try {
             switch (event.getType()) {

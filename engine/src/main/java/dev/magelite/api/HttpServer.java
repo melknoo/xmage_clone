@@ -57,7 +57,7 @@ public final class HttpServer {
         void register(Javalin app);
     }
 
-    private record Session(Outbox outbox, long userId) {
+    private record Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat) {
     }
 
     private final Config config;
@@ -189,14 +189,15 @@ public final class HttpServer {
                     ctx.closeSession(4404, "game");
                     return;
                 }
-                if (host.get().getSetup().userId() != user.id()) {
+                GameHost.HumanSeat seat = host.get().seatOf(user.id()).orElse(null);
+                if (seat == null) {
                     ctx.closeSession(4403, "seat");
                     return;
                 }
                 lastActivity = System.currentTimeMillis();
                 Outbox outbox = new Outbox(ctx);
-                sockets.put(ctx, new Session(outbox, user.id()));
-                host.get().attach(outbox);
+                sockets.put(ctx, new Session(outbox, user.id(), host.get(), seat));
+                host.get().attach(seat, outbox);
             });
             ws.onMessage(ctx -> onSocketMessage(ctx, ctx.message()));
             ws.onClose(ctx -> closeSocket(ctx));
@@ -255,13 +256,6 @@ public final class HttpServer {
         Long humanDeckId = "user".equals(deckSpec.path("type").asText()) ? deckSpec.path("id").asLong() : null;
         LoadedDeck humanDeck = resolveDeck(user.id(), deckSpec, null);
 
-        List<LoadedDeck> bots = new ArrayList<>();
-        List<String> usedSamples = new ArrayList<>();
-        JsonNode botSpecs = body.path("bots");
-        for (int i = 0; i < 3; i++) {
-            JsonNode spec = botSpecs.isArray() && botSpecs.size() > i ? botSpecs.get(i) : Json.MAPPER.createObjectNode().put("type", "random");
-            bots.add(resolveDeck(user.id(), spec, usedSamples));
-        }
         TempoSettings.Preset tempo = TempoSettings.Preset.valueOf(body.path("tempo").asText("NORMAL").toUpperCase(Locale.ROOT));
         String name = body.path("playerName").asText(config.server() ? user.name() : "Du");
         // Test-Situationen (z.B. lange Trigger-Ketten) nur in der Dev-Engine, nie im Release oder auf dem Server
@@ -270,7 +264,29 @@ public final class HttpServer {
             throw new IllegalArgumentException("Szenario nicht erlaubt: " + scenario);
         }
 
-        GameHost host = games.start(new GameSetup(name, humanDeck, bots, tempo, humanDeckId, user.id()), onGameFinished,
+        List<GameSetup.SeatSpec> seatSpecs = new ArrayList<>();
+        seatSpecs.add(GameSetup.SeatSpec.human(user.id(), name, humanDeck, humanDeckId));
+        // Weitere Menschen (bis die Lobby da ist nur in der Dev-Engine): humans: [{userId, name?, deck?}]
+        JsonNode extra = body.path("humans");
+        if (extra.isArray() && extra.size() > 0) {
+            if (!config.dev()) {
+                throw new IllegalArgumentException("Mehrere Menschen pro Spiel nur ueber die Lobby");
+            }
+            for (JsonNode h : extra) {
+                long uid = h.path("userId").asLong();
+                JsonNode ds = h.has("deck") ? h.get("deck") : Json.MAPPER.createObjectNode().put("type", "random");
+                Long did = "user".equals(ds.path("type").asText()) ? ds.path("id").asLong() : null;
+                seatSpecs.add(GameSetup.SeatSpec.human(uid, h.path("name").asText("Spieler " + uid), resolveDeck(uid, ds, null), did));
+            }
+        }
+        List<String> usedSamples = new ArrayList<>();
+        JsonNode botSpecs = body.path("bots");
+        for (int i = 0; seatSpecs.size() < 4; i++) {
+            JsonNode spec = botSpecs.isArray() && botSpecs.size() > i ? botSpecs.get(i) : Json.MAPPER.createObjectNode().put("type", "random");
+            seatSpecs.add(GameSetup.SeatSpec.bot(resolveDeck(user.id(), spec, usedSamples)));
+        }
+
+        GameHost host = games.start(new GameSetup(seatSpecs, tempo), onGameFinished,
                 scenario == null ? null : h -> Scenarios.apply(scenario, h.getGame(), h.getHumanId()));
         onGameStarted.started(host, humanDeckId);
         ctx.json(Map.of("gameId", host.getId()));
@@ -318,34 +334,39 @@ public final class HttpServer {
     private void onSocketMessage(WsContext ctx, String text) {
         try {
             JsonNode m = Json.MAPPER.readTree(text);
-            UUID id = UUID.fromString(ctx.pathParam("id"));
-            GameHost host = games.get(id).orElse(null);
-            if (host == null || !sockets.containsKey(ctx)) {
+            Session s = sockets.get(ctx);
+            if (s == null) {
                 return;
             }
+            GameHost host = s.host();
+            GameHost.HumanSeat seat = s.seat();
             switch (m.path("t").asText()) {
-                case "respond" -> host.respond(m.path("id").asLong(), parseResponse(m));
-                case "action" -> host.action(m.path("action").asText(), m.hasNonNull("data") ? m.get("data").asText() : null);
-                case "tempo" -> host.setTempo(TempoSettings.Preset.valueOf(m.path("preset").asText("NORMAL").toUpperCase(Locale.ROOT)));
-                case "autoPass" -> host.setAutoPass(m.path("on").asBoolean(true));
-                case "autoPay" -> host.autoPayNow();
+                case "respond" -> host.respond(seat, m.path("id").asLong(), parseResponse(m));
+                case "action" -> host.action(seat, m.path("action").asText(), m.hasNonNull("data") ? m.get("data").asText() : null);
+                case "tempo" -> {
+                    if (seat.isHost()) {
+                        host.setTempo(TempoSettings.Preset.valueOf(m.path("preset").asText("NORMAL").toUpperCase(Locale.ROOT)));
+                    }
+                }
+                case "autoPass" -> host.setAutoPass(seat, m.path("on").asBoolean(true));
+                case "autoPay" -> host.autoPayNow(seat);
                 case "combat" -> {
                     List<UUID> ids = new ArrayList<>();
                     m.path("ids").forEach(n -> ids.add(UUID.fromString(n.asText())));
                     UUID target = m.hasNonNull("target") ? UUID.fromString(m.get("target").asText()) : null;
-                    if (!host.combat(ids, target)) {
+                    if (!host.combat(seat, ids, target)) {
                         LOG.info("Mehrfach-Kampf abgelehnt (kein passender Prompt)");
                     }
                 }
                 case "settings" -> {
                     if (m.has("autoPay")) {
-                        host.setAutoPayDefault(m.get("autoPay").asBoolean(true));
+                        host.setAutoPayDefault(seat, m.get("autoPay").asBoolean(true));
                     }
                     if (m.has("autoPass")) {
-                        host.setAutoPass(m.get("autoPass").asBoolean(true));
+                        host.setAutoPass(seat, m.get("autoPass").asBoolean(true));
                     }
                 }
-                case "leave" -> host.abort();
+                case "leave" -> host.leave(seat);
                 case "ping" -> ctx.send("{\"t\":\"pong\"}");
                 default -> LOG.debug("Unbekannte Nachricht: " + text);
             }
@@ -380,8 +401,7 @@ public final class HttpServer {
         if (s != null) {
             s.outbox().close();
             try {
-                UUID id = UUID.fromString(ctx.pathParam("id"));
-                games.get(id).ifPresent(h -> h.detach(s.outbox()));
+                s.host().detach(s.seat(), s.outbox());
             } catch (Exception ignored) {
                 // egal
             }

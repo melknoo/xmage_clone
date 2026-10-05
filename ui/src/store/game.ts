@@ -155,7 +155,7 @@ export const useGame = create<GameStore>((set, get) => {
         break
       case 'gameOver':
         set({ gameOver: msg, prompt: null, thinking: null, activity: null })
-        sounds.play(msg.placements.find((p) => p.human)?.place === 1 ? 'win' : 'lose')
+        sounds.play(msg.placements.find((p) => p.playerId === get().hello?.myPlayerId)?.place === 1 ? 'win' : 'lose')
         break
       case 'error':
         pushToast('error', [{ text: msg.message }])

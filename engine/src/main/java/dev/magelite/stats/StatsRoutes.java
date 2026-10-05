@@ -107,12 +107,12 @@ public final class StatsRoutes implements HttpServer.Module {
                                SUM(s.cast) AS cast, AVG(s.first_cast_turn) AS avgFirstCastTurn,
                                SUM(CASE WHEN s.cast > 0 AND g.result='win' THEN 1 ELSE 0 END) AS winsWhenCast,
                                COUNT(*) AS gamesSeen
-                        FROM game_card_stats s JOIN games g ON g.id = s.game_id
+                        FROM game_card_stats s JOIN games g ON g.id = s.game_id AND g.user_id = s.user_id
                         WHERE s.deck_id = ? AND g.end_reason != 'error' AND g.user_id = ?
                         GROUP BY s.card_name ORDER BY gamesCast DESC, drawn DESC""", id, userId));
                 m.put("commander", one(c, """
                         SELECT AVG(first_cast_turn) AS avgFirstCastTurn FROM game_card_stats s
-                        JOIN games g ON g.id = s.game_id WHERE s.deck_id = ? AND s.card_name = g.commander AND g.user_id = ?""", id, userId));
+                        JOIN games g ON g.id = s.game_id AND g.user_id = s.user_id WHERE s.deck_id = ? AND s.card_name = g.commander AND g.user_id = ?""", id, userId));
                 return m;
             }));
         });

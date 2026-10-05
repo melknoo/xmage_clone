@@ -18,7 +18,8 @@ export function GameOverOverlay() {
   const lastSetup = useNav((s) => s.lastSetup)
   const [hidden, setHidden] = useState(false)
   const [busy, setBusy] = useState(false)
-  const human = over.placements.find((p) => p.human)
+  const myId = useGame((s) => s.hello?.myPlayerId)
+  const human = over.placements.find((p) => p.playerId === myId) ?? over.placements.find((p) => p.human)
   const won = human?.place === 1 && over.winnerId === human.playerId
   const r = over.reward
   const [xpShown, setXpShown] = useState(0)
@@ -68,7 +69,7 @@ export function GameOverOverlay() {
 
         <div className="mt-5 flex flex-col gap-1.5">
           {over.placements.map((p) => (
-            <div key={p.playerId} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${p.human ? 'bg-gold-400/10 ring-1 ring-gold-400/40' : 'bg-ink-950/40'}`}>
+            <div key={p.playerId} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${p.playerId === human?.playerId ? 'bg-gold-400/10 ring-1 ring-gold-400/40' : p.human ? 'bg-ink-950/40 ring-1 ring-white/10' : 'bg-ink-950/40'}`}>
               <div className="w-6 text-center font-display text-lg font-bold text-ink-300">{p.place}</div>
               <div className="flex-1 truncate font-semibold">{p.name}</div>
               <div className="text-xs text-ink-400">{p.eliminatedTurn ? `raus in Zug ${p.eliminatedTurn}` : `${p.life} Leben`}</div>

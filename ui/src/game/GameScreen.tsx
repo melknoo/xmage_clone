@@ -124,26 +124,38 @@ export function GameScreen() {
 
 function EliminatedBanner() {
   const leave = useGame((s) => s.leave)
+  const reset = useGame((s) => s.reset)
   const setTempo = useGame((s) => s.setTempo)
+  const isHost = useGame((s) => s.hello?.host !== false)
+  const otherHumans = useGame((s) => (s.hello?.seats.filter((x) => x.human && x.playerId !== s.hello?.myPlayerId).length ?? 0) > 0)
+  const go = useNav((s) => s.go)
   const [watching, setWatching] = useState(false)
   if (watching) return null
+  // Mit anderen Menschen am Tisch laeuft das Spiel ohne mich weiter -> zurueck ins Menue (Ergebnis kommt in die Statistik)
+  const leaveTable = () => {
+    leave()
+    if (otherHumans) {
+      reset()
+      go('home')
+    }
+  }
   return (
     <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="glass fixed left-1/2 top-16 z-40 flex -translate-x-1/2 items-center gap-4 rounded-2xl px-5 py-3 shadow-2xl ring-1 ring-blood-400/40">
       <div>
         <div className="font-display text-lg font-bold text-blood-400">Du bist ausgeschieden</div>
-        <div className="text-xs text-ink-300">Die Bots spielen noch weiter. Dein Ergebnis steht fest.</div>
+        <div className="text-xs text-ink-300">Die anderen spielen noch weiter. Dein Ergebnis steht fest.</div>
       </div>
       <button
         className="btn-ghost"
         onClick={() => {
-          setTempo('BLITZ')
+          if (isHost) setTempo('BLITZ')
           setWatching(true)
         }}
       >
-        Zuschauen (Blitz)
+        {isHost ? 'Zuschauen (Blitz)' : 'Zuschauen'}
       </button>
-      <button className="btn-primary" onClick={leave}>
-        Spiel beenden
+      <button className="btn-primary" onClick={leaveTable}>
+        Spiel verlassen
       </button>
     </motion.div>
   )
@@ -163,6 +175,7 @@ function TopBar() {
   const setAutoMana = useGame((s) => s.setAutoMana)
   const autoPass = useGame((s) => s.autoPass)
   const setAutoPass = useGame((s) => s.setAutoPass)
+  const isHost = useGame((s) => s.hello?.host !== false)
 
   return (
     <div className="flex shrink-0 items-center justify-between gap-3 px-1">
@@ -171,13 +184,19 @@ function TopBar() {
         <PhaseBar state={state} />
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <div className="flex items-center gap-0.5 rounded-lg bg-ink-900/70 p-0.5 ring-1 ring-white/10" title="Bot-Tempo">
-          {TEMPOS.map((t) => (
-            <button key={t.key} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${tempo === t.key ? 'bg-arcane-500 text-ink-950' : 'text-ink-300 hover:text-ink-100'}`} onClick={() => setTempo(t.key)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {isHost ? (
+          <div className="flex items-center gap-0.5 rounded-lg bg-ink-900/70 p-0.5 ring-1 ring-white/10" title="Bot-Tempo">
+            {TEMPOS.map((t) => (
+              <button key={t.key} className={`rounded-md px-2 py-1 text-[11px] font-semibold ${tempo === t.key ? 'bg-arcane-500 text-ink-950' : 'text-ink-300 hover:text-ink-100'}`} onClick={() => setTempo(t.key)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-ink-900/70 px-2 py-1 text-[11px] font-semibold text-ink-400 ring-1 ring-white/10" title="Das Tempo stellt der Gastgeber">
+            Tempo: {TEMPOS.find((t) => t.key === tempo)?.label ?? tempo}
+          </div>
+        )}
         <button
           className={`btn-ghost !px-2 !py-1 !text-xs ${autoMana ? '!border-arcane-400/60 !text-arcane-400' : ''}`}
           title="Mana automatisch bezahlen"

@@ -7,7 +7,7 @@
 > `POST /api/games` → 409, wenn ein anderer Nutzer spielt (statt sein Spiel zu beenden).
 > Umsetzung in Etappen E1–E5; nach jeder Etappe `docs/STATUS.md` aktualisieren und hier abhaken.
 >
-> Fortschritt: [x] E1 · [x] E2 · [ ] E3 · [ ] E4 · [ ] E5
+> Fortschritt: [x] E1 · [x] E2 · [x] E3 (05.10., Engine-Kern + UI-Anpassungen; Tische/Lobby folgen in E4) · [ ] E4 · [ ] E5
 
 ## Kontext
 
