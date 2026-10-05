@@ -98,7 +98,8 @@ ok(r.json?.find((t) => t.id === tid)?.state === 'RUNNING', 'Lobby zeigt den Tisc
 
 function pilot(cookie) {
   const st = { hello: null, over: null, prompts: 0, last: null }
-  const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/ws/game/${gameId}`, { headers: { Cookie: cookie } })
+  // Origin wie ein Browser mitschicken: der Server prueft ihn im Server-Modus (ausser --dev)
+  const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/ws/game/${gameId}`, { headers: { Cookie: cookie, Origin: base } })
   st.ws = ws
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data)

@@ -54,7 +54,8 @@ ok(r.status === 200 && r.json?.gameId === gameId, `Bob sieht das Spiel als sein 
 /** Autopilot: spielt Laender, passt sonst; zaehlt Nachrichten. */
 function pilot(name, cookie) {
   const st = { name, hello: null, last: null, over: null, prompts: 0, foreignPrompts: 0, states: 0, waitingFor: new Set(), closeCode: null, ws: null }
-  const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/ws/game/${gameId}`, { headers: { Cookie: cookie } })
+  // Origin wie ein Browser mitschicken: der Server prueft ihn im Server-Modus (ausser --dev)
+  const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/ws/game/${gameId}`, { headers: { Cookie: cookie, Origin: base } })
   st.ws = ws
   ws.onclose = (ev) => {
     st.closeCode = ev.code
