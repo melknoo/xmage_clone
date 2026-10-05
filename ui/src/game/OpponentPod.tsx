@@ -1,5 +1,6 @@
 import { memo } from 'react'
 import type { Card, PlayerState } from '../api/types'
+import { useGame } from '../store/game'
 import { Battlefield } from './Battlefield'
 import type { Interaction } from './interaction'
 import { CommandZone, CommanderDamage, LifeBadge, ManaPool, ZoneCounters, commanderArt } from './PlayerInfo'
@@ -36,6 +37,7 @@ export const OpponentPod = memo(function OpponentPod({
             {p.active && <span className="rounded bg-gold-400/20 px-1 text-[10px] font-semibold text-gold-300">am Zug</span>}
             {thinking && <span className="animate-pulse text-[10px] font-semibold text-arcane-400">denkt…</span>}
             {p.lost && <span className="rounded bg-blood-500/30 px-1 text-[10px] text-blood-400">raus</span>}
+            {p.human && !p.lost && <ConnBadge playerId={p.id} />}
           </div>
           <div className="truncate text-[11px] text-ink-300">{p.deckName}</div>
         </div>
@@ -59,3 +61,26 @@ export const OpponentPod = memo(function OpponentPod({
     </div>
   )
 })
+
+/** "getrennt seit N s" fuer menschliche Mitspieler; nach 60 s "aufgeben lassen" (Engine wartet sonst ewig auf dessen Prompt). */
+function ConnBadge({ playerId }: { playerId: string }) {
+  const conn = useGame((s) => s.seatConn[playerId])
+  const myConceded = useGame((s) => s.conceded)
+  const kick = useGame((s) => s.kick)
+  // Grenze kommt von der Engine (Produktion 60 s, Dev-Engine 5 s)
+  const KICK_AFTER_MS = useGame((s) => s.kickAfterMs)
+  if (!conn || conn.connected || conn.conceded) return null
+  const secs = Math.round(conn.disconnectedMs / 1000)
+  return (
+    <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <span className="rounded bg-blood-500/20 px-1 text-[10px] font-semibold text-blood-300" title="Verbindung zum Mitspieler ist weg; das Spiel wartet auf ihn">
+        getrennt {secs} s
+      </span>
+      {conn.disconnectedMs >= KICK_AFTER_MS && !myConceded && (
+        <button className="rounded bg-white/10 px-1 text-[10px] text-ink-100 hover:bg-blood-500/30" title="Den getrennten Spieler aufgeben lassen, damit das Spiel weitergeht" onClick={() => kick(playerId)}>
+          aufgeben lassen
+        </button>
+      )}
+    </span>
+  )
+}

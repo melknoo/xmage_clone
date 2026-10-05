@@ -125,8 +125,11 @@ Fallback auf manuelles Klicken.
    - 2026-10-05 **Pausemenü** (Esc / „☰ Menü“): Optionen (Auto-Mana, Auto-Passen, Ton, Verlauf, Tempo), Aufgeben
      mit Ja/Nein, danach „Zuschauen“/„Zurück zum Tisch“/„Zum Hauptmenü“. Neue WS-Nachricht `seat {conceded}`;
      `/api/games/current` liefert für aufgegebene Sitze 404 (kein Rückholen beim Neuladen).
-   - Offen: E5 (Trennung mitten im Spiel: „getrennt“-Anzeige, Gastgeber darf nach 60 s aufgeben lassen;
-     WebSocket-Deflate; State-Größen messen).
+   - 2026-10-05 **E5 fertig:** WS `seats` (Verbindungszustand der Menschen, alle 2 s solange jemand getrennt ist),
+     Badge „getrennt N s“ am Platz + rote Statuszeile, nach 60 s „aufgeben lassen“ (WS `kick`, Engine prüft die
+     Grenze; Dev-Engine 5 s). Kompression gemessen: REST gzip (`/api/samples` 15 kB → 3,3 kB), WebSocket
+     `permessage-deflate` wird ausgehandelt. State-Größe: größter State 33 kB unkomprimiert (32 Züge, 318 States,
+     7,8 MB gesamt). `e2e-online` deckt Trennung/Kick/Reconnect ab. **Online-Plan E1–E5 abgeschlossen.**
 1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
    `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
    Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +

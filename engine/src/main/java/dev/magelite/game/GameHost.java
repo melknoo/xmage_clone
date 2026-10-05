@@ -72,6 +72,8 @@ public final class GameHost {
     private static final int RECOVER_MAX_PER_ANSWER = 3;
     /** Ohne Spielaenderung und ohne CPU-Last so lange -> "stuck" melden. */
     private static final long STUCK_AFTER_MS = 15000;
+    /** Ab so langer Trennung duerfen die anderen Menschen einen Sitz aufgeben lassen (Dev: -Dmagelite.kickAfterMs). */
+    private static final long KICK_AFTER_MS = Long.getLong("magelite.kickAfterMs", 60_000L);
 
     /** F-Tasten und Einstellungen, die der Client senden darf (kein Undo/Rollback/Cheat). */
     private static final Set<PlayerAction> ALLOWED_ACTIONS = EnumSet.of(
@@ -437,13 +439,46 @@ public final class GameHost {
         if (over != null) {
             newSink.send(over);
         }
+        if (humans.size() > 1) {
+            broadcastSeats();
+        }
     }
 
     public void detach(HumanSeat seat, Sink oldSink) {
         if (seat.sink == oldSink) {
             seat.sink = NOOP;
             seat.disconnectedSince = System.currentTimeMillis();
+            if (humans.size() > 1) {
+                broadcastSeats();
+            }
         }
+    }
+
+    /** Verbindungszustand aller Menschen an alle Menschen (nur bei mehreren Menschen sinnvoll). */
+    private void broadcastSeats() {
+        List<Messages.SeatConn> list = new ArrayList<>();
+        for (HumanSeat s : humans.values()) {
+            list.add(new Messages.SeatConn(s.playerId, s.connected(), s.disconnectedForMs(), s.conceded));
+        }
+        emit(new Messages.SeatsStatus(list, KICK_AFTER_MS));
+    }
+
+    /**
+     * Ein verbundener Mensch laesst einen seit mindestens {@link #KICK_AFTER_MS} getrennten Mitspieler aufgeben,
+     * damit das Spiel nicht ewig auf dessen Prompt wartet.
+     *
+     * @return true, wenn der Sitz aufgegeben hat
+     */
+    public boolean kick(HumanSeat by, UUID targetPlayerId) {
+        HumanSeat target = humans.get(targetPlayerId);
+        if (target == null || target == by || target.conceded || by.conceded || !by.connected()
+                || target.connected() || target.disconnectedForMs() < KICK_AFTER_MS) {
+            return false;
+        }
+        LOG.info(target.name() + " wird nach " + (target.disconnectedForMs() / 1000) + " s Trennung von " + by.name() + " aufgegeben");
+        leave(target);
+        broadcastSeats();
+        return true;
     }
 
     /**
@@ -1369,6 +1404,11 @@ public final class GameHost {
             boolean waiting = inWaitForResponse(t);
             if (waiting && looksLost(now)) {
                 callExecutor.execute(this::recoverLostResponse);
+            }
+            // getrennte Mitspieler: Zaehler fuer die anderen alle 2 s aktualisieren
+            if (ticks % 4 == 0 && humans.size() > 1
+                    && humans.values().stream().anyMatch(s -> !s.conceded && !s.connected())) {
+                broadcastSeats();
             }
             if (++ticks % 2 == 0) {
                 sendActivity(t, waiting, now);

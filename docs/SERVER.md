@@ -112,6 +112,12 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
   `mkdir -p /data/spike && cd /data/spike && java -Xmx2g -Dmagelite.vendor=/app/vendor/xmage -cp "/app/lib/magelite-engine-0.1.0.jar:/app/lib/*" dev.magelite.spike.BotSpike --games=2 --tempo=BLITZ --turnCap=40`
   Ergebnis: 3,9 bzw. 1,5 s/Zug (max 14,2 s), Heap-Spitze 1,7 GB, 0 Fehler – schneller als lokal (≈ 5 s/Zug).
   Danach `rm -rf /data/spike` und `fly scale memory 4096`.
+- **Verbindungsabbruch eines Mitspielers:** Die anderen sehen „getrennt seit N s“ an seinem Platz; kommt er
+  zurück, läuft alles weiter. Nach 60 s erscheint „aufgeben lassen“ – damit gibt sein Sitz auf und das Spiel geht
+  ohne ihn weiter (sein Ergebnis landet trotzdem in seiner Statistik). Sind alle Menschen länger als 10 min weg,
+  bricht die Engine das Spiel ab.
+- **Datenmenge:** REST/Statik gzip, WebSocket `permessage-deflate` (automatisch). Ein State im späten Spiel liegt
+  unkomprimiert im zweistelligen kB-Bereich (siehe `STATUS.md`), also auch für Mobilfunk unkritisch.
 - **Zwei Tische parallel:** `fly scale memory 8192` und in `fly.toml` `MAGELITE_MAX_GAMES = "2"`.
 - **Volume voll?** `cache/images` wächst unbegrenzt (Scryfall-Bilder). Notfalls per `fly ssh console` leeren.
 - Die lokale Electron-App bleibt unverändert (eigener lokaler Held, Token, nur `127.0.0.1`).

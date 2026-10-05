@@ -57,6 +57,8 @@ tasks.register<JavaExec>("runServer") {
     jvmArgs = jvmArgsCommon
     workingDir = runDir.asFile
     args = listOf("--data=${runDir.asFile.absolutePath}", "--port=7317", "--server", "--dev")
+    // Dev: getrennte Mitspieler schon nach 5 s "aufgeben lassen" duerfen (Produktion 60 s), fuer e2e-online
+    jvmArgs = jvmArgsCommon + "-Dmagelite.kickAfterMs=5000"
     environment("MAGELITE_OWNER_CODE", System.getenv("MAGELITE_OWNER_CODE") ?: "DEV-OWNER-CODE")
     environment("MAGELITE_OWNER_NAME", System.getenv("MAGELITE_OWNER_NAME") ?: "Owner")
     doFirst { runDir.asFile.mkdirs() }

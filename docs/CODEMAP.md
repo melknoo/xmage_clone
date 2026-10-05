@@ -101,6 +101,7 @@ Server → Client:
 | `log` | `entries[]` mit `turn`, `active` (Name des aktiven Spielers), `kind` (INFO/STATUS), `rich`; nach Reconnect kommt der Verlauf komplett neu (Client leert ihn bei `hello`) |
 | `status` | `thinking` (Bot-id), `waitingFor` (Bot- oder Mitspieler-Name; null = niemand mehr) |
 | `seat` | `conceded` – eigener Sitz hat aufgegeben (nach `leave` und beim Reconnect); `/api/games/current` liefert dann 404 |
+| `seats` | nur bei mehreren Menschen: `seats[] {playerId, connected, disconnectedMs, conceded}` bei Verbinden/Trennen, alle 2 s solange jemand getrennt ist |
 | `activity` | Herzschlag 1/s vom Wachhund: `mode` (you/bot/human/engine/idle/stuck; `human` = ein anderer Mensch ist dran), `who`, `cpu` (% eines Kerns, alle Engine-Threads), `idleMs`, `recovered` |
 | `toast` | `level`, `rich` |
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
@@ -118,6 +119,7 @@ Client → Server:
 | `settings` | `autoPay`, `autoPass` (bool) |
 | `autoPass` | `on` |
 | `leave` | eigener Sitz gibt auf; sind keine Menschen mehr im Spiel, geben auch die Bots auf |
+| `kick` | `playerId`: einen seit ≥ 60 s getrennten Mitspieler aufgeben lassen (jeder verbundene, nicht aufgegebene Mensch; Dev-Engine 5 s über `-Dmagelite.kickAfterMs`) |
 | `tempo` | nur vom Gastgeber (`hello.host`) angenommen |
 | `ping` | → `pong` |
 
@@ -167,7 +169,7 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `game/interaction.ts` | **Klicklogik**: aus Prompt + State → Modus (priority/attack/block/target/mana/dialog), Hervorhebung, Klickziel |
 | `game/promptActions.ts` | Buttons pro Prompt-Art, F-Tasten-Belegung |
 | `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste, Dialoge (Auswahl, Ersatzeffekte gruppiert, Menge, Stapel, Mulligan, Kartenwahl) |
-| `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen; Stapel mit großem obersten Objekt (einklappbar); Zonen-Knöpfe leuchten, wenn darin etwas spielbar/Ziel ist, 📚 öffnet die sichtbare oberste Bibliothekskarte |
+| `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen; Stapel mit großem obersten Objekt (einklappbar); Zonen-Knöpfe leuchten, wenn darin etwas spielbar/Ziel ist, 📚 öffnet die sichtbare oberste Bibliothekskarte; `OpponentPod.ConnBadge`: „getrennt N s“ + „aufgeben lassen“ für menschliche Mitspieler |
 | `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
 | `game/Side.tsx` | Kartenvorschau, Spielverlauf (nach Zügen gruppiert, Filter Wichtiges/Alles, Icons per Stichwort-Regex), Toasts, Einblendung aufgedeckter/angesehener Karten (`RevealPopups`, Store `reveals`) |
 | `game/ActivityIndicator.tsx` | Anzeige in der TopBar: arbeitet die Engine wirklich (Modus + CPU aus `activity`), Warnung bei Stillstand/ohne Verbindung |

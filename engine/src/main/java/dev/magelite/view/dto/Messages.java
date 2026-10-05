@@ -33,6 +33,17 @@ public final class Messages {
         }
     }
 
+    /** Verbindungszustand der menschlichen Sitze (fuer "getrennt"-Anzeige und "aufgeben lassen"). */
+    public record SeatConn(UUID playerId, boolean connected, long disconnectedMs, boolean conceded) {
+    }
+
+    /** {@code kickAfterMs}: ab dieser Trennungsdauer darf "aufgeben lassen" angeboten werden */
+    public record SeatsStatus(String t, List<SeatConn> seats, long kickAfterMs) {
+        public SeatsStatus(List<SeatConn> seats, long kickAfterMs) {
+            this("seats", seats, kickAfterMs);
+        }
+    }
+
     public record PromptClosed(String t, long id) {
         public PromptClosed(long id) {
             this("promptClosed", id);

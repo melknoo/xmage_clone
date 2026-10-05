@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { wsUrl } from '../api/client'
 import { useAuth } from './auth'
-import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, ServerMessage, Tempo, UUID } from '../api/types'
+import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, SeatConn, ServerMessage, Tempo, UUID } from '../api/types'
 import { sounds } from '../lib/sounds'
 import { useNav } from './nav'
 
@@ -45,6 +45,12 @@ interface GameStore {
   /** Pausemenue offen */
   menuOpen: boolean
   setMenuOpen: (open: boolean) => void
+  /** Verbindungszustand der Mitspieler (nur bei mehreren Menschen), nach playerId */
+  seatConn: Record<UUID, SeatConn>
+  /** ab dieser Trennungsdauer (ms) darf man einen Mitspieler aufgeben lassen (von der Engine) */
+  kickAfterMs: number
+  /** einen laenger getrennten Mitspieler aufgeben lassen */
+  kick: (playerId: UUID) => void
 
   connect: (gameId: UUID) => void
   disconnect: () => void
@@ -162,6 +168,12 @@ export const useGame = create<GameStore>((set, get) => {
       case 'seat':
         set({ conceded: msg.conceded })
         break
+      case 'seats': {
+        const seatConn: Record<UUID, SeatConn> = {}
+        for (const s of msg.seats) seatConn[s.playerId] = s
+        set({ seatConn, kickAfterMs: msg.kickAfterMs || 60000 })
+        break
+      }
       case 'toast':
         pushToast(msg.level, msg.rich)
         break
@@ -243,11 +255,14 @@ export const useGame = create<GameStore>((set, get) => {
     conceded: false,
     menuOpen: false,
     setMenuOpen: (open) => set({ menuOpen: open }),
+    seatConn: {},
+    kickAfterMs: 60000,
+    kick: (playerId) => send({ t: 'kick', playerId }),
 
     connect: (gameId) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false })
+      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {} })
       open(gameId)
     },
     disconnect: () => {

@@ -30,7 +30,8 @@ Drei Terminals:
 # A: Engine (Port 7317, ohne Token, Konsolen-Log, Daten in engine\run)
 cd engine; .\gradlew.bat run
 
-# A' (statt A): Engine im Server-Modus (Cookie-Login, Konten, Owner-Code DEV-OWNER-CODE)
+# A' (statt A): Engine im Server-Modus (Cookie-Login, Konten, Owner-Code DEV-OWNER-CODE;
+#     "aufgeben lassen" schon nach 5 s Trennung statt 60 s, -Dmagelite.kickAfterMs)
 cd engine; .\gradlew.bat runServer
 
 # B: UI mit Hot-Reload

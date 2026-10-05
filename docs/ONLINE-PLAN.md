@@ -7,7 +7,7 @@
 > `POST /api/games` → 409, wenn ein anderer Nutzer spielt (statt sein Spiel zu beenden).
 > Umsetzung in Etappen E1–E5; nach jeder Etappe `docs/STATUS.md` aktualisieren und hier abhaken.
 >
-> Fortschritt: [x] E1 · [x] E2 · [x] E3 (05.10.) · [x] E4 (05.10.: `TableManager`, `/api/tables`, Lobby-/Tisch-Screen, `#table=`-Link, „Zurück zum Tisch“; Polling 1,5 s) · [ ] E5
+> Fortschritt: [x] E1 · [x] E2 · [x] E3 (05.10.) · [x] E4 (05.10.: `TableManager`, `/api/tables`, Lobby-/Tisch-Screen, `#table=`-Link, „Zurück zum Tisch“; Polling 1,5 s) · [x] E5 (05.10.: „getrennt“-Anzeige + „aufgeben lassen“ nach 60 s, Kompression geprüft, State-Größen gemessen, Doku)
 
 ## Kontext
 

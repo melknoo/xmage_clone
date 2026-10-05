@@ -370,6 +370,11 @@ public final class HttpServer {
                         m.hasNonNull("key") ? m.get("key").asText() : null, m.path("always").asBoolean(false));
                 case "replReset" -> host.resetReplacementDeclines(seat);
                 case "leave" -> host.leave(seat);
+                case "kick" -> {
+                    if (!host.kick(seat, UUID.fromString(m.path("playerId").asText()))) {
+                        LOG.info("Aufgeben-lassen abgelehnt (nicht lange genug getrennt oder nicht erlaubt)");
+                    }
+                }
                 case "ping" -> ctx.send("{\"t\":\"pong\"}");
                 default -> LOG.debug("Unbekannte Nachricht: " + text);
             }

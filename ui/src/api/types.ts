@@ -233,6 +233,14 @@ export interface Seat {
   commanders?: string[]
 }
 
+/** Verbindungszustand eines menschlichen Sitzes (nur bei mehreren Menschen gesendet) */
+export interface SeatConn {
+  playerId: UUID
+  connected: boolean
+  disconnectedMs: number
+  conceded: boolean
+}
+
 export interface Hello {
   t: 'hello'
   protocol: number
@@ -312,6 +320,7 @@ export type ServerMessage =
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'status'; thinking?: UUID; autoPassed?: boolean; waitingFor?: string }
   | { t: 'seat'; conceded: boolean }
+  | { t: 'seats'; seats: SeatConn[]; kickAfterMs: number }
   | Activity
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }

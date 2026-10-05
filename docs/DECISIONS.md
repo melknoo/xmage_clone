@@ -143,3 +143,13 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - Fremde Decks sieht man nur als Namen (`deckName`), die Deck-Angabe (`deck`) nur fuer den eigenen Platz bzw.
     die Bots des Gastgebers.
   - Tische nur im Server-Modus registriert (`Main`); lokal startet man weiter direkt ueber das Spiel-Setup.
+- **Trennungen im Mehrspieler (E5, 2026-10-05):**
+  - **Kein Timer, keine automatische Aufgabe:** Ein getrennter Mitspieler wird den anderen als "getrennt seit N s"
+    angezeigt; nach 60 s darf jeder verbundene, nicht aufgegebene Mensch ihn "aufgeben lassen" (WS `kick`).
+    Die Engine prueft die Grenze selbst (`GameHost.KICK_AFTER_MS`). Ein kurzer Reconnect (Tab-Wechsel, Funkloch)
+    kostet so nichts; nur wenn das Spiel wirklich haengt, entscheidet ein Mensch.
+  - Sind alle Menschen laenger als 10 min getrennt, bricht die Engine das Spiel ab (Leerlauf-Wachhund), damit
+    die Maschine auf fly stoppen kann.
+  - **Kompression:** Javalin komprimiert REST und Statik ab 1,5 kB per gzip von selbst (`/api/samples` 15 kB -> 3,3 kB);
+    Jetty handelt `permessage-deflate` fuer den WebSocket aus, wenn der Browser es anbietet (alle gaengigen tun das).
+    Nichts zu konfigurieren; gemessen statt vermutet.

@@ -14,6 +14,13 @@ const WORKING_CPU = 10
 export function ActivityLine({ fallback }: { fallback: ReactNode }) {
   const a = useGame((s) => s.activity)
   const at = useGame((s) => s.activityAt)
+  // Wartet das Spiel auf einen getrennten Mitspieler? (Name -> Sitz -> Verbindungszustand)
+  const disconnectedMs = useGame((s) => {
+    if (s.activity?.mode !== 'human' || !s.activity.who) return 0
+    const seat = s.hello?.seats.find((x) => x.name === s.activity?.who)
+    const c = seat ? s.seatConn[seat.playerId] : undefined
+    return c && !c.connected ? c.disconnectedMs : 0
+  })
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const iv = window.setInterval(() => setNow(Date.now()), 1000)
@@ -40,8 +47,8 @@ export function ActivityLine({ fallback }: { fallback: ReactNode }) {
     label = working ? `${a.who ?? 'Bot'} rechnet …` : `Warte auf ${a.who ?? 'Bot'} …`
     tone = working ? 'work' : 'wait'
   } else if (a.mode === 'human') {
-    label = `${a.who ?? 'Mitspieler'} ist dran …`
-    tone = 'wait'
+    label = disconnectedMs > 0 ? `${a.who ?? 'Mitspieler'} ist dran – getrennt seit ${Math.round(disconnectedMs / 1000)} s` : `${a.who ?? 'Mitspieler'} ist dran …`
+    tone = disconnectedMs > 0 ? 'warn' : 'wait'
   } else if (a.mode === 'engine') {
     label = 'Engine arbeitet …'
     tone = 'work'

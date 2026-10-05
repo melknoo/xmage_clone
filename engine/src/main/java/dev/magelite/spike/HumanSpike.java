@@ -131,6 +131,7 @@ public final class HumanSpike {
         AtomicLong lastMsgAt = new AtomicLong(System.currentTimeMillis());
         AtomicLong bytes = new AtomicLong();
         AtomicLong states = new AtomicLong();
+        java.util.concurrent.atomic.AtomicInteger maxState = new java.util.concurrent.atomic.AtomicInteger();
         java.io.PrintWriter dump = dumpJson == null ? null : new java.io.PrintWriter(Files.newBufferedWriter(Path.of(dumpJson)));
         java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
         Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
@@ -149,6 +150,9 @@ public final class HumanSpike {
                 try {
                     String json = JSON.writeValueAsString(msg);
                     bytes.addAndGet(json.length());
+                    if (msg instanceof StateDto) {
+                        maxState.accumulateAndGet(json.length(), Math::max);
+                    }
                     if (dump != null) {
                         synchronized (dump) {
                             dump.println(json);
@@ -205,9 +209,9 @@ public final class HumanSpike {
             dump.close();
         }
         long dur = System.currentTimeMillis() - t0;
-        out("  Ergebnis: %s | Zuege=%d | %.1f s | Prompts=%s | States=%d | JSON %.1f MB",
+        out("  Ergebnis: %s | Zuege=%d | %.1f s | Prompts=%s | States=%d | JSON %.1f MB | groesster State %d KB",
                 over == null ? "ABGEBROCHEN" : over.result(), over == null ? -1 : over.turns(), dur / 1000.0,
-                driver.kinds, states.get(), bytes.get() / 1e6);
+                driver.kinds, states.get(), bytes.get() / 1e6, maxState.get() / 1024);
         if (over != null) {
             for (Messages.Placement p : over.placements()) {
                 out("    %d. %-28s Leben=%d %s mull=%d", p.place(), p.name(), p.life(),

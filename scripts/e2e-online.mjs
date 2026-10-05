@@ -70,6 +70,7 @@ function pilot(name, cookie) {
     }
     if (m.t === 'status' && m.waitingFor) st.waitingFor.add(m.waitingFor)
     if (m.t === 'seat') st.seat = m
+    if (m.t === 'seats') st.seats = m.seats
     if (m.t === 'gameOver') st.over = m
     if (m.t !== 'prompt') return
     st.prompts++
@@ -126,14 +127,30 @@ ok(A.states > 0 && B.states > 0 && A.foreignPrompts === 0 && B.foreignPrompts ==
 ok([...A.waitingFor].includes('Bob') || [...B.waitingFor].includes('Owner'), `Warte-Hinweis auf den anderen Menschen (Owner sah: ${[...A.waitingFor].join(',')}; Bob sah: ${[...B.waitingFor].join(',')})`)
 console.log(`     Zug ${A.last?.turn ?? '?'} nach 90 s`)
 
-// Bob gibt auf -> Spiel laeuft fuer Owner weiter; Bob bleibt Zuschauer und bekommt sein gameOver erst am Ende
-if (!B.over) {
-  B.ws.send(JSON.stringify({ t: 'leave' }))
-  await sleep(5000)
-}
-ok(!B.over, `Bob nach dem Aufgeben noch ohne gameOver (Zuschauer): ${B.over ? 'FEHLER, hat ' + B.over.result : 'ok'}`)
-ok(B.last?.players?.find((p) => p.id === B.hello?.myPlayerId)?.lost === true, 'Bob ist im State als ausgeschieden markiert')
-ok(B.seat?.conceded === true && !A.seat, `seat-Nachricht: Bob conceded=${B.seat?.conceded}, Owner keine`)
+// Bobs Verbindung bricht ab (Tab zu) -> Owner sieht "getrennt"; zu frueh "aufgeben lassen" wird abgelehnt,
+// nach der Dev-Grenze (runServer: 5 s, Produktion 60 s) klappt es -> Bobs Sitz gibt auf, Spiel laeuft fuer Owner weiter
+const bobPid = B.hello?.myPlayerId
+B.ws.close()
+await sleep(1500)
+let connB = A.seats?.find((s) => s.playerId === bobPid)
+ok(connB && connB.connected === false && connB.conceded === false, `Owner sieht Bob getrennt (connected=${connB?.connected}, conceded=${connB?.conceded})`)
+A.ws.send(JSON.stringify({ t: 'kick', playerId: bobPid }))
+await sleep(1000)
+connB = A.seats?.find((s) => s.playerId === bobPid)
+ok(connB && connB.conceded === false, `zu fruehes Aufgeben-lassen abgelehnt (conceded=${connB?.conceded})`)
+await sleep(5000)
+A.ws.send(JSON.stringify({ t: 'kick', playerId: bobPid }))
+await sleep(1500)
+connB = A.seats?.find((s) => s.playerId === bobPid)
+ok(connB && connB.conceded === true, `nach der Grenze: Bob aufgegeben lassen (conceded=${connB?.conceded})`)
+// Bob kommt zurueck (Zuschauer): bekommt seat conceded=true, kein eigenes Spiel mehr
+const B2 = pilot('Bob', bob)
+await sleep(2500)
+ok(B2.seat?.conceded === true, `Bob nach Reconnect: seat conceded=${B2.seat?.conceded}`)
+ok(B2.last?.players?.find((p) => p.id === bobPid)?.lost === true, 'Bob ist im State als ausgeschieden markiert')
+ok(!A.seat, 'Owner bekam keine seat-Nachricht (nicht aufgegeben)')
+B.over = null
+Object.defineProperty(B, 'over', { get: () => B2.over })
 r = await call('GET', '/api/games/current', { cookie: bob })
 ok(r.status === 404, `Bob /api/games/current nach Aufgeben -> ${r.status} (kein Rueckholen beim Neuladen)`)
 r = await call('GET', '/api/games/current', { cookie: owner })
@@ -167,6 +184,6 @@ ok(pB.json?.games === 1, `Bob-Profil zaehlt ${pB.json?.games} Spiel`)
 // Aufraeumen
 await call('DELETE', `/api/admin/invites/${bobId}`, { cookie: owner })
 A.ws.close()
-B.ws.close()
+B2.ws.close()
 console.log(failed === 0 ? '\n=== alles gruen ===' : `\n=== ${failed} Pruefungen fehlgeschlagen ===`)
 process.exit(failed === 0 ? 0 : 1)
