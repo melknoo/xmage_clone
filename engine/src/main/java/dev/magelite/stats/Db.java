@@ -20,7 +20,7 @@ import java.sql.Statement;
 public final class Db implements AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(Db.class);
-    private static final String[] MIGRATIONS = {"V1__init.sql", "V2__users.sql", "V3__games_per_user.sql", "V4__accounts.sql"};
+    private static final String[] MIGRATIONS = {"V1__init.sql", "V2__users.sql", "V3__games_per_user.sql", "V4__accounts.sql", "V5__social.sql"};
 
     private final Connection conn;
 

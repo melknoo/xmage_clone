@@ -84,6 +84,12 @@ mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --r
 4. „Neuer Code“ macht den alten sofort ungültig (offene Verbindungen werden getrennt). „Entfernen“ löscht Konto,
    Held und Decks; Spiele bleiben in der Statistik-Tabelle.
 
+5. **Freunde in der App:** Auf der Startseite gibt es den **Lobby-Chat** (alle Angemeldeten, standardmäßig drin,
+   „Verlassen“ macht unsichtbar) und die **Freundesliste** (Name eintippen oder im Chat auf den Namen klicken →
+   Anfrage, der andere nimmt an). Wer an einem Tisch sitzt, kann Freunde per „Einladen“ holen; die Einladung
+   erscheint beim Freund als Karte oben rechts („Beitreten“), auch wenn er gerade woanders in der App ist (nicht
+   im laufenden Spiel). Der Chat-Verlauf liegt nur im Speicher und ist nach einem Auto-Stop weg.
+
 Text für Freunde:
 
 > Hier kannst du dein Commander-Deck gegen drei Bots testen, direkt im Browser am PC/Laptop (Chrome, Edge oder
@@ -127,6 +133,8 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
 - **Datenmenge:** REST/Statik gzip, WebSocket `permessage-deflate` (automatisch). Ein State im späten Spiel liegt
   unkomprimiert im zweistelligen kB-Bereich (siehe `STATUS.md`), also auch für Mobilfunk unkritisch.
 - **Zwei Tische parallel:** `fly scale memory 8192` und in `fly.toml` `MAGELITE_MAX_GAMES = "2"`.
+- **Leerlauf trotz offener Tabs:** Startseite/Lobby pollen (Social alle 3 s), aber nur bei sichtbarem Tab und bis
+  15 min nach der letzten Maus-/Tastatureingabe; danach greift der Idle-Exit wie gewohnt.
 - **Volume voll?** `cache/images` wächst unbegrenzt (Scryfall-Bilder). Notfalls per `fly ssh console` leeren.
 - Die lokale Electron-App bleibt unverändert (eigener lokaler Held, Token, nur `127.0.0.1`).
 

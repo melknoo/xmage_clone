@@ -16,6 +16,8 @@ import { takeInviteFromUrl, useAuth } from './store/auth'
 import { useGame } from './store/game'
 import { useNav, type Screen } from './store/nav'
 import { useTable } from './store/table'
+import { useSocial } from './store/social'
+import { InviteToasts } from './social/InviteToasts'
 
 const NAV: { key: Screen; label: string; icon: string }[] = [
   { key: 'home', label: 'Held', icon: '🛡️' },
@@ -50,6 +52,17 @@ export function App() {
   const mode = useAuth((s) => s.mode)
   const me = useAuth((s) => s.me)
   const [engine, setEngine] = useState<'wait' | 'ok' | 'down'>('wait')
+  const inGame = screen === 'game' && !!gameId
+  const socialOn = engine === 'ok' && authStatus === 'ok' && mode === 'server' && !inGame
+  const homeBadge = useSocial((s) => s.incoming.length + s.invites.length + s.msgs.filter((m) => m.seq > s.readSeq && m.userId !== me?.id).length)
+
+  // Lobby-Chat/Freunde/Einladungen: Polling außerhalb des Spiels (Server-Modus)
+  useEffect(() => {
+    const social = useSocial.getState()
+    if (socialOn) social.start()
+    else if (authStatus !== 'ok') social.reset()
+    else social.stop()
+  }, [socialOn, authStatus])
 
   // Engine erreichbar? Angemeldet? Laufendes Spiel wieder aufnehmen?
   useEffect(() => {
@@ -149,11 +162,14 @@ export function App() {
         {nav.map((n) => (
           <button
             key={n.key}
-            className={`flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === n.key || (n.key === 'play' && (screen === 'solo' || screen === 'table')) ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:bg-white/5 hover:text-ink-100'}`}
+            className={`relative flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === n.key || (n.key === 'play' && (screen === 'solo' || screen === 'table')) ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:bg-white/5 hover:text-ink-100'}`}
             onClick={() => go(n.key)}
           >
             <span className="text-xl">{n.icon}</span>
             {n.label}
+            {n.key === 'home' && mode === 'server' && homeBadge > 0 && screen !== 'home' && (
+              <span className="absolute right-2 top-1.5 min-w-4 rounded-full bg-gold-400 px-1 text-[10px] font-bold leading-4 text-ink-950">{homeBadge > 9 ? '9+' : homeBadge}</span>
+            )}
           </button>
         ))}
         {gameId && (
@@ -188,6 +204,7 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+      {mode === 'server' && <InviteToasts />}
     </div>
   )
 }

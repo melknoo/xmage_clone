@@ -62,7 +62,10 @@ Electron (desktop/src/main.cjs)
 | `stats/Db` | SQLite-Verbindung + Migrationen (`resources/db/migrations/V*.sql`, Liste in `Db.MIGRATIONS`) |
 | `stats/StatsWatcher`, `StatsSink` | Spielereignisse jedes Menschen erfassen (ein Sink pro Spiel **und** Spieler; Starthand, gezogen, gewirkt, Länder, Schaden, eigene Züge) |
 | `game/FxWatcher` | Watcher ohne Felder: Zonenwechsel (stirbt/Exil/Hand/Bibliothek/abgeworfen/gemillt/verrechnet), Schaden, Leben, Marken, Neutralisieren → `GameHost.onFx` → gebündelt als WS `events` vor dem nächsten State (verdeckte Karten nur an den Besitzer, Token-Tode ×N) |
-| `game/ChatText` | Chat-Regeln (Steuerzeichen raus, 300 Zeichen, 5 Nachrichten / 5 s) für Spiel- und Tisch-Chat |
+| `game/ChatText` | Chat-Regeln (Steuerzeichen raus, 300 Zeichen, 5 Nachrichten / 5 s) für Spiel-, Tisch- und Lobby-Chat |
+| `social/SocialService` | Server-Modus: Lobby-Chat (≤ 100, nur im Speicher, `seq`-Cursor), Präsenz (Poll < 15 s = online), Freundes-Status `online/table/game/offline`, Tisch-Einladungen (10 min, nur an Freunde, nur sichtbar solange der Tisch in der Lobby einen freien Platz hat). Eigene Sperre, Tisch/Spiel/DB-Abfragen außerhalb davon |
+| `social/FriendStore` | SQL für `friendships` (Paar `a<b`, Anfrage → `accepted_at`, Gegenanfrage = Annehmen) und `users.lobby_chat` |
+| `social/SocialRoutes` | REST `/api/social`, `/api/friends`, `/api/tables/{id}/invite`; `SocialException` → 409 |
 | `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
@@ -156,17 +159,22 @@ Client → Server:
 | POST | `/api/games` | Spiel starten `{deck, bots[], tempo, humans?: [{userId, name?, deck?}]}` (weitere Menschen bis zur Lobby nur in der Dev-Engine; freie Plätze bis 4 werden mit Bots gefüllt); Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
 | GET | `/api/games/current` | eigenes laufendes Spiel (für Reconnect); fremdes → 404 |
 | POST | `/api/tables/{id}/chat` | Tisch-Chat `{text}` (nur Sitzende, 409 sonst); die Zeilen (≤ 50) kommen in jeder Tisch-Antwort als `chat[]` mit |
+| GET | `/api/social?after=<seq>` | Server-Modus, ein Poll für alles: `{chatIn, seq, msgs[] (nur > after, leer wenn draußen), members[], friends[{id,name,status,tableId?,tableName?}], incoming[], outgoing[], invites[]}`; setzt die Präsenz |
+| POST/PUT | `/api/social/chat` | Lobby-Chat schreiben `{text}` (409 wenn draußen/Rate-Limit) / `{in: bool}` betreten/verlassen (pro Konto gespeichert) |
+| POST/DELETE | `/api/friends`, `/api/friends/{id}/accept`, `/api/friends/{id}` | Anfrage `{name}` (exakt, Groß/klein egal) oder `{userId}` → `{state: outgoing\|friend}`; annehmen; ablehnen/zurückziehen/entfernen |
+| POST/DELETE | `/api/tables/{id}/invite`, `/api/social/invites/{id}` | Freund an meinen Tisch einladen `{userId}` / Einladung ablehnen (Beitritt per `/api/tables/{id}/join` erledigt sie) |
 | GET/PUT | `/api/profile` | Held; PUT `{name}` |
 | GET | `/api/stats/overview`, `/api/stats/decks`, `/api/stats/decks/{id}/cards`, `/api/history?limit=` | Statistik |
 | GET | `/img/card/{set}/{num}?size=&face=&name=`, `/img/token?name=&set=&n=&size=`, `/img/named?name=&size=` | Bilder |
 
-### SQLite (`magelite.db`, Migrationen `V1__init.sql`, `V2__users.sql`, `V3__games_per_user.sql`, `V4__accounts.sql`)
+### SQLite (`magelite.db`, Migrationen `V1__init.sql`, `V2__users.sql`, `V3__games_per_user.sql`, `V4__accounts.sql`, `V5__social.sql`)
 
 `users` (id, name, code_hash, is_admin, last_seen, `email` (NOCASE, unique), `pw_hash` (PBKDF2), pw_set_at; 1 = lokal) ·
 `sessions` (user_id, token_hash, via code|password, created_at, last_seen; Cookie `ml_sess` hält das Klartext-Token) · `profile` (id = Nutzer-id, name, xp_total) · `decks`
 (dck-Text, commanders, colors, valid, mastery_xp, `user_id`) · `games` (PK `(id, user_id)`: Ergebnis, Platz, Tempo,
 Mulligans, XP, end_reason je Mensch) · `game_seats` (pro Spiel einmal) · `game_card_stats` (PK `(game_id, user_id,
-card_name)`: opening, drawn, cast, first_cast_turn) · `xp_ledger` (`user_id`) · `settings` (noch ungenutzt).
+card_name)`: opening, drawn, cast, first_cast_turn) · `xp_ledger` (`user_id`) · `settings` (noch ungenutzt) ·
+`friendships` (a < b, requested_by, accepted_at; ON DELETE CASCADE) · `users.lobby_chat` (1 = im Lobby-Chat).
 Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neue Migration: Datei `V4__….sql` anlegen
 **und** in `Db.MIGRATIONS` eintragen (Splitter `;` + Zeilenumbruch, keine `;` in Kommentaren).
 
@@ -181,6 +189,8 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `api/types.ts` | TypeScript-Typen des Protokolls (bei Änderungen an DTOs mitziehen!) |
 | `store/game.ts` | Zustand-Store: WebSocket, State, Prompt, Log, Toasts, `answer()`, `action()`, Tempo, Auto-Mana, `combatReset()`, `repeat()`, Chat (`chat`, `unreadChat`, `sendChat`), Ereignisse (`fx`/`recent` mit beim Empfang erfassten Bildschirmpositionen, `fxEnabled`) |
 | `store/nav.ts` | aktueller Screen, letzte Spielkonfiguration (localStorage) |
+| `store/social.ts`, `api/social.ts` | Social-Poll (3 s, nur Server-Modus außerhalb des Spiels; pausiert bei verstecktem Tab und nach 15 min ohne Eingabe), Lobby-Chat mit Cursor, Freunde, Anfragen, Einladungen, `readSeq` für das Badge am „Held“-Nav |
+| `social/LobbyChat.tsx`, `social/FriendsPanel.tsx`, `social/InviteToasts.tsx` | Lobby-Chat (Startseite, Klick auf Namen → Freund hinzufügen, Verlassen/Beitreten), Freundesliste (Startseite + Tisch „Freunde einladen“), Einladungs-Toasts im App-Shell |
 | `screens/*` | Held (`HomeScreen`), Spiel-Setup, Decks (Import-Dialog), Statistik |
 | `game/GameScreen.tsx` | Tisch-Layout, TopBar, eigener Bereich, Hotkeys, „ausgeschieden“-Banner |
 | `game/interaction.ts` | **Klicklogik**: aus Prompt + State → Modus (priority/attack/block/target/mana/dialog), Hervorhebung, Klickziel (Mana-Modus: Klick auf einberufbare Kreatur → `specialPay`) |
@@ -211,6 +221,7 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `tools/steps-swarm.json`, `tools/swarm-pilot.js` | Szenario `swarm` (Dev-Engine): Stapel ×N, Shift-Markieren, Mehrfach-Angriff, Pfeile, Verlauf ×N |
 | `tools/steps-dredge.json`, `tools/dredge-pilot.js` | Szenario `dredge` (Dev-Engine): Ersatzeffekt-Dialog mit Gruppen + Hover, „Keinen anwenden“, „merken“ + Toolbar-Knopf |
 | `tools/steps-server.json` | Server-Modus über den Vite-Proxy: Login-Screen, `#invite=`-Login, Einladungen, Spiel |
+| `tools/steps-social.json` | Server-Modus: Startseite mit Lobby-Chat/Freunden/Einladungs-Toast, Namens-Popup, Tisch mit „Freunde einladen“, Chat verlassen (`"show": true` – versteckt bleiben Screen-Wechsel hängen; Testdaten vorher per Skript anlegen; Vite gegen andere Engine: `MAGELITE_ENGINE=http://127.0.0.1:7400`) |
 | `tools/scenario-pilot.js`, `tools/steps-necro.json`, `steps-attack-undo.json`, `steps-gemstone.json`, `steps-fx.json`, `steps-modal-hover.json` | Szenario-Screenshots (Dev-Engine): ×5-Picker + Stapel, „Alle angreifen“ → Abbrechen/Zurücksetzen, Starthand-Dialog, Ereignisleiste/Geisterkarte, Vorschau bei offenem Mulligan-Dialog (`window.__hold` steuert, was der Pilot offen lässt) |
 
 ## Skripte (`scripts/`) und Server-Dateien
@@ -218,6 +229,6 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 `build.ps1` (alles bauen, prüft Java/Node) · `import-xmage.ps1` (XMage-Distribution → `vendor/xmage`) ·
 `bootstrap-gradle.ps1` (Wrapper neu erzeugen) · `e2e-flow.mjs` (REST+WS-Test) · `e2e-login.mjs` (Server-Modus:
 Konten, Sessions, E-Mail/Passwort, Nutzertrennung) · `e2e-online.mjs` (2 Menschen, Chat) · `e2e-tables.mjs` (Lobby,
-Tisch-Chat) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
+Tisch-Chat) · `e2e-social.mjs` (Lobby-Chat, Freunde, Einladungen) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
 Repo-Root: `Dockerfile` (UI → Engine `installDist` → JRE 17, Engine-Jar vor `lib/*`), `.dockerignore`, `fly.toml`
 (performance-2x/4 GB, Auto-Stop, Volume `/data`, Health-Grace 300 s). Betrieb: `docs/SERVER.md`.

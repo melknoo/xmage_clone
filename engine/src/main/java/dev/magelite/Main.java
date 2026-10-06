@@ -6,6 +6,9 @@ import dev.magelite.api.Json;
 import dev.magelite.api.TableRoutes;
 import dev.magelite.deck.DeckResolver;
 import dev.magelite.game.TableManager;
+import dev.magelite.social.FriendStore;
+import dev.magelite.social.SocialRoutes;
+import dev.magelite.social.SocialService;
 import dev.magelite.auth.AccountService;
 import dev.magelite.auth.AuthRoutes;
 import dev.magelite.boot.CardDbManager;
@@ -104,7 +107,13 @@ public final class Main {
         if (server) {
             // Lobby/Tische: nur online sinnvoll (lokal startet man direkt)
             DeckResolver deckResolver = new DeckResolver(deckStore, samples);
-            httpServer.addModule(new TableRoutes(new TableManager(games, deckResolver), deckResolver));
+            TableManager tableManager = new TableManager(games, deckResolver);
+            SocialService social = new SocialService(new FriendStore(db), tableManager, games);
+            TableRoutes tableRoutes = new TableRoutes(tableManager, deckResolver);
+            tableRoutes.setOnJoined(social::joined);
+            httpServer.addModule(tableRoutes);
+            // Lobby-Chat, Freunde, Einladungen
+            httpServer.addModule(new SocialRoutes(social));
         }
         int port = httpServer.start();
 

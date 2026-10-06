@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiConsumer;
 
 /**
  * REST fuer Lobby und Tische (Server-Modus). Die Lobby synchronisiert sich per Polling auf
@@ -23,10 +24,17 @@ public final class TableRoutes implements HttpServer.Module {
 
     private final TableManager tables;
     private final DeckResolver decks;
+    private volatile BiConsumer<Long, String> onJoined = (userId, tableId) -> {
+    };
 
     public TableRoutes(TableManager tables, DeckResolver decks) {
         this.tables = tables;
         this.decks = decks;
+    }
+
+    /** Wird nach einem Beitritt aufgerufen (Nutzer, Tisch), z.B. um Einladungen zu erledigen. */
+    public void setOnJoined(BiConsumer<Long, String> cb) {
+        this.onJoined = cb;
     }
 
     @Override
@@ -66,7 +74,9 @@ public final class TableRoutes implements HttpServer.Module {
         });
         app.post("/api/tables/{id}/join", ctx -> {
             User u = Auth.user(ctx);
-            ctx.json(view(tables.join(u, ctx.pathParam("id")), u));
+            TableManager.Table t = tables.join(u, ctx.pathParam("id"));
+            onJoined.accept(u.id(), t.id);
+            ctx.json(view(t, u));
         });
         app.post("/api/tables/{id}/leave", ctx -> {
             User u = Auth.user(ctx);

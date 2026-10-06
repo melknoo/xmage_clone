@@ -161,3 +161,17 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - **Kompression:** Javalin komprimiert REST und Statik ab 1,5 kB per gzip von selbst (`/api/samples` 15 kB -> 3,3 kB);
     Jetty handelt `permessage-deflate` fuer den WebSocket aus, wenn der Browser es anbietet (alle gaengigen tun das).
     Nichts zu konfigurieren; gemessen statt vermutet.
+- **Lobby-Chat, Freunde, Einladungen (2026-10-06):**
+  - **Ein Social-Poll** (`GET /api/social`, alle 3 s) statt Lobby-WebSocket – gleiche Begründung wie bei den Tischen;
+    ein Endpunkt liefert Chat-Delta (`after`-Cursor), Mitglieder, Freunde mit Status, Anfragen und Einladungen.
+  - **fly-Leerlauf:** Jede API-Anfrage hält die Maschine wach. Deshalb pollt die UI nur außerhalb des Spiels, nicht bei
+    verstecktem Tab und nicht nach 15 min ohne Maus/Tastatur („abwesend“). Ein offener, unbenutzter Tab kostet so
+    höchstens 15 min + Idle-Exit.
+  - **Lobby-Chat nur im Speicher** (letzte 100): nach Auto-Stop leer – bewusst (Nutzerwunsch), keine Moderations-/
+    Löschpflichten für gespeicherte Nachrichten. Standardmäßig ist jeder drin; „Verlassen“ heißt unsichtbar (nicht in
+    der Mitgliederliste, keine Nachrichten, Senden 409) und wird pro Konto gespeichert (`users.lobby_chat`).
+  - **Freunde per Anfrage + Annehmen**, beidseitig; die Gegenanfrage nimmt an. Suche nur per exaktem Namen (keine
+    Nutzerliste/Suche, damit man nicht alle Konten abgrasen kann); bei doppeltem Namen über den Lobby-Chat (per ID).
+  - **Einladungen nur an Freunde**, im Speicher, 10 min gültig, nur sichtbar solange der Tisch in der Lobby einen
+    freien Platz hat. Sie erscheinen überall außer im laufenden Spiel. Tische bleiben trotzdem per Link/Code offen
+    (keine privaten Tische).

@@ -6,6 +6,7 @@ import { ColorPips } from '../lib/mana'
 import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
 import { useTable } from '../store/table'
+import { FriendsPanel } from '../social/FriendsPanel'
 import { DeckPicker, TEMPOS, useDeckCatalog, type DeckInfo } from './PlaySetupScreen'
 
 const POLL_MS = 1500
@@ -242,6 +243,13 @@ export function TableScreen() {
             {shaky && <div className="rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-300">Verbindung wackelt – versuche es weiter …</div>}
             {error && <div className="rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{error}</div>}
           </div>
+
+          {table.state === 'LOBBY' && table.seats.some((s) => s.kind === 'OPEN') && table.mySeat !== null && (
+            <>
+              <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-ink-300">Freunde einladen</h2>
+              <FriendsPanel inviteTableId={table.id} seatedIds={humans.map((s) => s.userId ?? 0)} compact />
+            </>
+          )}
         </section>
       </div>
 

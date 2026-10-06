@@ -182,6 +182,23 @@ Fallback auf manuelles Klicken.
     Server-Modus e2e (eigene Engine): `e2e-login` 46/46, `e2e-online` 34/34, `e2e-tables` 35/35.
     **Live:** Commit `b10937a` deployt (Repo = Live-Stand), neues Bundle ausgeliefert, `e2e-tables` live 35/35.
 
+- 2026-10-06 **Lobby-Chat, Freunde, Tisch-Einladungen** (nur Server-Modus, Begründung in `DECISIONS.md`):
+  - **Lobby-Chat** auf der Startseite für alle Angemeldeten (rechte Spalte): standardmäßig drin, „Verlassen“ =
+    unsichtbar + keine Nachrichten (pro Konto, `users.lobby_chat`), „Beitreten“ holt zurück. Verlauf nur im Speicher
+    (100), Mitgliederliste, Klick auf Namen → „Als Freund hinzufügen“, Ungelesen-Badge am „Held“-Nav.
+  - **Freunde** (Migration `V5__social.sql`, `friendships`): Anfrage per exaktem Namen oder aus dem Chat, Annehmen/
+    Ablehnen/Zurückziehen/Entfernen, Gegenanfrage nimmt an. Status online / am Tisch / im Spiel / offline.
+  - **Einladungen:** am Tisch „Freunde einladen“ (auch von der Startseite aus, wenn man an einem Tisch sitzt);
+    beim Freund unten rechts eine Karte „Beitreten / Ablehnen“ (überall außer im Spiel). Nur an Freunde, 10 min
+    gültig, verschwindet bei vollem/laufendem Tisch oder nach dem Beitritt.
+  - Technik: `social/SocialService`, `FriendStore`, `SocialRoutes`; UI `store/social.ts` pollt alle 3 s außerhalb des
+    Spiels, pausiert bei verstecktem Tab und nach 15 min ohne Eingabe (fly-Leerlauf). Vite-Proxy-Ziel jetzt per
+    `MAGELITE_ENGINE`, `shot.cjs` kennt `"show": true`.
+  - Geprüft (eigene Engine 7400): `e2e-social` 47/47 (neu), `e2e-tables`, `e2e-online` grün, `test` grün, `humanSpike`
+    1/1, `tsc`. Visuell (`steps-social.json`): Startseite mit Chat/Freunden/Anfrage/Einladungskarte, Namens-Popup,
+    Beitritt per Einladung → Tisch mit „Freunde einladen“, Chat verlassen → „Beitreten“-Karte.
+    **Nicht deployt.**
+
 ## Offene Punkte (priorisiert)
 
 0. **Online (fly.io)** – Plan `docs/ONLINE-PLAN.md`, Betrieb `docs/SERVER.md`.

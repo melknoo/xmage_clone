@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // Dev-Proxy: ohne ?port= spricht die UI dieselbe Origin an (wie im Server-Modus auf fly), Cookies funktionieren.
-// Mit ?port=7317 geht sie weiterhin direkt auf die Engine (CORS, Token).
-const engine = 'http://127.0.0.1:7317'
+// Mit ?port=7317 geht sie weiterhin direkt auf die Engine (CORS, Token). Andere Engine: MAGELITE_ENGINE=http://127.0.0.1:7400
+const engine = process.env.MAGELITE_ENGINE ?? 'http://127.0.0.1:7317'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],

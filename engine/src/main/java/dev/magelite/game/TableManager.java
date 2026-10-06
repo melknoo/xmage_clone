@@ -151,6 +151,25 @@ public final class TableManager {
         return tables.values().stream().filter(t -> t.seatOf(userId).isPresent()).findFirst();
     }
 
+    /** Kann man an diesen Tisch einladen (gibt es, Lobby, freier Platz)? */
+    public synchronized boolean invitable(String id) {
+        Table t = tables.get(normalize(id));
+        if (t == null || !"LOBBY".equals(t.state)) {
+            return false;
+        }
+        for (Seat s : t.seats) {
+            if (s.kind == SeatKind.OPEN) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public synchronized boolean seated(String id, long userId) {
+        Table t = tables.get(normalize(id));
+        return t != null && t.seatOf(userId).isPresent();
+    }
+
     // ------------------------------------------------------------------ Lobby-Aktionen
 
     public synchronized Table create(User host, String name, TempoSettings.Preset tempo) {

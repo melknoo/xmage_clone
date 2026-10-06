@@ -1,6 +1,7 @@
 // Entwickler-Werkzeug: oeffnet eine URL, fuehrt Schritte aus und speichert Screenshots.
 // Aufruf: electron tools/shot.cjs <steps.json>
-// steps.json: { "url": "...", "width": 1680, "height": 1000, "timeout": 120000,
+// steps.json: { "url": "...", "width": 1680, "height": 1000, "timeout": 120000, "show": false (true: sichtbares Fenster,
+//   noetig wenn Screen-Wechsel animiert werden - versteckt bleibt AnimatePresence haengen),
 //   "steps": [ {"wait": 2000}, {"js": "..."}, {"jsFile": "autoplay.js"}, {"shot": "a.png"}, {"waitFor": "css-selector", "timeout": 30000} ] }
 // Relative Pfade (jsFile, shot) beziehen sich auf den Ordner der steps.json.
 const { app, BrowserWindow } = require('electron')
@@ -14,7 +15,7 @@ app.whenReady().then(async () => {
   const spec = JSON.parse(fs.readFileSync(file, 'utf8'))
   const base = path.dirname(path.resolve(file))
   const rel = (p) => (path.isAbsolute(p) ? p : path.join(base, p))
-  const win = new BrowserWindow({ width: spec.width ?? 1680, height: spec.height ?? 1000, show: false, paintWhenInitiallyHidden: true, backgroundColor: '#07090f', webPreferences: { backgroundThrottling: false } })
+  const win = new BrowserWindow({ width: spec.width ?? 1680, height: spec.height ?? 1000, show: !!spec.show, paintWhenInitiallyHidden: true, backgroundColor: '#07090f', webPreferences: { backgroundThrottling: false } })
   win.webContents.on('console-message', (_e, level, message) => {
     if (level >= 2) process.stdout.write(`[console] ${message}\n`)
   })
