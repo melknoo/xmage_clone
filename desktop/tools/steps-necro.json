@@ -1,0 +1,26 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1700,
+  "height": 1000,
+  "timeout": 240000,
+  "steps": [
+    { "waitFor": "#root div", "timeout": 60000 },
+    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'necro'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
+    { "wait": 4000 },
+    { "js": "window.__hold={necro:true,ability:true};'hold'" },
+    { "jsFile": "scenario-pilot.js" },
+    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='CHOOSE_ABILITY'&&p.sourceId&&g.answeredPromptId!==p.id){clearInterval(t);r('Picker: '+p.choices.map(c=>c.text).join(' | '))}},200)})" },
+    { "wait": 1000 },
+    { "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='×5');if(!b)return 'kein x5';b.click();return 'x5'})()" },
+    { "wait": 500 },
+    { "shot": "../../engine/run/necro-1-picker.png" },
+    { "wait": 300 },
+    { "shot": "../../engine/run/necro-1-picker.png" },
+    { "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Pay 1 life'));if(!b)return 'kein Knopf';b.click();return 'Pay 1 life x5'})()" },
+    { "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.stack.length>=5){clearInterval(t);r('Stapel: '+s.stack.length)}},100);setTimeout(()=>{clearInterval(t);r('Timeout Stapel')},20000)})" },
+    { "shot": "../../engine/run/necro-2-stack.png" },
+    { "wait": 300 },
+    { "shot": "../../engine/run/necro-2-stack.png" },
+    { "js": "(()=>{const s=window.__ml.game.getState().state;const me=s.players.find(p=>p.me);return 'Leben '+me.life+' Exil '+me.exile.length+' Stapel '+s.stack.length})()" }
+  ]
+}

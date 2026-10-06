@@ -55,6 +55,12 @@ body {
   user-select: none;
 }
 
+/* Edge zeigt sonst ein eigenes Auge neben dem von PasswordInput */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 input, textarea, select {
   user-select: text;
 }
@@ -95,6 +101,11 @@ input, textarea, select {
 
 .glow-chosen {
   box-shadow: 0 0 0 3px rgba(120, 255, 160, 0.95), 0 0 18px 4px rgba(120, 255, 160, 0.4);
+}
+
+.glow-special {
+  /* Einberufen (Convoke): Kreatur per Klick tappen */
+  box-shadow: 0 0 0 2px rgba(178, 132, 255, 0.95), 0 0 16px 3px rgba(178, 132, 255, 0.45);
 }
 
 .glow-attacking {

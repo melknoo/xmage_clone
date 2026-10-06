@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { wsUrl } from '../api/client'
 import { useAuth } from './auth'
-import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, SeatConn, ServerMessage, Tempo, UUID } from '../api/types'
+import { anchorOf, objCenter, stackAnchor, zoneAnchor, zoneKey, type Point } from '../game/overlayGeometry'
+import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, SeatConn, ServerMessage, Tempo, UUID, FxEvent, ChatEntry } from '../api/types'
 import { sounds } from '../lib/sounds'
 import { useNav } from './nav'
 
@@ -51,6 +52,20 @@ interface GameStore {
   kickAfterMs: number
   /** einen laenger getrennten Mitspieler aufgeben lassen */
   kick: (playerId: UUID) => void
+  /** laufende Mini-Animationen (Geisterkarten, schwebende Zahlen) */
+  fx: FxItem[]
+  /** Ereignisleiste: die letzten Ereignisse (~5 s) */
+  recent: FxItem[]
+  /** Animationen an/aus (Leiste bleibt) */
+  fxEnabled: boolean
+  setFxEnabled: (on: boolean) => void
+  /** Chat zwischen den Menschen am Tisch */
+  chat: ChatEntry[]
+  unreadChat: number
+  /** Chat-Tab sichtbar (dann kein Ungelesen-Zaehler/Toast) */
+  chatOpen: boolean
+  setChatOpen: (open: boolean) => void
+  sendChat: (text: string) => void
 
   connect: (gameId: UUID) => void
   disconnect: () => void
@@ -71,6 +86,12 @@ interface GameStore {
   clearMarks: () => void
   /** alle Markierten greifen target an (Spieler/Planeswalker) bzw. blocken den Angreifer target */
   combatMany: (target: UUID) => void
+  /** "Angriff zuruecksetzen": alle eigenen Angreifer wieder zuruecknehmen (vor dem Bestaetigen) */
+  combatReset: () => void
+  /** CHOOSE_ABILITY: Faehigkeit N-mal aktivieren (Engine haelt dazwischen die Prioritaet) */
+  repeat: (abilityId: UUID, times: number) => void
+  /** PLAY_MANA: Kreatur einberufen (Convoke); Aktionswahl, Ziel und Farbe beantwortet die Engine */
+  specialPay: (permId: UUID) => void
   /** Ersatzeffekt-Wahl: accept = Effekt key anwenden (Folge-Frage beantwortet die Engine), decline = alle optionalen ablehnen */
   replacement: (mode: 'accept' | 'decline', key?: string, always?: boolean) => void
   /** "Fuer dieses Spiel merken" der abgelehnten Ersatzeffekte zuruecknehmen */
@@ -78,10 +99,38 @@ interface GameStore {
   reset: () => void
 }
 
+/** Ereignis mit Bildschirmpositionen (beim Empfang erfasst - der DOM zeigt dann noch den Zustand davor) */
+export interface FxItem extends FxEvent {
+  key: number
+  at: number
+  /** Start-/Zielposition auf dem Bildschirm (from/to sind die XMage-Zonen) */
+  src?: Point
+  dst?: Point
+}
+let fxSeq = 0
+const FX_MS = 1300
+const FX_MAX = 24
+const RECENT_MS = 5000
+const RECENT_MAX = 6
+const CHAT_MAX = 200
+/** Ereignisse, die in der Leiste stehen (Zonenwechsel, Spieler-Schaden, groessere Lebensaenderungen) */
+const STRIP_KINDS = new Set(['died', 'tokenDied', 'exiled', 'bounced', 'tucked', 'discarded', 'milled', 'countered', 'command'])
+
+function reducedMotion(): boolean {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  } catch {
+    return false
+  }
+}
+
 let socket: WebSocket | null = null
 let pingTimer: number | undefined
 let reconnectTimer: number | undefined
 let toastSeq = 0
+/** Ankunft des aktuellen Prompts: ein "Weiter" in den ersten ms gilt als doppelter Tastendruck (Main 2 ueberspringen) */
+let promptAt = 0
+const PASS_GUARD_MS = 250
 const LOG_MAX = 600
 const REVEAL_MS = 12000
 /** schon gezeigte Aufdeckungen (pro Spiel), damit sie nach dem Schliessen nicht erneut aufpoppen */
@@ -130,7 +179,7 @@ export const useGame = create<GameStore>((set, get) => {
     switch (msg.t) {
       case 'hello':
         // nach einem Reconnect schickt die Engine Verlauf, State, offenen Prompt und ggf. "seat" erneut
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false })
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], chat: [], unreadChat: 0 })
         break
       case 'state': {
         const prev = get().state
@@ -147,6 +196,7 @@ export const useGame = create<GameStore>((set, get) => {
         const keep = msg.kind === 'SELECT' && msg.mode === 'attackers' ? msg.possibleAttackers : msg.kind === 'SELECT' && msg.mode === 'blockers' ? msg.possibleBlockers : undefined
         const marked = get().marked
         const nextMarked = marked.size && keep ? new Set([...marked].filter((id) => keep.includes(id))) : marked.size ? new Set<UUID>() : marked
+        promptAt = Date.now()
         set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null, marked: nextMarked })
         if (msg.kind !== 'SELECT' || msg.mode !== 'priority') sounds.play('prompt')
         break
@@ -157,6 +207,21 @@ export const useGame = create<GameStore>((set, get) => {
       case 'log': {
         const log = get().log.concat(msg.entries)
         set({ log: log.length > LOG_MAX ? log.slice(log.length - LOG_MAX) : log })
+        break
+      }
+      case 'events':
+        onEvents(msg.items)
+        break
+      case 'chat': {
+        const chat = get().chat.concat(msg.entries).slice(-CHAT_MAX)
+        const live = msg.entries.length === 1 && msg.entries[0].playerId !== get().hello?.myPlayerId
+        const unseen = live && !get().chatOpen
+        set({ chat, ...(unseen ? { unreadChat: get().unreadChat + 1 } : {}) })
+        if (unseen) {
+          const e = msg.entries[0]
+          pushToast('chat', [{ text: `${e.name}: ${e.text}` }])
+          sounds.play('prompt')
+        }
         break
       }
       case 'activity':
@@ -184,6 +249,45 @@ export const useGame = create<GameStore>((set, get) => {
       case 'error':
         pushToast('error', [{ text: msg.message }])
         break
+    }
+  }
+
+  /** Positionen sofort erfassen: der passende State kommt erst danach, der DOM zeigt noch die alte Lage. */
+  function onEvents(items: FxEvent[]) {
+    const now = Date.now()
+    const animate = get().fxEnabled && !reducedMotion()
+    const fxNew: FxItem[] = []
+    const recentNew: FxItem[] = []
+    for (const e of items) {
+      const item: FxItem = { ...e, key: ++fxSeq, at: now }
+      if (animate) {
+        if (e.kind === 'damage' || e.kind === 'life' || e.kind === 'counter') {
+          item.src = (e.objectId ? objCenter(e.objectId) : null) ?? (e.playerId ? anchorOf(e.playerId) : null) ?? undefined
+        } else if (e.kind === 'countered' || e.from === 'STACK') {
+          item.src = stackAnchor(e.objectId) ?? undefined
+          item.dst = zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.to) ?? 'graveyard') ?? undefined
+        } else {
+          item.src = (e.objectId ? objCenter(e.objectId) : null) ?? zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.from)) ?? undefined
+          item.dst = e.kind === 'tokenDied' ? item.src : (zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.to)) ?? undefined)
+        }
+        if (item.src) fxNew.push(item)
+      }
+      const strip = STRIP_KINDS.has(e.kind) || (e.kind === 'damage' && !e.objectId && (e.amount ?? 0) > 0) || (e.kind === 'life' && Math.abs(e.amount ?? 0) >= 3)
+      if (strip && !(e.hidden && !e.name)) recentNew.push(item)
+    }
+    if (fxNew.length) {
+      set({ fx: [...get().fx, ...fxNew].slice(-FX_MAX) })
+      window.setTimeout(() => {
+        const keys = new Set(fxNew.map((i) => i.key))
+        set({ fx: get().fx.filter((i) => !keys.has(i.key)) })
+      }, FX_MS)
+    }
+    if (recentNew.length) {
+      set({ recent: [...get().recent, ...recentNew].slice(-RECENT_MAX) })
+      window.setTimeout(() => {
+        const keys = new Set(recentNew.map((i) => i.key))
+        set({ recent: get().recent.filter((i) => !keys.has(i.key)) })
+      }, RECENT_MS)
     }
   }
 
@@ -258,11 +362,26 @@ export const useGame = create<GameStore>((set, get) => {
     seatConn: {},
     kickAfterMs: 60000,
     kick: (playerId) => send({ t: 'kick', playerId }),
+    chat: [],
+    unreadChat: 0,
+    chatOpen: false,
+    setChatOpen: (open) => set({ chatOpen: open, ...(open ? { unreadChat: 0 } : {}) }),
+    sendChat: (text) => {
+      const t = text.trim()
+      if (t) send({ t: 'chat', text: t.slice(0, 300) })
+    },
+    fx: [],
+    recent: [],
+    fxEnabled: loadBool('magelite.fx', true),
+    setFxEnabled: (on) => {
+      saveBool('magelite.fx', on)
+      set({ fxEnabled: on, ...(on ? {} : { fx: [] }) })
+    },
 
     connect: (gameId) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {} })
+      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, fx: [], recent: [], chat: [], unreadChat: 0 })
       open(gameId)
     },
     disconnect: () => {
@@ -276,6 +395,8 @@ export const useGame = create<GameStore>((set, get) => {
     answer: (a) => {
       const p = get().prompt
       if (!p || get().answeredPromptId === p.id) return
+      // Passen direkt nach einem neuen Prioritaets-Prompt: wohl noch der Tastendruck fuer den vorigen -> ignorieren
+      if (p.kind === 'SELECT' && p.mode === 'priority' && 'bool' in a && a.bool === false && Date.now() - promptAt < PASS_GUARD_MS) return
       set({ answeredPromptId: p.id })
       send({ t: 'respond', id: p.id, ...a })
     },
@@ -328,6 +449,24 @@ export const useGame = create<GameStore>((set, get) => {
       set({ answeredPromptId: p.id, marked: new Set() })
       send({ t: 'combat', ids, target })
     },
+    repeat: (abilityId, times) => {
+      const p = get().prompt
+      if (!p || get().answeredPromptId === p.id) return
+      set({ answeredPromptId: p.id })
+      send({ t: 'repeat', id: p.id, uuid: abilityId, times })
+    },
+    specialPay: (permId) => {
+      const p = get().prompt
+      if (!p || get().answeredPromptId === p.id) return
+      set({ answeredPromptId: p.id })
+      send({ t: 'specialPay', id: p.id, uuid: permId })
+    },
+    combatReset: () => {
+      const p = get().prompt
+      if (!p || get().answeredPromptId === p.id) return
+      set({ answeredPromptId: p.id, marked: new Set() })
+      send({ t: 'combatReset' })
+    },
     replacement: (mode, key, always) => {
       const p = get().prompt
       if (!p || get().answeredPromptId === p.id) return
@@ -341,7 +480,7 @@ export const useGame = create<GameStore>((set, get) => {
     },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false })
+      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, fx: [], recent: [], chat: [], unreadChat: 0 })
     },
   }
 })

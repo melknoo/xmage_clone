@@ -41,10 +41,13 @@ function ZoneButton({
   glow,
   onHover,
   children,
+  zone,
 }: {
   label: string
   icon: string
   count: number
+  /** Ankerzone fuer Animationen (data-zone) */
+  zone?: string
   onClick?: () => void
   glow?: string
   onHover?: (on: boolean) => void
@@ -56,6 +59,7 @@ function ZoneButton({
       onClick={onClick}
       disabled={!onClick}
       title={label}
+      data-zone={zone}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
     >
@@ -94,6 +98,7 @@ export function ZoneCounters({ p, onHover, inter }: { p: PlayerState; onHover: (
         <ZoneButton
           label={top ? `Bibliothek – oberste Karte: ${top.name}${p.topCardPrivate ? ' (nur für dich sichtbar)' : ' (aufgedeckt)'}` : 'Bibliothek'}
           icon="📚"
+          zone="library"
           count={p.library}
           onClick={top ? () => setView('lib') : undefined}
           glow={top ? zoneGlow([top], inter) : undefined}
@@ -101,9 +106,9 @@ export function ZoneCounters({ p, onHover, inter }: { p: PlayerState; onHover: (
         >
           {top && <span className={`text-[10px] ${p.topCardPrivate ? 'text-arcane-400' : 'text-gold-300'}`}>👁</span>}
         </ZoneButton>
-        <ZoneButton label="Hand" icon="✋" count={p.handCount} />
-        <ZoneButton label="Friedhof" icon="🪦" count={p.graveyard.length} onClick={p.graveyard.length ? () => setView('gy') : undefined} glow={zoneGlow(p.graveyard, inter)} />
-        <ZoneButton label="Exil" icon="🌀" count={p.exile.length} onClick={p.exile.length ? () => setView('ex') : undefined} glow={zoneGlow(p.exile, inter)} />
+        <ZoneButton label="Hand" icon="✋" zone="hand" count={p.handCount} />
+        <ZoneButton label="Friedhof" icon="🪦" zone="graveyard" count={p.graveyard.length} onClick={p.graveyard.length ? () => setView('gy') : undefined} glow={zoneGlow(p.graveyard, inter)} />
+        <ZoneButton label="Exil" icon="🌀" zone="exile" count={p.exile.length} onClick={p.exile.length ? () => setView('ex') : undefined} glow={zoneGlow(p.exile, inter)} />
         {p.counters?.map((c) => (
           <span key={c.name} className="rounded-md bg-purple-500/20 px-1.5 py-0.5 text-[11px] text-purple-200 ring-1 ring-purple-400/30" title={c.name}>
             {counterLabel(c.name)} {c.count}
@@ -147,7 +152,7 @@ function counterLabel(name: string): string {
 
 export function CommandZone({ objects, inter, onHover, size = 'sm' }: { objects: CommandObject[]; inter: Interaction; onHover: (c: Card | null) => void; size?: 'xs' | 'sm' | 'md' }) {
   return (
-    <div className="flex items-end gap-1.5">
+    <div className="flex items-end gap-1.5" data-zone="command">
       {objects.map((o) => {
         const card: Card = o.card ?? { id: o.id, name: o.name, set: o.set, num: o.num, rules: o.rules, image: o.image, imageNum: o.imageNum }
         const away = o.kind === 'commander-away'

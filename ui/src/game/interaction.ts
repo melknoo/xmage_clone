@@ -50,6 +50,7 @@ export function useInteraction(): Interaction {
   const marked = useGame((s) => s.marked)
   const toggleMarks = useGame((s) => s.toggleMarks)
   const combatMany = useGame((s) => s.combatMany)
+  const specialPay = useGame((s) => s.specialPay)
 
   return useMemo(() => {
     const active = prompt && answered !== prompt.id ? prompt : null
@@ -57,6 +58,8 @@ export function useInteraction(): Interaction {
     const playable = new Set(Object.keys(state?.playable ?? {}))
     const chosen = new Set(active?.chosen ?? [])
     let clickable = new Set<UUID>()
+    /** Mana-Prompt: per Klick einberufbare Kreaturen (ohne eigene Manafaehigkeit) */
+    let special = new Set<UUID>()
     let mode: Mode = 'none'
     let needsCardModal = false
     let modalCards: Card[] = []
@@ -100,7 +103,9 @@ export function useInteraction(): Interaction {
         case 'PLAY_MANA':
         case 'PLAY_X_MANA':
           mode = 'mana'
-          clickable = playable
+          // Kreatur mit Manafaehigkeit: lieber Mana (gleicher Wert, Laender bleiben nutzbar)
+          special = new Set((active.specialTargets ?? []).filter((id) => !playable.has(id)))
+          clickable = new Set([...playable, ...special])
           break
         default:
           mode = DIALOG_KINDS.has(active.kind) ? 'dialog' : 'none'
@@ -136,7 +141,7 @@ export function useInteraction(): Interaction {
         case 'priority':
           return actions.has(id) ? 'playable' : 'mana'
         case 'mana':
-          return 'playable'
+          return special.has(id) ? 'special' : 'playable'
         case 'target':
           return chosen.has(id) ? 'chosen' : 'target'
         case 'attack':
@@ -162,6 +167,10 @@ export function useInteraction(): Interaction {
           combatMany(id)
           return
         }
+        if (special.has(id)) {
+          specialPay(id)
+          return
+        }
         if (clickable.has(id)) answer({ uuid: id })
       },
       playerTargetable: (id: UUID) => ((mode === 'target' || mode === 'attack') && clickable.has(id)) || markTargets.has(id),
@@ -169,5 +178,5 @@ export function useInteraction(): Interaction {
       modalCards,
       marked: marks,
     }
-  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany])
+  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay])
 }

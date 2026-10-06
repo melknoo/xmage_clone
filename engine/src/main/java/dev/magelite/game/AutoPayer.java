@@ -129,6 +129,15 @@ public final class AutoPayer {
      * @return naechster Klick oder null, wenn nichts Sinnvolles moeglich ist
      */
     public static Step next(Game game, UUID playerId, String promptText, Collection<UUID> usable) {
+        return next(game, playerId, promptText, usable, false);
+    }
+
+    /**
+     * @param partial Teilzahlung (Rest per Sonderbezahlung wie Convoke): nicht bezahlbare Farben ueberspringen statt
+     *                aufzugeben, aber keine Quelle tappen, die nichts mehr beitraegt
+     * @return naechster Klick oder null, wenn nichts Sinnvolles moeglich ist
+     */
+    public static Step next(Game game, UUID playerId, String promptText, Collection<UUID> usable, boolean partial) {
         Cost cost = parseCost(promptText);
         if (cost.isEmpty()) {
             return null;
@@ -146,6 +155,9 @@ public final class AutoPayer {
             }
             int n = (int) sources.stream().filter(s -> canMake(s, e.getKey())).count();
             if (n == 0) {
+                if (partial) {
+                    continue; // zahlt die Sonderbezahlung
+                }
                 return null; // nicht bezahlbar -> manuell
             }
             if (n < bestCount) {
@@ -176,6 +188,9 @@ public final class AutoPayer {
             return pick == null ? null : new Step(pick.id(), col);
         }
         // 3) generisch: farblose / unflexible Quellen zuerst
+        if (partial && cost.generic() == 0) {
+            return null;
+        }
         Source pick = sources.stream().min((a, b) -> compare(a, b, cost)).orElse(null);
         if (pick == null) {
             return null;

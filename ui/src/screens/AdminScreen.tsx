@@ -8,6 +8,8 @@ interface Account {
   admin: boolean
   createdAt: number
   lastSeen: number | null
+  email: string | null
+  hasPassword: boolean
 }
 
 interface Created {
@@ -154,6 +156,7 @@ export function AdminScreen() {
             <thead className="bg-white/5 text-left text-xs uppercase tracking-wider text-ink-400">
               <tr>
                 <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Anmeldung</th>
                 <th className="px-4 py-2">Zuletzt gesehen</th>
                 <th className="px-4 py-2 text-right">Aktionen</th>
               </tr>
@@ -161,7 +164,7 @@ export function AdminScreen() {
             <tbody>
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-6 text-center text-ink-400">
+                  <td colSpan={4} className="px-4 py-6 text-center text-ink-400">
                     Noch keine Einladungen.
                   </td>
                 </tr>
@@ -173,6 +176,7 @@ export function AdminScreen() {
                     {a.admin && <span className="ml-2 rounded bg-gold-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-gold-300">Admin</span>}
                     {a.id === me?.id && <span className="ml-2 text-xs text-ink-400">(du)</span>}
                   </td>
+                  <td className="px-4 py-2 text-ink-300">{a.hasPassword ? <span title="Konto mit E-Mail + Passwort gesichert">{a.email}</span> : <span className="text-ink-400">Gast (nur Code)</span>}</td>
                   <td className="px-4 py-2 text-ink-300">{ago(a.lastSeen)}</td>
                   <td className="px-4 py-2 text-right">
                     {confirmDelete === a.id ? (

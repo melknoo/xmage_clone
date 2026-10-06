@@ -2,6 +2,7 @@ package dev.magelite.api;
 
 import dev.magelite.auth.AccountService;
 import dev.magelite.auth.InviteCodes;
+import dev.magelite.auth.Passwords;
 import dev.magelite.auth.User;
 import io.javalin.http.Context;
 import io.javalin.http.UnauthorizedResponse;
@@ -17,14 +18,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * Anmeldung pro Anfrage.
  * <ul>
  *   <li>Lokal: Zufallstoken (Header/Query) wie bisher; der Nutzer ist immer {@link User#LOCAL}.</li>
- *   <li>Server: Cookie {@value #COOKIE} mit dem Einladungscode; daraus SHA-256 -> Konto. Ohne gueltiges Cookie
- *       sind nur {@code /api/health} und {@code /api/auth/login} erreichbar.</li>
+ *   <li>Server: Session-Cookie {@value #SESSION_COOKIE} (Zufallstoken, SHA-256 in {@code sessions}); jeder Login
+ *       (Code oder E-Mail/Passwort) erzeugt eine Session. Uebergangsweise gilt auch noch das alte Cookie
+ *       {@value #COOKIE} mit dem Einladungscode. Ohne gueltiges Cookie sind nur {@code /api/health} und
+ *       {@code /api/auth/login} erreichbar.</li>
  * </ul>
  */
 public final class Auth {
 
+    /** Legacy: Einladungscode im Cookie (vor den Sessions) */
     public static final String COOKIE = "ml_code";
+    public static final String SESSION_COOKIE = "ml_sess";
     public static final String ATTR = "user";
+    /** Request-Attribut: Hash des Session-Tokens (fuer Logout / "andere Sessions beenden") */
+    public static final String SESSION_ATTR = "sessHash";
     private static final int LOGIN_LIMIT = 10;
     private static final long LOGIN_WINDOW_MS = 60_000;
 
@@ -57,9 +64,12 @@ public final class Auth {
         if (p.equals("/api/health") || p.equals("/api/auth/login")) {
             return;
         }
-        User u = resolve(ctx.cookie(COOKIE)).orElseThrow(() -> new UnauthorizedResponse("login"));
+        String sess = ctx.cookie(SESSION_COOKIE);
+        User u = resolve(sess, ctx.cookie(COOKIE)).orElseThrow(() -> new UnauthorizedResponse("login"));
         ctx.attribute(ATTR, u);
-        accounts.touch(u.id());
+        String sessHash = sess == null || sess.isBlank() ? null : Passwords.tokenHash(sess);
+        ctx.attribute(SESSION_ATTR, sessHash);
+        accounts.touch(u.id(), sessHash);
     }
 
     /** Nutzer der Anfrage; lokal immer Nutzer 1. */
@@ -68,8 +78,22 @@ public final class Auth {
         return u == null ? User.LOCAL : u;
     }
 
-    /** Konto zu einem Einladungscode (Server-Modus). Lokal immer {@link User#LOCAL}. */
-    public Optional<User> resolve(String code) {
+    /** Nutzer zu den Cookies (Server-Modus): Session zuerst, sonst Legacy-Code. Lokal immer {@link User#LOCAL}. */
+    public Optional<User> resolve(String sessionToken, String code) {
+        if (!config.server()) {
+            return Optional.of(User.LOCAL);
+        }
+        if (sessionToken != null && !sessionToken.isBlank()) {
+            Optional<User> u = accounts.bySession(Passwords.tokenHash(sessionToken));
+            if (u.isPresent()) {
+                return u;
+            }
+        }
+        return byCode(code);
+    }
+
+    /** Konto zu einem Einladungscode (Login bzw. Legacy-Cookie). */
+    public Optional<User> byCode(String code) {
         if (!config.server()) {
             return Optional.of(User.LOCAL);
         }

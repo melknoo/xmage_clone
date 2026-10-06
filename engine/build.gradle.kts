@@ -101,6 +101,19 @@ tasks.register<JavaExec>("blockerSpike") {
     doFirst { runDir.asFile.mkdirs() }
 }
 
+// Regressionstest: Thread.interrupt() mitten in CardRepository.getNames() darf die Karten-DB nicht kaputt machen
+// (Demonic-Consultation-Absturz; braucht unsere DatabaseUtils mit H2 retry:). Bewusst nicht Teil von `test`.
+tasks.register<JavaExec>("dbInterruptSpike") {
+    group = "magelite"
+    description = "Karten-DB ueberlebt Thread-Interrupt waehrend einer Abfrage (DatabaseUtils retry:)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.magelite.spike.DbInterruptSpike")
+    jvmArgs = jvmArgsCommon
+    workingDir = runDir.asFile
+    args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
+    doFirst { runDir.asFile.mkdirs() }
+}
+
 // KI-Vergleich: zwei Bot-Varianten (je 2 Sitze) spielen gegeneinander, Ergebnis + CSV in run/arena
 tasks.register<JavaExec>("botArena") {
     group = "magelite"

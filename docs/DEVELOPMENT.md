@@ -62,10 +62,14 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 | Prompt-API-Stresstest | `.\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32 --verbose"` | „0 fehlgeschlagen“, keine STALLs |
 | REST + WS End-to-End | Dev-Engine starten, dann `node scripts\e2e-flow.mjs https://archidekt.com/decks/7031486` | Spielende mit `reward` |
 | Server-Modus (Konten) | `gradlew runServer`, dann `node scripts\e2e-login.mjs` | „alles gruen“ (Login, Cookie, Nutzertrennung, 409, Rotieren, Rate-Limit) |
-| Mehrere Menschen (Routing) | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=2"` (auch `--humans=4`) | „0 fehlgeschlagen“, jeder Sitz bekommt Prompts und `gameOver` |
+| Mehrere Menschen (Routing) | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=2"` (auch `--humans=4`) | „0 fehlgeschlagen“, jeder Sitz bekommt Prompts und `gameOver`; Zeile „Ereignisse (events)“ ohne „verdeckte Karten an Fremde“ |
+| Szenarien | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=8 --scenario=necro"` (auch `gemstone --turnCap=4`, `swarm --turnCap=24`, `dredge`) | „Necro x5: OK“, „Starthand-Aktion (Gemstone): OK“, „Mehrfach-Angriff: OK“ + „Angriff zuruecksetzen: OK“ |
+| Karten-DB vs. Interrupt | `.\gradlew.bat dbInterruptSpike` | „retry-FS=aktiv … 0 KAPUTT -> OK“ (Demonic-Consultation-Absturz; nicht Teil von `test`) |
 | Mehrere Menschen (REST+WS) | `gradlew runServer`, dann `node scripts\e2e-online.mjs` | „alles gruen“ (2 Cookies, 2 Autopiloten, Aufgeben einzeln, reward + `games`-Zeile je Nutzer) |
 | Lobby/Tische | `gradlew runServer`, dann `node scripts\e2e-tables.mjs` | „alles gruen“ (Tisch eröffnen/beitreten, Decks, Bot-Platz, Start mit 3 Spielern, Revanche, schließen, 409-Fälle) |
 | Server-UI visuell | `runServer` + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-server.json` in `desktop/` | `engine/run/shot-server-*.png` (Login, Einladungen, Spiel) |
+| Szenario-Screenshots | Dev-Engine + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-<necro\|attack-undo\|gemstone\|fx\|modal-hover\|convoke\|pass-ui>.json` | `engine/run/necro-*.png`, `attack-*.png`, `gemstone-*.png`, `fx-*.png`, `modal-hover-*.png`, `convoke-*.png` (Weiter-Ziel, X, Einberufen), `pass-*.png` (F9 + Stopp, Startfehler, Login-Auge) |
+| Design-Screenshots (alle Screens) | Dev-Engine + `npm run dev`: `tools\steps-design-<splash\|meta\|game\|swarm\|necro\|dredge\|gemstone\|minsize>.json`; danach `runServer` + `node tools\design-mate.mjs` (zweiter Mensch) parallel zu `tools\steps-design-server.json` | `design/claude-design/screenshots/*.png`, Übersicht in `INDEX.md`; für Vorher/Nachher-Vergleiche beim Redesign |
 | UI visuell | siehe unten | Screenshots ansehen |
 
 Spike-Argumente: `--games --turnCap --tempo=BLITZ|NORMAL|BEDACHT|MAX --fastOpp=true|false --seed --verbose

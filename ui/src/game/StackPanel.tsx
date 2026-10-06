@@ -21,6 +21,7 @@ function sameAbility(a: Card, b: Card): boolean {
     b.kind === 'ability' &&
     a.name === b.name &&
     a.controllerId === b.controllerId &&
+    a.x === b.x &&
     (a.rules?.[0] ?? '') === (b.rules?.[0] ?? '') &&
     !a.targetRefs?.length &&
     !b.targetRefs?.length
@@ -175,6 +176,11 @@ function Origin({ c, who }: { c: Card; who: { name: string; me: boolean } | null
       <span className="text-ink-300">{c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'}</span>
       {who && (
         <span className={`rounded px-1 font-semibold ${who.me ? 'bg-arcane-500/15 text-arcane-400' : 'bg-white/5 text-ink-200'}`}>{who.name}</span>
+      )}
+      {c.x != null && (
+        <span className="rounded bg-gold-400 px-1.5 font-bold text-ink-950" title="Angesagter Wert für X">
+          X = {c.x}
+        </span>
       )}
     </div>
   )

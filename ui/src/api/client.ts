@@ -56,7 +56,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data: any = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // z.B. HTML-Fehlerseite des fly-Proxys waehrend eines Neustarts
+    throw new ApiError(res.ok ? 'Unerwartete Antwort vom Server' : `Server nicht erreichbar (${res.status}) – bitte gleich nochmal versuchen`, res.status)
+  }
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
     throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status, data)

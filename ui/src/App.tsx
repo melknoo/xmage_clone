@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useState } from 'react'
 import { api, endpoint } from './api/client'
 import { GameScreen } from './game/GameScreen'
+import { AccountScreen } from './screens/AccountScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { DecksScreen } from './screens/DecksScreen'
 import { HomeScreen } from './screens/HomeScreen'
@@ -48,7 +49,6 @@ export function App() {
   const authStatus = useAuth((s) => s.status)
   const mode = useAuth((s) => s.mode)
   const me = useAuth((s) => s.me)
-  const logout = useAuth((s) => s.logout)
   const [engine, setEngine] = useState<'wait' | 'ok' | 'down'>('wait')
 
   // Engine erreichbar? Angemeldet? Laufendes Spiel wieder aufnehmen?
@@ -108,7 +108,8 @@ export function App() {
         }
       })
       .catch(() => {
-        /* kein laufendes Spiel */
+        // kein laufendes Spiel: kam der Freund ueber einen Tisch-Link (#table=...) und musste sich erst anmelden?
+        if (!stop && /table=/.test(window.location.hash)) void resumeTable(false)
       })
     return () => {
       stop = true
@@ -163,12 +164,13 @@ export function App() {
         )}
         {mode === 'server' && (
           <button
-            className={`${gameId ? '' : 'mt-auto '}flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold text-ink-400 transition hover:bg-white/5 hover:text-ink-100`}
-            onClick={() => logout()}
-            title={me ? `Angemeldet als ${me.name}` : undefined}
+            className={`${gameId ? '' : 'mt-auto '}relative flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === 'account' ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-400 hover:bg-white/5 hover:text-ink-100'}`}
+            onClick={() => go('account')}
+            title={me ? `Angemeldet als ${me.name}${me.hasPassword ? '' : ' (Gast – Konto sichern)'}` : undefined}
           >
-            <span className="text-xl">⎋</span>
-            Abmelden
+            <span className="text-xl">👤</span>
+            <span className="max-w-full truncate px-1">{me?.name ?? 'Konto'}</span>
+            {me && !me.hasPassword && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-gold-400" title="Gast – Konto noch nicht gesichert" />}
           </button>
         )}
       </nav>
@@ -182,6 +184,7 @@ export function App() {
             {screen === 'decks' && <DecksScreen />}
             {screen === 'stats' && <StatsScreen />}
             {screen === 'admin' && <AdminScreen />}
+            {screen === 'account' && <AccountScreen />}
           </motion.div>
         </AnimatePresence>
       </main>

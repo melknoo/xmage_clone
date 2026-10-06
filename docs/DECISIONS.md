@@ -55,13 +55,21 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   Zielabfragen (`GameHost.continueMacro`). Bei allem Unerwarteten (Kosten, Ziel nicht wählbar) bricht sie ab und
   zeigt den Prompt. Sie antwortet nie mit „Abbrechen“, weil XMage bei Pflicht-Zielen sonst endlos neu fragt.
 
-- **Auto-Passen**: Prioritäts-Prompt ohne Nicht-Mana-Aktion → Engine antwortet selbst „passen“. Dazu Stopps nur in
-  eigenen Hauptphasen, bei Angriffen/Blocks und neuen Stapelobjekten, Auto-Pass nach eigenem Zauber
-  (`HumanSettings`).
+- **Auto-Passen**: Prioritäts-Prompt ohne Nicht-Mana-Aktion → Engine antwortet selbst „passen“. Dazu Stopps in
+  eigenen Hauptphasen, in der **Endphase jedes Gegners**, bei Angriffen/Blocks und neuen Stapelobjekten, Auto-Pass
+  nach eigenem Zauber (`HumanSettings`). **Eigene Main 1/Main 2 halten immer** (Nutzerwunsch 2026-10-06: Main 2
+  wurde sonst still übersprungen, wenn `getPlayable` nichts fand). Die gegnerische Endphase hält nur, wenn etwas
+  Spontanes spielbar ist – sonst würde das Abbrechen von F9 nichts bringen. „Weiter“ zeigt im eigenen Zug das Ziel
+  (`NextStop`, Kampf nur mit möglichen Angreifern; XMages `getAvailableAttackers(game)` ist vor Kampfbeginn leer,
+  deshalb pro Gegner). F-Tasten-Passen ist jederzeit abbrechbar (F3, „Stopp“-Knopf, „Passen manuell“).
 - **Auto-Mana** (`AutoPayer`): XMage lässt jede Manaquelle einzeln anklicken. Der Planer wird pro Schritt neu
   berechnet (Restkosten aus dem Prompt-Text „Pay {…}“): zuerst die am stärksten eingeschränkte Farbe mit der
   unflexibelsten passenden Quelle, generisch zuletzt. Farbwahl- und Fähigkeits-Dialoge beantwortet er passend.
   Bei Stillstand oder Unbezahlbarkeit zeigt er den normalen Prompt.
+- **Convoke & Co.** (`SpecialPay`): XMage bietet Sonderbezahlung nur über die Antwort „special“ an (kein Knopf in
+  den Optionen). Nach dem ersten Einberufen sind Länder für diesen Zauber gesperrt – deshalb startet Auto-Mana bei
+  möglicher Sonderbezahlung **nicht** von selbst; „Länder automatisch“ zahlt nur mit Manaquellen (Teilzahlung), Klick
+  auf eine leuchtende Kreatur beruft sie ein (Makro: Aktion → Kreatur → Farbe nach Engpass).
 - **Statistik über einen feldlosen `StatsWatcher` + statischen `StatsSink`**, weil XMage Watcher für
   KI-Simulationen kopiert und ersetzt.
 - **XP-Formel** (`GameRecorder`):

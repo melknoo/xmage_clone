@@ -8,17 +8,18 @@ import { viewerOpen } from '../components/Modal'
 import { sounds } from '../lib/sounds'
 import { Battlefield } from './Battlefield'
 import { CombatOverlay } from './CombatOverlay'
+import { FxLayer } from './FxLayer'
 import { GameOverOverlay } from './GameOverOverlay'
 import { Hand } from './Hand'
 import { useInteraction, type Interaction } from './interaction'
 import { OpponentPod } from './OpponentPod'
 import { PhaseBar } from './PhaseBar'
 import { CommandZone, CommanderDamage, LifeBadge, ManaPool, ZoneCounters, commanderArt } from './PlayerInfo'
-import { HOTKEY_ACTIONS, usePromptButtons } from './promptActions'
+import { HOTKEY_ACTIONS, SKIP_LABEL, usePromptButtons } from './promptActions'
 import { PauseMenu } from './PauseMenu'
 import { PromptBar } from './PromptBar'
 import { PromptDialogs } from './PromptDialogs'
-import { LogPanel, RevealPopups, Toasts, ZoomPanel, type LogFilter } from './Side'
+import { ChatPanel, LogPanel, RevealPopups, Toasts, ZoomPanel, type LogFilter } from './Side'
 import { StackPanel } from './StackPanel'
 import { TargetOverlay } from './TargetOverlay'
 
@@ -39,6 +40,12 @@ export function GameScreen() {
   const menuOpen = useGame((s) => s.menuOpen)
   const inter = useInteraction()
   const [showLog, setShowLog] = useState(true)
+  const [side, setSide] = useState<'log' | 'chat'>('log')
+  const humans = useGame((s) => s.hello?.seats.filter((x) => x.human).length ?? 1)
+  const unreadChat = useGame((s) => s.unreadChat)
+  const setChatOpen = useGame((s) => s.setChatOpen)
+  const chatAvailable = humans >= 2
+  useEffect(() => setChatOpen(chatAvailable && showLog && side === 'chat'), [chatAvailable, showLog, side, setChatOpen])
   const [stackFocus, setStackFocus] = useState<string | null>(null)
   const [logFilter, setLogFilter] = useLogFilter()
   const onHover = useCallback((c: Card | null) => setHover(c), [setHover])
@@ -62,7 +69,7 @@ export function GameScreen() {
   const [left, top, right] = [opps[0], opps[1], opps[2]]
 
   return (
-    <div className="bg-table relative flex h-full w-full overflow-hidden">
+    <div className="bg-table relative flex h-full w-full overflow-hidden" style={{ ['--modal-inset-right' as string]: '320px' }}>
       <div className="flex min-w-0 flex-1 flex-col gap-2 p-2">
         <TopBar />
         {/* Gegner */}
@@ -84,15 +91,33 @@ export function GameScreen() {
 
       {/* Seitenleiste */}
       <div className="flex w-[320px] shrink-0 flex-col gap-2 border-l border-white/5 bg-ink-950/40 p-2">
-        <div className="shrink-0">
+        {/* z-[55]: ueber dem Modal-Overlay (z-50), damit die Vorschau auch bei offenem Dialog lesbar bleibt */}
+        <div className="relative z-[55] shrink-0">
           <ZoomPanel card={hover} />
         </div>
         <div className={`glass flex flex-col overflow-hidden rounded-xl ${showLog ? 'min-h-[180px] flex-1' : 'h-9'}`}>
           <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5">
-            <button className="flex flex-1 items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-300 hover:text-ink-100" onClick={() => setShowLog(!showLog)}>
-              <span>{showLog ? '▾' : '▸'}</span> Spielverlauf
+            <button className={`flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink-300 hover:text-ink-100 ${chatAvailable ? '' : 'flex-1'}`} onClick={() => setShowLog(!showLog)}>
+              <span>{showLog ? '▾' : '▸'}</span> {chatAvailable ? '' : 'Spielverlauf'}
             </button>
-            {showLog && (
+            {chatAvailable && (
+              <div className="flex flex-1 items-center gap-0.5 rounded-md bg-ink-950/60 p-0.5 ring-1 ring-white/10">
+                {(['log', 'chat'] as const).map((t) => (
+                  <button
+                    key={t}
+                    className={`relative rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${side === t && showLog ? 'bg-ink-600 text-ink-100' : 'text-ink-400 hover:text-ink-200'}`}
+                    onClick={() => {
+                      setSide(t)
+                      setShowLog(true)
+                    }}
+                  >
+                    {t === 'log' ? 'Verlauf' : 'Chat'}
+                    {t === 'chat' && unreadChat > 0 && <span className="ml-1 rounded-full bg-gold-400 px-1.5 text-[9px] font-bold text-ink-950">{unreadChat}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+            {showLog && side === 'log' && (
               <div className="flex items-center gap-0.5 rounded-md bg-ink-950/60 p-0.5 ring-1 ring-white/10" title="Routine (Ziehen, Zugbeginn …) ausblenden">
                 {(['important', 'all'] as const).map((f) => (
                   <button
@@ -107,9 +132,7 @@ export function GameScreen() {
             )}
           </div>
           {showLog && (
-            <div className="min-h-0 flex-1">
-              <LogPanel filter={logFilter} />
-            </div>
+            <div className="min-h-0 flex-1">{chatAvailable && side === 'chat' ? <ChatPanel /> : <LogPanel filter={logFilter} />}</div>
           )}
         </div>
       </div>
@@ -118,6 +141,7 @@ export function GameScreen() {
       {menuOpen && !gameOver && <PauseMenu logFilter={logFilter} setLogFilter={setLogFilter} />}
       <CombatOverlay combat={state.combat} seq={state.seq} />
       <TargetOverlay stack={state.stack} focusId={stackFocus} seq={state.seq} />
+      <FxLayer />
       <PromptDialogs inter={inter} onHover={onHover} />
       <RevealPopups />
       <Toasts />
@@ -282,7 +306,7 @@ function MyArea({ me, inter, onHover, hand }: { me: PlayerState; inter: Interact
           <ZoneCounters p={me} onHover={onHover} inter={inter} />
           <CommanderDamage dmg={me.commanderDamage} />
           <ManaPool mana={me.mana} onClick={manaClick} />
-          {me.skips && me.skips.length > 0 && <div className="rounded bg-arcane-500/15 px-1.5 py-0.5 text-[10px] text-arcane-400">⏩ Auto-Passen aktiv (F3 stoppt)</div>}
+          {me.skips && me.skips.length > 0 && <SkipBadge skips={me.skips} />}
           <div className="mt-auto">
             <CommandZone objects={me.command} inter={inter} onHover={onHover} size="md" />
           </div>
@@ -291,10 +315,24 @@ function MyArea({ me, inter, onHover, hand }: { me: PlayerState; inter: Interact
           <Battlefield perms={me.battlefield} size="md" inter={inter} onHover={onHover} />
         </div>
       </div>
-      <div className="h-[150px] shrink-0">
+      <div className="h-[150px] shrink-0" data-zone="hand" data-owner={me.id}>
         <Hand cards={hand} inter={inter} onHover={onHover} />
       </div>
     </div>
+  )
+}
+
+/** Laufendes F-Tasten-Passen: Klick = abbrechen (wie F3) */
+function SkipBadge({ skips }: { skips: string[] }) {
+  const action = useGame((s) => s.action)
+  return (
+    <button
+      className="rounded bg-arcane-500/15 px-1.5 py-0.5 text-left text-[10px] text-arcane-400 ring-1 ring-arcane-400/30 hover:bg-arcane-500/25"
+      title="Klick oder F3: automatisches Passen beenden"
+      onClick={() => action('PASS_PRIORITY_CANCEL_ALL_ACTIONS')}
+    >
+      ⏭ {SKIP_LABEL[skips[0]] ?? 'Passe automatisch'} · ⏹ F3
+    </button>
   )
 }
 
@@ -337,6 +375,8 @@ function useHotkeys(inter: Interaction) {
       const a = HOTKEY_ACTIONS[e.key]
       if (a) {
         e.preventDefault()
+        // F10 bei leerem Stapel: XMage ignoriert es (Engine lehnt ab) - gar nicht erst senden
+        if (a === 'PASS_PRIORITY_UNTIL_STACK_RESOLVED' && (useGame.getState().state?.stack.length ?? 0) === 0) return
         action(a)
       }
     }

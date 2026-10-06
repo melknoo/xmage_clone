@@ -1,0 +1,19 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1700,
+  "height": 1000,
+  "timeout": 300000,
+  "steps": [
+    { "waitFor": "#root div", "timeout": 60000 },
+    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
+    { "wait": 5000 },
+    { "jsFile": "autoplay.js" },
+    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();if(g.recent.length>=1){clearInterval(t);r('Ereignisse: '+g.recent.map(e=>e.kind+':'+(e.name||e.amount)).join(', '))}},100);setTimeout(()=>{clearInterval(t);r('Timeout: keine Ereignisse')},180000)})" },
+    { "shot": "../../engine/run/fx-1-strip.png" },
+    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();if(g.fx.length>=1){clearInterval(t);r('Animation: '+g.fx.map(e=>e.kind+':'+(e.name||e.amount)).join(', '))}},50);setTimeout(()=>{clearInterval(t);r('Timeout: keine Animation')},120000)})" },
+    { "shot": "../../engine/run/fx-2-ghost.png" },
+    { "wait": 20000 },
+    { "js": "(()=>{const g=window.__ml.game.getState();return 'recent='+g.recent.length+' fx='+g.fx.length+' Zug '+(g.state&&g.state.turn)})()" },
+    { "shot": "../../engine/run/fx-3-later.png" }
+  ]
+}

@@ -53,7 +53,7 @@ ok(r.status === 200 && r.json?.gameId === gameId, `Bob sieht das Spiel als sein 
 
 /** Autopilot: spielt Laender, passt sonst; zaehlt Nachrichten. */
 function pilot(name, cookie) {
-  const st = { name, hello: null, last: null, over: null, prompts: 0, foreignPrompts: 0, states: 0, waitingFor: new Set(), closeCode: null, ws: null }
+  const st = { name, hello: null, last: null, over: null, prompts: 0, foreignPrompts: 0, states: 0, waitingFor: new Set(), closeCode: null, ws: null, chat: [], chatBundles: 0 }
   // Origin wie ein Browser mitschicken: der Server prueft ihn im Server-Modus (ausser --dev)
   const ws = new WebSocket(`${base.replace(/^http/, 'ws')}/ws/game/${gameId}`, { headers: { Cookie: cookie, Origin: base } })
   st.ws = ws
@@ -71,6 +71,10 @@ function pilot(name, cookie) {
     if (m.t === 'status' && m.waitingFor) st.waitingFor.add(m.waitingFor)
     if (m.t === 'seat') st.seat = m
     if (m.t === 'seats') st.seats = m.seats
+    if (m.t === 'chat') {
+      st.chat.push(...m.entries)
+      if (m.entries.length > 1) st.chatBundles++
+    }
     if (m.t === 'gameOver') st.over = m
     if (m.t !== 'prompt') return
     st.prompts++
@@ -129,6 +133,19 @@ console.log(`     Zug ${A.last?.turn ?? '?'} nach 90 s`)
 
 // Bobs Verbindung bricht ab (Tab zu) -> Owner sieht "getrennt"; zu frueh "aufgeben lassen" wird abgelehnt,
 // nach der Dev-Grenze (runServer: 5 s, Produktion 60 s) klappt es -> Bobs Sitz gibt auf, Spiel laeuft fuer Owner weiter
+// Chat: Owner -> Bob, Kuerzung auf 300 Zeichen, Rate-Limit 5/5 s, leere Nachricht verworfen
+A.ws.send(JSON.stringify({ t: 'chat', text: 'hi Bob' }))
+await sleep(600)
+ok(B.chat.length === 1 && B.chat[0].text === 'hi Bob' && B.chat[0].name === 'Owner', `Chat kommt bei Bob an (${B.chat.length}: ${B.chat[0]?.name}: ${B.chat[0]?.text})`)
+ok(A.chat.length === 1, `Chat-Echo beim Absender (${A.chat.length})`)
+B.ws.send(JSON.stringify({ t: 'chat', text: 'x'.repeat(350) }))
+await sleep(600)
+ok(A.chat.length === 2 && A.chat[1].text.length === 300, `lange Nachricht auf 300 gekuerzt (${A.chat[1]?.text.length})`)
+A.ws.send(JSON.stringify({ t: 'chat', text: '   ' }))
+for (let i = 0; i < 7; i++) A.ws.send(JSON.stringify({ t: 'chat', text: `burst ${i}` }))
+await sleep(800)
+ok(B.chat.length === 6, `Rate-Limit: Bob hat ${B.chat.length} Nachrichten (1 + 1 + max. 4 weitere vom Owner in 5 s, leere verworfen)`)
+
 const bobPid = B.hello?.myPlayerId
 B.ws.close()
 await sleep(1500)
@@ -147,6 +164,7 @@ ok(connB && connB.conceded === true, `nach der Grenze: Bob aufgegeben lassen (co
 const B2 = pilot('Bob', bob)
 await sleep(2500)
 ok(B2.seat?.conceded === true, `Bob nach Reconnect: seat conceded=${B2.seat?.conceded}`)
+ok(B2.chatBundles === 1 && B2.chat.length === 6, `Chat-Verlauf nach Reconnect als Buendel (${B2.chatBundles} Buendel, ${B2.chat.length} Zeilen)`)
 ok(B2.last?.players?.find((p) => p.id === bobPid)?.lost === true, 'Bob ist im State als ausgeschieden markiert')
 ok(!A.seat, 'Owner bekam keine seat-Nachricht (nicht aufgegeben)')
 B.over = null

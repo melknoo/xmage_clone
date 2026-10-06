@@ -10,6 +10,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Stellt die XMage-Karten-DB bereit, ohne bei jedem Start alle Karten zu scannen.
@@ -59,8 +62,60 @@ public final class CardDbManager {
             CardScanner.scanned = true; // verhindert spaetere Scans durch XMage-Code
         }
 
+        warmNames(repo);
+        checkRetryFs();
+
         LOG.info("Karten-DB bereit: oeffnen " + (tOpen - t0) + " ms, gesamt " + (System.currentTimeMillis() - t0)
                 + " ms (" + repo.name() + "/" + expansions.name() + ")");
         return scanned;
+    }
+
+    /**
+     * Laedt alle Kartennamen-Listen in den statischen Cache von {@link CardRepository}.
+     * <p>
+     * Hintergrund: XMage cacht diese Listen erst nach einer <em>erfolgreichen</em> Abfrage. Fragt eine
+     * KI-Simulation (z.B. Demonic Consultation) sie zum ersten Mal ab und wird dabei per Timeout unterbrochen,
+     * schliesst Java den H2-Dateikanal ({@code ClosedByInterruptException}), die Liste bleibt leer und
+     * {@code ChooseACardNameEffect} wirft spaeter "Critical error, can't find card names in database".
+     * Vorgeladen fasst waehrend des Spiels niemand mehr die DB fuer Namenslisten an.
+     */
+    public static void warmNames(CardRepository repo) {
+        long t0 = System.currentTimeMillis();
+        List<Supplier<Set<String>>> lists = List.of(
+                repo::getNames, repo::getLandNames, repo::getNonLandNames, repo::getNonbasicLandNames,
+                repo::getNotBasicLandNames, repo::getCreatureNames, repo::getArtifactNames,
+                repo::getNonLandAndNonCreatureNames, repo::getNonArtifactAndNonLandNames);
+        int total = 0;
+        int empty = 0;
+        for (Supplier<Set<String>> s : lists) {
+            Set<String> names = s.get();
+            total += names.size();
+            if (names.isEmpty()) {
+                empty++;
+            }
+        }
+        String msg = "Kartennamen vorgeladen: " + lists.size() + " Listen, " + total + " Eintraege, "
+                + (System.currentTimeMillis() - t0) + " ms";
+        if (empty > 0) {
+            LOG.error(msg + " - " + empty + " Liste(n) LEER, Karten-DB vermutlich defekt");
+        } else {
+            LOG.info(msg);
+        }
+    }
+
+    /**
+     * Prueft, ob unsere Ersatzklasse {@code mage.cards.repository.DatabaseUtils} (H2 mit {@code retry:}-Dateisystem,
+     * das unterbrochene Dateizugriffe wiederholt statt den Kanal zu schliessen) vor den XMage-Jars auf dem
+     * Classpath liegt (Regel 10 in CLAUDE.md).
+     */
+    public static boolean checkRetryFs() {
+        boolean ok = mage.cards.repository.DatabaseUtils.prepareH2Connection("x", false).startsWith("jdbc:h2:retry:");
+        if (ok) {
+            LOG.info("Karten-DB: interrupt-sicherer Dateizugriff aktiv (DatabaseUtils retry:)");
+        } else {
+            LOG.warn("Karten-DB: XMage-DatabaseUtils aktiv (Engine-Jar nicht vor den XMage-Jars?) - "
+                    + "ein Bot-Timeout waehrend eines DB-Zugriffs kann die DB bis zum Neustart kaputt machen");
+        }
+        return ok;
     }
 }

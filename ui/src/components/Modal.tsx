@@ -76,7 +76,7 @@ export function Modal({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-6 backdrop-blur-sm"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-ink-950/70 p-6 pr-[var(--modal-inset-right,1.5rem)] backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

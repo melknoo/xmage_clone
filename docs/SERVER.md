@@ -20,8 +20,11 @@ Browser ──HTTPS/WSS──▶ fly-proxy (TLS, Auto-Start/Stop) ──▶ Masc
 ```
 
 - Dieselbe Engine wie lokal, Flag `--server`: bindet `0.0.0.0`, kein Zufallstoken, kein Parent-Watchdog.
-- **Anmeldung per Einladungscode.** Der Code steht nach dem Login in einem Cookie (`ml_code`, HttpOnly, 1 Jahr);
-  in der DB liegt nur der SHA-256. Ohne Cookie sind nur Startseite, `/api/health` und `/api/auth/login` erreichbar.
+- **Anmeldung per Einladungscode oder E-Mail + Passwort.** Jeder Login erzeugt eine Session (Tabelle `sessions`,
+  Cookie `ml_sess` mit Zufallstoken, HttpOnly, 1 Jahr; in der DB nur der SHA-256). Ein Konto ist zunächst „Gast“
+  (nur Code); unter **Konto** kann der Nutzer E-Mail + Passwort setzen (PBKDF2) und sich danach auch damit anmelden.
+  Der Code bleibt gültig – es gibt keinen Mailversand, „Passwort vergessen“ heißt: Gastgeber erzeugt einen neuen
+  Code. Ohne Cookie sind nur Startseite, `/api/health` und `/api/auth/login` erreichbar.
 - **Konten:** Nutzer 1 = der lokale Held (hat keinen Code), Nutzer 2 = Owner (Admin) aus den fly-Secrets, weitere
   per „Einladungen“ in der UI. `decks`, `games`, `xp_ledger`, `profile` sind pro Nutzer getrennt.
 - **Kostenbremse:** fly stoppt die Maschine ohne Verbindungen; zusätzlich beendet sich die Engine selbst, wenn
@@ -77,14 +80,19 @@ mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --r
 2. Links **Einladungen** → Name eintragen → „Anlegen“. Der Code erscheint **einmalig**; „Link kopieren“ erzeugt
    `https://<app>.fly.dev/#invite=XXXX-XXXX-XXXX-XXXX`.
 3. Der Freund öffnet den Link und ist angemeldet (ein Jahr, pro Browser). Code von Hand eintippen geht auch.
+   Die Startseite schlägt vor, das Konto mit E-Mail + Passwort zu sichern („Als Gast weiterspielen“ ist ok).
 4. „Neuer Code“ macht den alten sofort ungültig (offene Verbindungen werden getrennt). „Entfernen“ löscht Konto,
    Held und Decks; Spiele bleiben in der Statistik-Tabelle.
 
 Text für Freunde:
 
-> Hier kannst du dein Commander-Deck gegen drei Bots testen, direkt im Browser: *Link*. Deck importieren geht mit
-> einem Archidekt-Link oder einer Textliste (Moxfield: Text-Export einfügen). Es kann immer nur einer gleichzeitig
-> spielen – wenn „Gerade spielt …“ kommt, kurz warten. Dein Held, deine Decks und deine Statistik gehören nur dir.
+> Hier kannst du dein Commander-Deck gegen drei Bots testen, direkt im Browser am PC/Laptop (Chrome, Edge oder
+> Firefox; Handy/Tablet geht nicht gut): *Link*. Der Link ist dein persönlicher Login – bitte nicht weitergeben.
+> Unter „Konto“ kannst du E-Mail + Passwort setzen, dann kommst du auch ohne Link wieder rein.
+> Deck importieren geht mit einem Archidekt-Link oder einer Textliste (Moxfield: Text-Export einfügen); ohne
+> eigenes Deck gibt es fertige Decks. Es kann immer nur **ein Spiel gleichzeitig** laufen – wenn „Gerade spielt …“
+> kommt, kurz warten. Der erste Aufruf nach einer Pause dauert ein paar Sekunden (Server startet).
+> Dein Held, deine Decks und deine Statistik gehören nur dir. Bugs/Ideen gern direkt an mich.
 
 ## Kosten (Preisliste 05.10.2026, Region fra)
 
@@ -126,7 +134,10 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
 
 - Öffentlich ohne Code: nur Startseite, `/api/health`, `/api/auth/login` (Rate-Limit 10/min pro IP).
 - Cookie `HttpOnly`, `SameSite=Lax`, `Secure` hinter HTTPS. WebSocket-Upgrade prüft Cookie **und** `Origin`.
-- Owner-Code nur in den fly-Secrets; in der DB nur Hashes. Rotieren/Entfernen wirkt sofort.
+- Owner-Code nur in den fly-Secrets; in der DB nur Hashes (Codes SHA-256, Passwörter PBKDF2-SHA256 mit 210k
+  Iterationen und Salt, Session-Tokens SHA-256). Rotieren/Entfernen beendet alle Sessions sofort; Passwortwechsel
+  beendet alle anderen Sessions. Logout löscht die Session serverseitig. Unbekannte E-Mail kostet beim Login dieselbe
+  Zeit wie ein falsches Passwort (Dummy-Hash). `PUT /api/auth/account` unterliegt dem Login-Rate-Limit.
 - Spiele gehören einem Nutzer: fremdes `/api/games/current` → 404, fremder WebSocket → Close 4403.
 - Szenarien (`POST /api/games {scenario}`) nur in der Dev-Engine, nie auf dem Server.
 - Request-Größe 2 MB; `DeckUrlImporter` ruft nur Archidekt-/Moxfield-API-URLs ab (kein SSRF).

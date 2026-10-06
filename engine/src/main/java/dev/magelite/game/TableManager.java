@@ -7,7 +7,10 @@ import dev.magelite.deck.LoadedDeck;
 import org.apache.log4j.Logger;
 
 import java.security.SecureRandom;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -38,6 +41,12 @@ public final class TableManager {
     }
 
     public enum SeatKind { OPEN, HUMAN, BOT }
+
+    /** Chat-Zeile am Tisch (ueberlebt Spiele dieses Tisches, weg mit dem Tisch). */
+    public record ChatMsg(long ts, long userId, String name, String text) {
+    }
+
+    private static final int CHAT_KEEP = 50;
 
     public static final class Seat {
         public SeatKind kind = SeatKind.OPEN;
@@ -80,6 +89,8 @@ public final class TableManager {
         public UUID lastGameId;
         public final long createdAt = System.currentTimeMillis();
         public long updatedAt = createdAt;
+        public final Deque<ChatMsg> chat = new ArrayDeque<>();
+        final Map<Long, Deque<Long>> chatTimes = new HashMap<>();
 
         Table(String id, String name, User host) {
             this.id = id;
@@ -289,6 +300,28 @@ public final class TableManager {
         t.lastGameId = t.gameId;
         t.gameId = null;
         t.touch();
+    }
+
+    /** Chat am Tisch: nur wer sitzt; Saeuberung/Laenge/Rate-Limit wie im Spiel. */
+    public synchronized Table chat(User user, String id, String text) {
+        Table t = require(id);
+        if (t.seatOf(user.id()).isEmpty()) {
+            throw new TableException("Du sitzt nicht an diesem Tisch");
+        }
+        String clean = ChatText.clean(text);
+        if (clean == null) {
+            throw new TableException("Leere Nachricht");
+        }
+        Deque<Long> times = t.chatTimes.computeIfAbsent(user.id(), k -> new ArrayDeque<>());
+        if (!ChatText.allow(times, System.currentTimeMillis())) {
+            throw new TableException("Langsamer – höchstens " + ChatText.RATE_N + " Nachrichten in " + (ChatText.RATE_MS / 1000) + " s");
+        }
+        t.chat.addLast(new ChatMsg(System.currentTimeMillis(), user.id(), user.name(), clean));
+        while (t.chat.size() > CHAT_KEEP) {
+            t.chat.pollFirst();
+        }
+        t.touch();
+        return t;
     }
 
     // ------------------------------------------------------------------ intern

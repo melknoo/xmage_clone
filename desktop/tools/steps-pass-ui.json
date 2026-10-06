@@ -1,0 +1,90 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1700,
+  "height": 1000,
+  "timeout": 240000,
+  "steps": [
+    {
+      "waitFor": "#root div",
+      "timeout": 60000
+    },
+    {
+      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'convoke'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='PRECOMBAT_MAIN'&&g.answeredPromptId!==p.id){clearInterval(t);g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('F9 in Main 1, nextStop='+p.nextStop)}else if(p&&p.kind==='ASK'&&g.answeredPromptId!==p.id){g.answer({bool:false})}},200);setTimeout(()=>{clearInterval(t);r('Timeout Main 1')},90000)})"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;const p=g.prompt;const me=s&&s.players.find(x=>x.me);if(p&&g.answeredPromptId!==p.id&&p.kind==='PICK_TARGET'){const open=(p.targets||[]).filter(x=>!(p.chosen||[]).includes(x));if(open.length)g.answer({uuid:open[0]});else g.answer({bool:false})}if(me&&me.skips&&me.skips.length&&!me.active&&!p){clearInterval(t);r('skips='+me.skips+' Zug '+s.turn)}},300);setTimeout(()=>{clearInterval(t);r('Timeout skips')},60000)})"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "../../engine/run/pass-1-skip.png"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "../../engine/run/pass-1-skip.png"
+    },
+    {
+      "js": "new Promise(r=>{let clicked=null;const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;const p=g.prompt;const me=s&&s.players.find(x=>x.me);if(!me)return;if(p&&g.answeredPromptId!==p.id&&p.kind==='PICK_TARGET'){const open=(p.targets||[]).filter(x=>!(p.chosen||[]).includes(x));g.answer(open.length?{uuid:open[0]}:{bool:false});return}if(!clicked&&!me.skips&&p&&p.kind==='SELECT'&&p.mode==='priority'&&me.active){g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');return}if(!clicked&&me.skips&&!me.active&&!p){const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Stopp')&&!e.textContent.includes('Passe'));if(b){b.click();clicked='Zug '+s.turn+' '+s.step}}else if(clicked&&!me.skips){clearInterval(t);r('Stopp in '+clicked+' -> abgebrochen in Zug '+s.turn+' '+s.step+(me.active?' (eigener Zug)':' (Gegnerzug)'))}},100);setTimeout(()=>{clearInterval(t);r('Timeout, clicked='+clicked)},90000)})"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "../../engine/run/pass-2-stopped.png"
+    },
+    {
+      "js": "window.__ml.game.getState().leave();window.__ml.game.getState().reset&&window.__ml.game.getState().reset();window.__ml.nav.setState({lastSetup:{deck:{type:'user',id:987654},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'}});window.__ml.nav.getState().go('home');'home'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Schnellstart'));if(!b)return 'kein Schnellstart';b.click();return 'Schnellstart'})()"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "shot": "../../engine/run/pass-3-home-error.png"
+    },
+    {
+      "js": "(()=>{const u=performance.getEntriesByType('resource').map(e=>e.name).find(n=>/\\/src\\/store\\/auth\\.ts/.test(n));return import(u).then(m=>{m.useAuth.setState({mode:'server',status:'login'});return 'login '+u})})()"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('E-Mail & Passwort'));if(!b)return 'kein Tab';b.click();return 'Tab'})()"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "js": "(()=>{const i=document.querySelector('input[autocomplete=current-password]');if(!i)return 'kein Feld';const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(i,'geheim123');i.dispatchEvent(new Event('input',{bubbles:true}));return 'getippt'})()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "../../engine/run/pass-4-login-hidden.png"
+    },
+    {
+      "js": "(()=>{const b=document.querySelector('button[aria-label=\"Passwort anzeigen\"]');if(!b)return 'kein Auge';b.click();return 'Auge'})()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "../../engine/run/pass-5-login-visible.png"
+    }
+  ]
+}

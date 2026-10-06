@@ -171,7 +171,7 @@ public final class HttpServer {
                         ctx.closeSession(4403, "origin");
                         return;
                     }
-                    user = auth.resolve(ctx.cookie(Auth.COOKIE)).orElse(null);
+                    user = auth.resolve(ctx.cookie(Auth.SESSION_COOKIE), ctx.cookie(Auth.COOKIE)).orElse(null);
                     if (user == null) {
                         ctx.closeSession(4401, "login");
                         return;
@@ -358,6 +358,23 @@ public final class HttpServer {
                         LOG.info("Mehrfach-Kampf abgelehnt (kein passender Prompt)");
                     }
                 }
+                case "repeat" -> {
+                    UUID ability = m.hasNonNull("uuid") ? UUID.fromString(m.get("uuid").asText()) : null;
+                    if (!host.repeat(seat, m.path("id").asLong(), ability, m.path("times").asInt(1))) {
+                        LOG.info("Mehrfach-Aktivierung abgelehnt (kein passender Prompt)");
+                    }
+                }
+                case "specialPay" -> {
+                    UUID perm = m.hasNonNull("uuid") ? UUID.fromString(m.get("uuid").asText()) : null;
+                    if (!host.specialPay(seat, m.path("id").asLong(), perm)) {
+                        LOG.info("Einberufen abgelehnt (kein passender Prompt)");
+                    }
+                }
+                case "combatReset" -> {
+                    if (!host.combatReset(seat)) {
+                        LOG.info("Angriff zuruecksetzen abgelehnt (kein passender Prompt)");
+                    }
+                }
                 case "settings" -> {
                     if (m.has("autoPay")) {
                         host.setAutoPayDefault(seat, m.get("autoPay").asBoolean(true));
@@ -369,6 +386,7 @@ public final class HttpServer {
                 case "replacement" -> host.replacement(seat, m.path("mode").asText(),
                         m.hasNonNull("key") ? m.get("key").asText() : null, m.path("always").asBoolean(false));
                 case "replReset" -> host.resetReplacementDeclines(seat);
+                case "chat" -> host.chat(seat, m.path("text").asText(""));
                 case "leave" -> host.leave(seat);
                 case "kick" -> {
                     if (!host.kick(seat, UUID.fromString(m.path("playerId").asText()))) {

@@ -20,6 +20,7 @@ export function GameOverOverlay() {
   const tableId = useTable((s) => s.tableId)
   const [hidden, setHidden] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
   const myId = useGame((s) => s.hello?.myPlayerId)
   const human = over.placements.find((p) => p.playerId === myId) ?? over.placements.find((p) => p.human)
   const won = human?.place === 1 && over.winnerId === human.playerId
@@ -50,9 +51,13 @@ export function GameOverOverlay() {
   const again = async () => {
     if (!lastSetup) return
     setBusy(true)
+    setStartError(null)
     try {
       const res = await api.post<{ gameId: string }>('/api/games', lastSetup)
       connect(res.gameId)
+    } catch (e) {
+      // z.B. 409 "Gerade spielt ..." (online nur ein Spiel gleichzeitig)
+      setStartError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -115,6 +120,7 @@ export function GameOverOverlay() {
           </div>
         )}
 
+        {startError && <div className="mt-4 rounded-lg bg-blood-500/15 px-3 py-2 text-center text-sm text-blood-300">{startError}</div>}
         <div className="mt-6 flex justify-center gap-2">
           <button className="btn-ghost" onClick={() => setHidden(true)}>
             Tisch ansehen

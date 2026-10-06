@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ApiError } from '../api/client'
 import { tableLink, tablesApi, type Table, type TableSeat } from '../api/tables'
 import type { DeckSpec, Tempo } from '../api/types'
 import { ColorPips } from '../lib/mana'
@@ -19,10 +20,14 @@ export function TableScreen() {
   const { decks, samples, describe } = useDeckCatalog()
   const [table, setTable] = useState<Table | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** letzte Abfrage fehlgeschlagen (Netz, Neustart) - wir pollen weiter */
+  const [shaky, setShaky] = useState(false)
   const [busy, setBusy] = useState(false)
   const [picker, setPicker] = useState<null | { seat: number; bot: boolean }>(null)
   const [copied, setCopied] = useState(false)
   const [nameEdit, setNameEdit] = useState<string | null>(null)
+  const [chatText, setChatText] = useState('')
+  const chatRef = useRef<HTMLDivElement>(null)
   const joinedGame = useRef<string | null>(null)
 
   const load = useCallback(async () => {
@@ -30,7 +35,14 @@ export function TableScreen() {
     try {
       const t = await tablesApi.get(tableId)
       setTable(t)
+      setShaky(false)
     } catch (e) {
+      const status = e instanceof ApiError ? e.status : 0
+      if (status === 0 || status >= 500 || status === 429 || status === 401) {
+        // Netz/Server-Neustart/Rate-Limit: weiter pollen statt den Tisch zu verlassen (401 zeigt ohnehin den Login)
+        setShaky(true)
+        return
+      }
       // Tisch weg (Gastgeber hat geschlossen) -> zurueck in die Lobby
       setTableId(null)
       setTable(null)
@@ -44,6 +56,11 @@ export function TableScreen() {
     const iv = window.setInterval(load, POLL_MS)
     return () => window.clearInterval(iv)
   }, [load])
+
+  const chatLen = table?.chat?.length ?? 0
+  useEffect(() => {
+    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
+  }, [chatLen])
 
   // Spiel gestartet -> an den Tisch setzen (einmal pro Spiel)
   useEffect(() => {
@@ -161,6 +178,38 @@ export function TableScreen() {
               />
             ))}
           </div>
+          <h2 className="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-ink-300">Tisch-Chat</h2>
+          <div className="glass flex h-[220px] flex-col overflow-hidden rounded-xl">
+            <div ref={chatRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm scrollbar-thin">
+              {(table.chat ?? []).length === 0 && <div className="py-2 text-xs italic text-ink-400">Noch keine Nachrichten.</div>}
+              {(table.chat ?? []).map((c, i) => (
+                <div key={`${c.ts}-${i}`} className="py-0.5">
+                  <span className="mr-1.5 tabular-nums text-[10px] text-ink-500">{new Date(c.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className={`font-semibold ${c.userId === table.hostUserId ? 'text-gold-300' : 'text-arcane-400'}`}>{c.name}</span>
+                  <span className="text-ink-400">: </span>
+                  <span className="text-ink-100">{c.text}</span>
+                </div>
+              ))}
+            </div>
+            <div className="shrink-0 border-t border-white/10 p-2">
+              <input
+                className="w-full rounded-lg bg-ink-950/70 px-3 py-1.5 text-sm ring-1 ring-white/15 outline-none placeholder:text-ink-500 focus:ring-gold-400/60"
+                placeholder="Nachricht an den Tisch … (Enter)"
+                maxLength={300}
+                value={chatText}
+                disabled={table.mySeat === null}
+                onChange={(e) => setChatText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  const t = chatText.trim()
+                  if (!t) return
+                  setChatText('')
+                  run(() => tablesApi.chat(table.id, t))
+                }}
+              />
+            </div>
+          </div>
         </section>
         <section>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-ink-300">Bot-Tempo</h2>
@@ -190,6 +239,7 @@ export function TableScreen() {
               </div>
             )}
             {isHost && startHint && <div className="text-xs text-ink-400">{startHint}</div>}
+            {shaky && <div className="rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-300">Verbindung wackelt – versuche es weiter …</div>}
             {error && <div className="rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{error}</div>}
           </div>
         </section>

@@ -80,6 +80,37 @@ public final class Messages {
         }
     }
 
+    /**
+     * Spielereignis fuer Mini-Animationen und die Ereignisleiste ({@code events}).
+     * kind: died | tokenDied | exiled | bounced | tucked | discarded | milled | resolved | command | countered |
+     * damage | life | counter. {@code hidden}: Karte ist fuer andere nicht sichtbar (nur an den Besitzer).
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record FxEvent(String kind, UUID objectId, String name, CardDto card, String from, String to, UUID playerId,
+                          UUID ownerId, UUID sourceId, String sourceName, Integer amount, Boolean token, Boolean combat,
+                          Boolean hidden, long ts) {
+        public FxEvent withAmount(int n) {
+            return new FxEvent(kind, objectId, name, card, from, to, playerId, ownerId, sourceId, sourceName, n, token, combat, hidden, ts);
+        }
+    }
+
+    public record Events(String t, List<FxEvent> items) {
+        public Events(List<FxEvent> items) {
+            this("events", items);
+        }
+    }
+
+    /** Chat-Zeile eines Menschen am Tisch. */
+    public record ChatEntry(long ts, UUID playerId, String name, String text) {
+    }
+
+    /** Chat: live eine Zeile, nach (Re-)Connect der ganze Verlauf als ein Buendel. */
+    public record Chat(String t, List<ChatEntry> entries) {
+        public Chat(List<ChatEntry> entries) {
+            this("chat", entries);
+        }
+    }
+
     public record Toast(String t, String level, List<Map<String, Object>> rich) {
         public Toast(String level, List<Map<String, Object>> rich) {
             this("toast", level, rich);

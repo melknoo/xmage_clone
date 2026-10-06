@@ -258,7 +258,8 @@ UI:
 
 ## Bewusst nicht enthalten (später, falls gewünscht)
 
-- Zuschauer, Chat, Zug-Timer.
+- Zuschauer, Zug-Timer. (Chat gibt es seit 2026-10-06 im Spiel und am Tisch; Konten lassen sich mit E-Mail +
+  Passwort sichern.)
 - Mehr Stopps in fremden Zügen (z. B. „Ende des Zuges anhalten“, für Spontanzauber gegen Menschen). Gehört zum
   geplanten Einstellungs-Screen.
 - Online- und lokale Daten zusammenführen (z. B. lokale Decks hochladen). Bis dahin: Decktext kopieren und online

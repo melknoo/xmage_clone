@@ -59,6 +59,18 @@ ok(r.status === 409, `zweiter Tisch des Gastgebers -> ${r.status}`)
 // ---- Bob tritt bei, Carla auch; Negativfaelle
 r = await call('POST', `/api/tables/${tid}/join`, { cookie: bob })
 ok(r.status === 200 && r.json?.mySeat === 1 && r.json?.humans === 2, `Bob tritt bei -> Platz ${r.json?.mySeat}`)
+// ---- Tisch-Chat: nur Sitzende, Kuerzung, Polling liefert ihn mit
+r = await call('POST', `/api/tables/${tid}/chat`, { cookie: owner, body: { text: 'Moin' } })
+ok(r.status === 200 && r.json?.chat?.length === 1 && r.json.chat[0].text === 'Moin' && r.json.chat[0].name, `Tisch-Chat Owner -> ${r.status} (${r.json?.chat?.length} Zeilen, von ${r.json?.chat?.[0]?.name})`)
+r = await call('GET', `/api/tables/${tid}`, { cookie: bob })
+ok(r.json?.chat?.[0]?.text === 'Moin', 'Bob sieht die Nachricht beim Polling')
+r = await call('POST', `/api/tables/${tid}/chat`, { cookie: carla, body: { text: 'darf ich?' } })
+ok(r.status === 409, `Nicht-Sitzende darf nicht chatten -> ${r.status}`)
+r = await call('POST', `/api/tables/${tid}/chat`, { cookie: bob, body: { text: 'y'.repeat(301) } })
+ok(r.status === 200 && r.json?.chat?.length === 2 && r.json.chat[1].text.length === 300, `lange Nachricht auf 300 gekuerzt (${r.json?.chat?.[1]?.text.length})`)
+r = await call('POST', `/api/tables/${tid}/chat`, { cookie: bob, body: { text: '  ' } })
+ok(r.status === 409, `leere Nachricht -> ${r.status}`)
+
 r = await call('POST', `/api/tables/${tid}/start`, { cookie: bob })
 ok(r.status === 409, `Bob startet (kein Gastgeber) -> ${r.status}`)
 r = await call('PUT', `/api/tables/${tid}/seats/2`, { cookie: bob, body: { kind: 'BOT' } })

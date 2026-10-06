@@ -9,9 +9,11 @@ import dev.magelite.view.dto.Messages;
 import dev.magelite.view.dto.PromptDto;
 import dev.magelite.view.dto.StateDto;
 import mage.constants.ManaType;
+import mage.constants.PhaseStep;
 import mage.constants.PlayerAction;
 import mage.constants.RangeOfInfluence;
 import mage.game.Game;
+import mage.game.permanent.Permanent;
 import mage.game.GameException;
 import mage.game.GameOptions;
 import mage.game.events.PlayerQueryEvent;
@@ -34,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -171,11 +174,21 @@ public final class GameHost {
         private volatile CombatMacro macro;
         /** laufende Ersatzeffekt-Entscheidung (1-Klick / "Keinen anwenden"), siehe {@link #handleReplacement} */
         private volatile ReplMacro replMacro;
+        /** laufende Mehrfach-Aktivierung ("N-mal aktivieren"), siehe {@link #continueRepeat} */
+        private volatile RepeatMacro repeat;
+        /** laufende Sonderbezahlung (Einberufen per Klick / Knopf), siehe {@link #continueSpecial} */
+        private volatile SpecialMacro special;
+        /** Sendezeitpunkte der letzten Chat-Nachrichten (Rate-Limit) */
+        private final Deque<Long> chatTimes = new ArrayDeque<>();
         /** Ersatzeffekte (Regeltext -> Kurzname), die dieses Spiel automatisch abgelehnt werden */
         private final Map<String, String> replDeclineAlways = new ConcurrentHashMap<>();
         // Auto-Bezahlen (Game-Thread)
         private boolean autoPayActive;
         private boolean autoPayFailed;
+        /** Stapelobjekt, bei dessen Bezahlung Auto-Bezahlen gescheitert ist (neue Bezahlung -> wieder automatisch) */
+        private UUID autoPayFailedKey;
+        /** Auto-Bezahlen nur mit Laendern, Rest per Sonderbezahlung (Convoke & Co.) */
+        private boolean autoPayPartial;
         private AutoPayer.Color autoPayColor;
         private int autoPaySteps;
         private String autoPayLastMsg;
@@ -260,6 +273,15 @@ public final class GameHost {
     private final AtomicLong stateSeq = new AtomicLong();
     private final AtomicLong promptSeq = new AtomicLong();
     private final Deque<Messages.LogEntry> logTail = new ArrayDeque<>();
+    /** Chat-Verlauf fuer den Replay nach (Re-)Connect */
+    private final Deque<Messages.ChatEntry> chatTail = new ArrayDeque<>();
+    private static final int CHAT_KEEP = 100;
+    /** Spielereignisse fuer Animationen (vom Game-Thread gefuellt, vor dem naechsten State bzw. per Wachhund geleert) */
+    private final java.util.concurrent.ConcurrentLinkedQueue<Messages.FxEvent> fx = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private final java.util.concurrent.atomic.AtomicInteger fxSize = new java.util.concurrent.atomic.AtomicInteger();
+    private volatile long lastFxAt;
+    private static final int FX_MAX = 200;
+    private static final long FX_FLUSH_AFTER_MS = 150;
     private final List<UUID> eliminationOrder = new ArrayList<>();
     private final Map<UUID, Integer> eliminatedTurn = new LinkedHashMap<>();
 
@@ -328,6 +350,8 @@ public final class GameHost {
             StatsSink.register(game.getId(), s.playerId);
         }
         game.getState().addWatcher(new StatsWatcher());
+        game.getState().addWatcher(new FxWatcher());
+        FxWatcher.listen(game.getId(), this::onFx);
     }
 
     public static GameHost create(GameSetup setup) throws GameException {
@@ -409,7 +433,13 @@ public final class GameHost {
     }
 
     public void setAutoPass(HumanSeat seat, boolean autoPass) {
+        boolean wasOn = seat.autoPass;
         seat.autoPass = autoPass;
+        if (wasOn && !autoPass) {
+            // "Passen manuell" beendet auch laufendes F-Tasten-Passen (z.B. bis zu meinem Zug). Nur beim Umschalten:
+            // der Client schickt die Einstellung bei jedem Reconnect erneut.
+            action(seat, PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS.name(), null);
+        }
     }
 
     /**
@@ -427,6 +457,11 @@ public final class GameHost {
                 newSink.send(new Messages.Log(new ArrayList<>(logTail)));
             }
         }
+        synchronized (chatTail) {
+            if (!chatTail.isEmpty()) {
+                newSink.send(new Messages.Chat(new ArrayList<>(chatTail)));
+            }
+        }
         StateDto s = seat.lastState;
         if (s != null) {
             newSink.send(s);
@@ -442,6 +477,33 @@ public final class GameHost {
         if (humans.size() > 1) {
             broadcastSeats();
         }
+    }
+
+    /**
+     * Chat-Nachricht eines Menschen an alle Menschen am Tisch (auch aufgegebene Sitze duerfen mitreden). Reine
+     * Host-Ebene, der Spiel-Thread ist nicht beteiligt.
+     */
+    public boolean chat(HumanSeat seat, String text) {
+        String clean = ChatText.clean(text);
+        if (clean == null) {
+            return false;
+        }
+        synchronized (seat.chatTimes) {
+            if (!ChatText.allow(seat.chatTimes, System.currentTimeMillis())) {
+                send(seat, new Messages.Toast("info", RichText.parse("Langsamer – höchstens " + ChatText.RATE_N + " Nachrichten in "
+                        + (ChatText.RATE_MS / 1000) + " s.")));
+                return false;
+            }
+        }
+        Messages.ChatEntry entry = new Messages.ChatEntry(System.currentTimeMillis(), seat.playerId, seat.name(), clean);
+        synchronized (chatTail) {
+            chatTail.addLast(entry);
+            while (chatTail.size() > CHAT_KEEP) {
+                chatTail.pollFirst();
+            }
+        }
+        emit(new Messages.Chat(List.of(entry)));
+        return true;
     }
 
     public void detach(HumanSeat seat, Sink oldSink) {
@@ -558,6 +620,7 @@ public final class GameHost {
                     LOG.error("onFinished fehlgeschlagen", e);
                 }
             }
+            FxWatcher.forget(game.getId());
             try {
                 game.cleanUp();
                 match.cleanUp();
@@ -641,6 +704,12 @@ public final class GameHost {
         }
         seat.macro = null;
         seat.replMacro = null;
+        seat.repeat = null;
+        seat.special = null;
+        if ("PLAY_MANA".equals(p.kind) && "special".equals(r.string())) {
+            // Knopf "Einberufen" & Co.: die folgende Aktionswahl beantworten wir, falls eindeutig
+            seat.special = new SpecialMacro(null, p.messageText);
+        }
         String sig = seat.promptSig;
         if (sig != null && seat.promptSigId == promptId && Boolean.FALSE.equals(r.bool())) {
             // gepasst -> gleiche Stapelobjekte laufen ab jetzt automatisch durch
@@ -685,10 +754,138 @@ public final class GameHost {
         CombatMacro m = new CombatMacro(p.mode, queue, target);
         m.current = first;
         seat.macro = m;
+        seat.special = null;
         send(seat, new Messages.PromptClosed(p.id));
         notifyOthers(seat, null);
         dispatch(seat, t -> apply(seat, t, Response.ofUuid(first)));
         return true;
+    }
+
+    /**
+     * "Angriff zuruecksetzen": alle eigenen Angreifer wieder aus dem Kampf nehmen, solange der Angriff noch nicht
+     * bestaetigt ist. XMage entfernt einen Angreifer, wenn er im Angriffs-Prompt erneut angeklickt wird
+     * ({@code removeAttackerIfPossible}); die Folge-Prompts beantwortet {@link #continueMacro}.
+     * <p>
+     * Steht gerade die Verteidiger-Wahl von "Alle angreifen" offen ({@code PICK_TARGET} mit {@code defenderPick}),
+     * waehlen wir das erste Ziel (XMage erklaert dann alle Angreifer) und nehmen sie danach wieder zurueck.
+     * Das ist deterministisch, egal ob der Prompt ein "Abbrechen" erlaubt - bei Pflicht-Zielen fragt XMage sonst
+     * endlos neu.
+     */
+    public boolean combatReset(HumanSeat seat) {
+        PromptDto p = openPrompt.get();
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        UUID first;
+        if ("SELECT".equals(p.kind) && "attackers".equals(p.mode)) {
+            Set<UUID> attackers = inCombat(seat.lastState, true);
+            first = attackers.isEmpty() ? null : attackers.iterator().next();
+        } else if ("PICK_TARGET".equals(p.kind) && p.defenderPick && p.targets != null && !p.targets.isEmpty()) {
+            first = p.targets.get(0);
+        } else {
+            send(seat, p); // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen
+            return false;
+        }
+        if (first == null || !openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        CombatMacro m = new CombatMacro("attackers", new ArrayDeque<>(), null, true);
+        if ("SELECT".equals(p.kind)) {
+            m.tried.add(first);
+        }
+        seat.macro = m;
+        seat.special = null;
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        dispatch(seat, t -> apply(seat, t, Response.ofUuid(first)));
+        return true;
+    }
+
+    /**
+     * "N-mal aktivieren" (z.B. Necropotence "Pay 1 life"): Antwort auf den offenen {@code CHOOSE_ABILITY}-Prompt mit
+     * {@code abilityId}, danach {@code times - 1} weitere Aktivierungen derselben Faehigkeit. Zwischen den
+     * Aktivierungen haelt XMage die Prioritaet ({@code HOLD_PRIORITY}), damit alle Aktivierungen erst auf den Stapel
+     * gehen; die letzte laeuft ohne Halten, danach greift XMages Auto-Passen. Folge-Prompts beantwortet
+     * {@link #continueRepeat}; Ziele, Fragen oder fremde Stapelobjekte beenden die Wiederholung.
+     */
+    public boolean repeat(HumanSeat seat, long promptId, UUID abilityId, int times) {
+        PromptDto p = openPrompt.get();
+        if (p == null || p.id != promptId || promptSeat != seat) {
+            return false;
+        }
+        PromptDto.Item item = null;
+        if ("CHOOSE_ABILITY".equals(p.kind) && p.choices != null && abilityId != null) {
+            for (PromptDto.Item i : p.choices) {
+                if (abilityId.toString().equals(i.id())) {
+                    item = i;
+                }
+            }
+        }
+        if (item == null || p.sourceId == null) {
+            send(seat, p);
+            return false;
+        }
+        if (!openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        int n = Math.max(1, Math.min(20, times));
+        RepeatMacro m = new RepeatMacro(p.sourceId, abilityId, item.text(), n - 1);
+        seat.macro = null;
+        seat.replMacro = null;
+        seat.special = null;
+        seat.repeat = n > 1 ? m : null;
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        if (n > 1) {
+            holdPriority(seat);
+        }
+        dispatch(seat, t -> apply(seat, t, Response.ofUuid(abilityId)));
+        return true;
+    }
+
+    /**
+     * Einberufen per Klick: beim offenen Mana-Prompt die Kreatur {@code permId} tappen. Antwortet {@code "special"};
+     * Aktionswahl, Kreatur und Farbe beantwortet {@link #continueSpecial}.
+     */
+    public boolean specialPay(HumanSeat seat, long promptId, UUID permId) {
+        PromptDto p = openPrompt.get();
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        if (p.id != promptId || !"PLAY_MANA".equals(p.kind) || permId == null || p.specialTargets == null
+                || !p.specialTargets.contains(permId) || !openPrompt.compareAndSet(p, null)) {
+            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        seat.macro = null;
+        seat.replMacro = null;
+        seat.repeat = null;
+        seat.special = new SpecialMacro(permId, p.messageText);
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        dispatch(seat, t -> apply(seat, t, Response.ofString("special")));
+        return true;
+    }
+
+    /** HOLD_PRIORITY auf dem CALL-Thread einreihen - vor der Antwort, die die Aktivierung ausloest (FIFO). */
+    private void holdPriority(HumanSeat seat) {
+        UUID pid = seat.playerId;
+        callExecutor.execute(() -> {
+            try {
+                game.sendPlayerAction(PlayerAction.HOLD_PRIORITY, pid, null);
+            } catch (Throwable e) {
+                LOG.error("HOLD_PRIORITY fehlgeschlagen", e);
+            }
+        });
     }
 
     /**
@@ -739,6 +936,7 @@ public final class GameHost {
             return false;
         }
         seat.macro = null;
+        seat.special = null;
         seat.replMacro = m;
         String a = answer;
         send(seat, new Messages.PromptClosed(p.id));
@@ -862,6 +1060,10 @@ public final class GameHost {
             leave(seat);
             return true;
         }
+        if (action == PlayerAction.PASS_PRIORITY_UNTIL_STACK_RESOLVED && game.getStack().isEmpty()) {
+            // XMage ignoriert das bei leerem Stapel (kein skip) - Prompt schliessen wuerde das Spiel haengen lassen
+            return false;
+        }
         boolean closesPrompt = action.name().startsWith("PASS_PRIORITY_UNTIL");
         if (closesPrompt) {
             closePromptOf(seat);
@@ -887,6 +1089,8 @@ public final class GameHost {
 
     /** Offenen SELECT-Prompt dieses Sitzes schliessen (XMage beantwortet ihn ueber die Aktion selbst). */
     private void closePromptOf(HumanSeat seat) {
+        seat.repeat = null;
+        seat.special = null;
         PromptDto p = openPrompt.get();
         if (p != null && promptSeat == seat && "SELECT".equals(p.kind) && openPrompt.compareAndSet(p, null)) {
             send(seat, new Messages.PromptClosed(p.id));
@@ -982,6 +1186,14 @@ public final class GameHost {
             if (m != null && continueMacro(seat, m, prompt)) {
                 return;
             }
+            RepeatMacro rm = seat.repeat;
+            if (rm != null && continueRepeat(seat, rm, prompt)) {
+                return;
+            }
+            SpecialMacro sm = seat.special;
+            if (sm != null && continueSpecial(seat, sm, prompt)) {
+                return;
+            }
 
             if (handleReplacement(seat, prompt)) {
                 return;
@@ -1002,11 +1214,18 @@ public final class GameHost {
             GameViewMapper.Playable playable = null;
             if (priorityPrompt) {
                 playable = GameViewMapper.playable(game, seat.player);
-                if (seat.autoPass && !playable.hasActions()) {
+                boolean myTurnEmptyStack = game.getStack().isEmpty() && seat.playerId.equals(game.getActivePlayerId());
+                PhaseStep step = game.getTurnStepType();
+                // eigene Main-Phasen halten immer (Main 2 nie still ueberspringen); F-Tasten passen XMage-seitig vorher
+                boolean ownMain = myTurnEmptyStack && (step == PhaseStep.PRECOMBAT_MAIN || step == PhaseStep.POSTCOMBAT_MAIN);
+                if (seat.autoPass && !playable.hasActions() && !ownMain) {
                     // nichts spielbar (ausser Mana) -> automatisch passen; State nur gedrosselt
                     onUpdate();
                     answerInternally(seat, prompt, Response.ofBool(false));
                     return;
+                }
+                if (myTurnEmptyStack) {
+                    prompt.nextStop = NextStop.of(game, seat.player, seat.autoPass);
                 }
             }
             StateDto state = sendState(seat, playable);
@@ -1042,13 +1261,22 @@ public final class GameHost {
         final String mode;
         final Deque<UUID> queue;
         final UUID target;
+        /** "Angriff zuruecksetzen": statt Kreaturen hinzuzufuegen alle eigenen Angreifer wieder entfernen */
+        final boolean remove;
+        /** beim Entfernen schon angeklickte Angreifer (XMage verweigert z.B. bei "muss angreifen") */
+        final Set<UUID> tried = new HashSet<>();
         /** zuletzt angeklickte Kreatur (wartet ggf. auf die Zielabfrage) */
         UUID current;
 
         CombatMacro(String mode, Deque<UUID> queue, UUID target) {
+            this(mode, queue, target, false);
+        }
+
+        CombatMacro(String mode, Deque<UUID> queue, UUID target, boolean remove) {
             this.mode = mode;
             this.queue = queue;
             this.target = target;
+            this.remove = remove;
         }
     }
 
@@ -1066,6 +1294,28 @@ public final class GameHost {
      */
     private boolean continueMacro(HumanSeat seat, CombatMacro m, PromptDto prompt) {
         boolean attack = "attackers".equals(m.mode);
+        if (m.remove) {
+            if (!"SELECT".equals(prompt.kind) || !"attackers".equals(prompt.mode)) {
+                seat.macro = null;
+                return false;
+            }
+            UUID next = null;
+            for (UUID id : game.getCombat().getAttackers()) {
+                Permanent perm = game.getPermanent(id);
+                if (perm != null && perm.isControlledBy(seat.playerId) && !m.tried.contains(id)) {
+                    next = id;
+                    break;
+                }
+            }
+            if (next == null) {
+                seat.macro = null;
+                return false; // alle zurueckgenommen (oder XMage verweigert den Rest) -> normaler Prompt
+            }
+            m.tried.add(next);
+            onUpdate();
+            answerInternally(seat, prompt, Response.ofUuid(next));
+            return true;
+        }
         if ("SELECT".equals(prompt.kind) && m.mode.equals(prompt.mode)) {
             List<UUID> possibleList = attack ? prompt.possibleAttackers : prompt.possibleBlockers;
             Set<UUID> possible = possibleList == null ? Set.of() : new HashSet<>(possibleList);
@@ -1095,6 +1345,168 @@ public final class GameHost {
                 ? "Mehrfach-Angriff angehalten – bitte hier selbst entscheiden."
                 : "Mehrfach-Block angehalten – bitte hier selbst entscheiden.")));
         return false;
+    }
+
+    /** "N-mal aktivieren": Quelle, Faehigkeit (id + Text als Fallback) und verbleibende Aktivierungen. */
+    private static final class RepeatMacro {
+        final UUID sourceId;
+        final UUID abilityId;
+        final String abilityText;
+        int remaining;
+
+        RepeatMacro(UUID sourceId, UUID abilityId, String abilityText, int remaining) {
+            this.sourceId = sourceId;
+            this.abilityId = abilityId;
+            this.abilityText = abilityText;
+            this.remaining = remaining;
+        }
+    }
+
+    /**
+     * Game-Thread: beantwortet die Prompts einer Mehrfach-Aktivierung selbst.
+     * <ul>
+     *   <li>{@code SELECT}/Prioritaet: Quelle erneut anklicken, solange sie spielbar ist und nur eigene Objekte auf dem
+     *       Stapel liegen; vor jeder Aktivierung ausser der letzten die Prioritaet halten.</li>
+     *   <li>{@code CHOOSE_ABILITY}: dieselbe Faehigkeit (id, sonst gleicher Text) waehlen, Zaehler runter.</li>
+     *   <li>Mana-Prompts: durchlassen (Auto-Bezahlen). Alles andere (Ziele, Fragen, Mengen): abbrechen, der Spieler
+     *       entscheidet selbst.</li>
+     * </ul>
+     */
+    private boolean continueRepeat(HumanSeat seat, RepeatMacro m, PromptDto prompt) {
+        if ("SELECT".equals(prompt.kind) && "priority".equals(prompt.mode)) {
+            if (m.remaining <= 0) {
+                seat.repeat = null;
+                return false;
+            }
+            boolean foreignOnStack = game.getStack().stream().anyMatch(o -> !seat.playerId.equals(o.getControllerId()));
+            if (foreignOnStack) {
+                stopRepeat(seat, "Mehrfach-Aktivierung angehalten – ein Gegner hat reagiert.");
+                return false;
+            }
+            if (!GameViewMapper.playable(game, seat.player).actions().contains(m.sourceId)) {
+                stopRepeat(seat, "Mehrfach-Aktivierung beendet – Fähigkeit nicht mehr aktivierbar.");
+                return false;
+            }
+            if (m.remaining > 1) {
+                holdPriority(seat);
+            }
+            onUpdate();
+            answerInternally(seat, prompt, Response.ofUuid(m.sourceId));
+            return true;
+        }
+        if ("CHOOSE_ABILITY".equals(prompt.kind) && prompt.choices != null) {
+            PromptDto.Item pick = null;
+            for (PromptDto.Item i : prompt.choices) {
+                if (m.abilityId.toString().equals(i.id())) {
+                    pick = i;
+                    break;
+                }
+            }
+            if (pick == null) {
+                for (PromptDto.Item i : prompt.choices) {
+                    if (m.abilityText != null && m.abilityText.equals(i.text())) {
+                        pick = i;
+                        break;
+                    }
+                }
+            }
+            if (pick == null) {
+                stopRepeat(seat, "Mehrfach-Aktivierung angehalten – Fähigkeit nicht gefunden.");
+                return false;
+            }
+            m.remaining--;
+            if (m.remaining <= 0) {
+                seat.repeat = null;
+            }
+            onUpdate();
+            answerInternally(seat, prompt, Response.ofUuid(UUID.fromString(pick.id())));
+            return true;
+        }
+        if ("PLAY_MANA".equals(prompt.kind) || "PLAY_X_MANA".equals(prompt.kind)
+                || ("CHOOSE_CHOICE".equals(prompt.kind) && prompt.choice != null && prompt.choice.manaColor)) {
+            return false; // Auto-Bezahlen uebernimmt; schlaegt es fehl, raeumt respond() das Makro
+        }
+        stopRepeat(seat, "Mehrfach-Aktivierung angehalten – bitte hier selbst entscheiden.");
+        return false;
+    }
+
+    private void stopRepeat(HumanSeat seat, String msg) {
+        seat.repeat = null;
+        LOG.info(msg);
+        send(seat, new Messages.Toast("info", RichText.parse(msg)));
+    }
+
+    /** Sonderbezahlung: eingeberufene Kreatur (null = Knopf, nur die Aktionswahl) und Restkosten beim Start. */
+    private static final class SpecialMacro {
+        final UUID permId;
+        final String unpaid;
+        /** 0 = "special" gesendet, 1 = Aktion gewaehlt, 2 = Kreatur gewaehlt */
+        int stage;
+
+        SpecialMacro(UUID permId, String unpaid) {
+            this.permId = permId;
+            this.unpaid = unpaid;
+        }
+    }
+
+    /**
+     * Game-Thread: beantwortet die Prompts einer Sonderbezahlung selbst.
+     * <ul>
+     *   <li>{@code CHOOSE_ABILITY}: Klick -&gt; die Convoke-Aktion; Knopf -&gt; die einzige angebotene Aktion.</li>
+     *   <li>{@code PICK_TARGET}: die angeklickte Kreatur.</li>
+     *   <li>Farbwahl von Convoke: {@link SpecialPay#pickColor}.</li>
+     *   <li>Alles andere (naechster Mana-Prompt, Ziel automatisch gewaehlt ...): fertig, Prompt normal zeigen. Nie mit
+     *       "Abbrechen" antworten - bei Pflicht-Zielen fragt XMage sonst endlos neu.</li>
+     * </ul>
+     */
+    private boolean continueSpecial(HumanSeat seat, SpecialMacro m, PromptDto prompt) {
+        boolean click = m.permId != null;
+        if (m.stage == 0) {
+            if ("CHOOSE_ABILITY".equals(prompt.kind) && prompt.choices != null) {
+                UUID pick = click ? SpecialPay.convokeChoice(game, seat.playerId, prompt)
+                        : prompt.choices.size() == 1 ? UUID.fromString(prompt.choices.get(0).id()) : null;
+                if (pick != null) {
+                    m.stage = 1;
+                    if (!click) {
+                        seat.special = null; // Knopf: Ziel und Farbe waehlt der Spieler selbst
+                    }
+                    onUpdate();
+                    answerInternally(seat, prompt, Response.ofUuid(pick));
+                    return true;
+                }
+            }
+            seat.special = null;
+            if (click) {
+                stopSpecial(seat, prompt);
+            }
+            return false;
+        }
+        if ("PICK_TARGET".equals(prompt.kind) && m.stage == 1) {
+            if (prompt.targets != null && prompt.targets.contains(m.permId)) {
+                m.stage = 2;
+                onUpdate();
+                answerInternally(seat, prompt, Response.ofUuid(m.permId));
+                return true;
+            }
+            seat.special = null;
+            stopSpecial(seat, prompt);
+            return false;
+        }
+        seat.special = null;
+        if (SpecialPay.isConvokeColor(prompt)) {
+            String color = SpecialPay.pickColor(game, seat.playerId, m.permId, m.unpaid, prompt.choice);
+            if (color != null) {
+                onUpdate();
+                answerInternally(seat, prompt, Response.ofString(color));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void stopSpecial(HumanSeat seat, PromptDto prompt) {
+        LOG.info("Einberufen angehalten bei " + prompt.kind + ": " + prompt.messageText);
+        send(seat, new Messages.Toast("info", RichText.parse("Einberufen angehalten – bitte hier selbst entscheiden.")));
     }
 
     /** Auto-Antwort ohne promptClosed-Nachricht an den Client. */
@@ -1152,10 +1564,13 @@ public final class GameHost {
         if (p == null || promptSeat != seat || !"PLAY_MANA".equals(p.kind)) {
             return;
         }
+        boolean partial = p.specialBtn != null;
         callExecutor.execute(() -> {
-            AutoPayer.Step st = AutoPayer.next(game, seat.playerId, p.messageText, GameViewMapper.playable(game, seat.player).all().keySet());
+            AutoPayer.Step st = AutoPayer.next(game, seat.playerId, p.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
             if (st == null) {
-                send(seat, new Messages.Toast("info", RichText.parse("Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.")));
+                send(seat, new Messages.Toast("info", RichText.parse(partial
+                        ? "Länder reichen nicht – Rest per " + p.specialBtn + " (Kreaturen anklicken bzw. Knopf)."
+                        : "Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.")));
                 // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
                 if (openPrompt.get() == p) {
                     send(seat, p);
@@ -1164,6 +1579,7 @@ public final class GameHost {
             }
             seat.autoPayActive = true;
             seat.autoPayFailed = false;
+            seat.autoPayPartial = partial;
             seat.autoPaySteps = 1;
             seat.autoPayLastMsg = p.messageText;
             seat.autoPayColor = st.color();
@@ -1191,11 +1607,17 @@ public final class GameHost {
     private boolean handleAutoPay(HumanSeat seat, PromptDto prompt) {
         switch (prompt.kind) {
             case "PLAY_MANA" -> {
-                if (!seat.autoPayActive && (!seat.autoPayDefault || seat.autoPayFailed)) {
+                if (seat.autoPayFailed && !Objects.equals(seat.autoPayFailedKey, payKey())) {
+                    seat.autoPayFailed = false; // andere Bezahlung -> wieder automatisch
+                }
+                // Sonderbezahlung moeglich (Convoke & Co.): nicht von selbst - Laender muessten vor den Kreaturen
+                // getappt werden, der Spieler entscheidet (Knopf "Automatisch bezahlen" = nur Laender)
+                if (!seat.autoPayActive && (!seat.autoPayDefault || seat.autoPayFailed || prompt.specialBtn != null)) {
                     return false;
                 }
                 if (!seat.autoPayActive) {
                     seat.autoPayActive = true;
+                    seat.autoPayPartial = false;
                     seat.autoPaySteps = 0;
                     seat.autoPayLastMsg = null;
                 }
@@ -1204,9 +1626,13 @@ public final class GameHost {
                     return false;
                 }
                 seat.autoPayLastMsg = prompt.messageText;
-                AutoPayer.Step st = AutoPayer.next(game, seat.playerId, prompt.messageText, GameViewMapper.playable(game, seat.player).all().keySet());
+                boolean partial = seat.autoPayPartial && prompt.specialBtn != null;
+                AutoPayer.Step st = AutoPayer.next(game, seat.playerId, prompt.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
                 if (st == null) {
                     stopAutoPay(seat, true);
+                    if (partial) {
+                        send(seat, new Messages.Toast("info", RichText.parse("Länder reichen nicht – Rest per " + prompt.specialBtn + ".")));
+                    }
                     return false;
                 }
                 seat.autoPayColor = st.color();
@@ -1241,17 +1667,32 @@ public final class GameHost {
                 if (seat.autoPayActive) {
                     stopAutoPay(seat, false);
                 }
-                seat.autoPayFailed = false;
+                // nur bei einer neuen Prioritaet zuruecksetzen - Ziel-/Farbwahl mitten in der Bezahlung (Convoke)
+                // wuerde sonst Auto-Bezahlen neu starten
+                if ("SELECT".equals(prompt.kind)) {
+                    seat.autoPayFailed = false;
+                }
                 return false;
             }
         }
     }
 
-    private static void stopAutoPay(HumanSeat seat, boolean failed) {
+    private void stopAutoPay(HumanSeat seat, boolean failed) {
         seat.autoPayActive = false;
         seat.autoPayColor = null;
         if (failed) {
             seat.autoPayFailed = true;
+            seat.autoPayFailedKey = payKey();
+        }
+    }
+
+    /** Was gerade bezahlt wird: oberstes Stapelobjekt (Zauber/Faehigkeit liegt beim Bezahlen schon dort). */
+    private UUID payKey() {
+        try {
+            var top = game.getStack().getFirstOrNull();
+            return top == null ? null : top.getId();
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 
@@ -1286,6 +1727,7 @@ public final class GameHost {
      * @return der State von {@code forSeat} (bzw. des ersten Menschen)
      */
     private StateDto sendState(HumanSeat forSeat, GameViewMapper.Playable playable) {
+        flushFx(); // Ereignisse vor dem State, der sie widerspiegelt (Outbox haelt die Reihenfolge)
         trackEliminations();
         long seq = stateSeq.incrementAndGet();
         StateDto mine = null;
@@ -1338,6 +1780,77 @@ public final class GameHost {
     private void emit(Object msg) {
         for (HumanSeat s : humans.values()) {
             send(s, msg);
+        }
+    }
+
+    // ------------------------------------------------------------------ Ereignisse (Animationen)
+
+    /** Game-Thread (Watcher): Ereignis einreihen. */
+    private void onFx(Messages.FxEvent e) {
+        if (fx.isEmpty()) {
+            lastFxAt = System.currentTimeMillis();
+        }
+        fx.add(e);
+        if (fxSize.incrementAndGet() > FX_MAX && fx.poll() != null) {
+            fxSize.decrementAndGet();
+        }
+    }
+
+    /**
+     * Gesammelte Ereignisse an alle Menschen: gleiche Token-Tode zu einem Eintrag (xN), Lebensverlust durch Schaden
+     * nicht doppelt, verdeckte Karten nur an den Besitzer. Laeuft auf dem Game-Thread (vor jedem State) oder dem
+     * Wachhund (wenn laenger kein State kommt) - die Queue ist thread-sicher, DTOs werden nur gelesen.
+     */
+    private void flushFx() {
+        if (fx.isEmpty()) {
+            return;
+        }
+        List<Messages.FxEvent> batch = new ArrayList<>();
+        Messages.FxEvent e;
+        while ((e = fx.poll()) != null) {
+            fxSize.decrementAndGet();
+            batch.add(e);
+        }
+        // Token-Tode gleichen Namens zusammenfassen
+        Map<String, Integer> tokenDeaths = new LinkedHashMap<>();
+        List<Messages.FxEvent> out = new ArrayList<>();
+        for (Messages.FxEvent x : batch) {
+            if ("tokenDied".equals(x.kind()) && x.name() != null) {
+                tokenDeaths.merge(x.name() + "|" + x.ownerId(), 1, Integer::sum);
+            }
+        }
+        Set<String> tokenSeen = new HashSet<>();
+        for (Messages.FxEvent x : batch) {
+            if ("tokenDied".equals(x.kind()) && x.name() != null) {
+                String key = x.name() + "|" + x.ownerId();
+                if (!tokenSeen.add(key)) {
+                    continue;
+                }
+                int n = tokenDeaths.getOrDefault(key, 1);
+                out.add(n > 1 ? x.withAmount(n) : x);
+                continue;
+            }
+            if ("life".equals(x.kind()) && x.amount() != null && x.amount() < 0) {
+                int lost = -x.amount();
+                boolean fromDamage = batch.stream().anyMatch(d -> "damage".equals(d.kind()) && d.objectId() == null
+                        && Objects.equals(d.playerId(), x.playerId()) && d.amount() != null && d.amount() == lost);
+                if (fromDamage) {
+                    continue;
+                }
+            }
+            out.add(x);
+        }
+        for (HumanSeat s : humans.values()) {
+            List<Messages.FxEvent> mine = new ArrayList<>(out.size());
+            for (Messages.FxEvent x : out) {
+                if (Boolean.TRUE.equals(x.hidden()) && !s.playerId.equals(x.ownerId())) {
+                    continue;
+                }
+                mine.add(x);
+            }
+            if (!mine.isEmpty()) {
+                send(s, new Messages.Events(mine));
+            }
         }
     }
 
@@ -1404,6 +1917,9 @@ public final class GameHost {
             boolean waiting = inWaitForResponse(t);
             if (waiting && looksLost(now)) {
                 callExecutor.execute(this::recoverLostResponse);
+            }
+            if (!fx.isEmpty() && now - lastFxAt > FX_FLUSH_AFTER_MS) {
+                flushFx(); // kein State in Sicht (gedrosselt/wartend): Ereignisse trotzdem zeigen
             }
             // getrennte Mitspieler: Zaehler fuer die anderen alle 2 s aktualisieren
             if (ticks % 4 == 0 && humans.size() > 1

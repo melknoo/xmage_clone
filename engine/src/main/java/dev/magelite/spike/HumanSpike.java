@@ -37,13 +37,27 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke
  * <p>
  * {@code --humans=N}: N automatische Test-Menschen mit eigenem Sitz und eigenem Autopiloten in einem Spiel (Routing-Test).
  * <p>
  * {@code --scenario=swarm}: lange Trigger-Ketten (siehe {@link Scenarios}). Der Test-Spieler spielt dann nur Laender,
  * passt sonst und misst, wie lange jede Kette auf dem Stapel braucht. Beim ersten Angriff greift er per
- * Mehrfach-Angriff ({@code GameHost.combat}) mit allen Kreaturen einen Gegner an und prueft das Ergebnis.
+ * Mehrfach-Angriff ({@code GameHost.combat}) mit allen Kreaturen einen Gegner an und prueft das Ergebnis; danach
+ * nimmt er den Angriff per {@code GameHost.combatReset} komplett zurueck und prueft, dass niemand mehr angreift.
+ * <p>
+ * {@code --scenario=necro}: Necropotence im Spiel, ich beginne. Im ersten Hauptsegment "Pay 1 life" ueber
+ * {@code GameHost.repeat} 5-mal aktivieren; prueft Leben -5 und Exil +5, ohne dass ein fremder Prompt kommt.
+ * <p>
+ * {@code --scenario=gemstone}: Starthand-Aktion (Gemstone Caverns, Bot beginnt). Prueft, dass die Ja/Nein-Frage vor
+ * dem ersten Zug kommt und die Karte nach "Ja" + Exil-Wahl auf dem Spielfeld liegt.
+ * <p>
+ * {@code --scenario=convoke}: X-Zauber und Einberufen. Main 1: Knopf-Ziel "combat", F10 bei leerem Stapel abgelehnt,
+ * Blaze mit X=2 (Stapel zeigt {@code x}); dann Guardian of Vitu-Ghazi: Mana-Prompt mit Knopf "Einberufen" und 6
+ * Kreaturen, kein Auto-Start; "Automatisch bezahlen" tappt nur die 2 Laender, den Rest zahlen Klicks auf Kreaturen
+ * ({@code GameHost.specialPay}) ohne weitere Fragen. Danach Main-2-Stopp mit Ziel "end", dort F9 ("bis zu meinem
+ * Zug"): im Gegnerzug per F3 abbrechen, erneut F9 und per "Passen manuell" abbrechen; danach muss ein Stopp in der
+ * Endphase eines Gegners kommen. Im naechsten eigenen Zug Ziel "combat".
  * <p>
  * {@code --scenario=dredge}: Ersatzeffekt-Wahl beim Ziehen ({@code GameHost.replacement}). 1. Dialog "Keinen
  * anwenden", 2. ersten Effekt per 1-Klick anwenden, 3. "Keinen anwenden" + merken. Prueft, dass danach keine
@@ -168,6 +182,8 @@ public final class HumanSpike {
         Driver driver = drivers.get(firstSeat);
         Map<GameHost.HumanSeat, Messages.GameOver> overs = new java.util.LinkedHashMap<>();
         ChainMeter chains = new ChainMeter();
+        Map<String, Integer> fxKinds = new java.util.TreeMap<>();
+        int fxLeaks = 0;
         host.start();
         long t0 = System.currentTimeMillis();
         boolean stalled = false;
@@ -190,6 +206,9 @@ public final class HumanSpike {
             }
             if (msg instanceof StateDto s) {
                 d.state = s;
+                if (d.convoke) {
+                    d.convokeState(s);
+                }
                 if (d == driver) {
                     turnOrder.accept(s);
                     chains.accept(s);
@@ -200,6 +219,14 @@ public final class HumanSpike {
                 overs.put(in.seat(), g);
                 if (overs.size() == drivers.size()) {
                     over = overs.get(firstSeat);
+                }
+            } else if (msg instanceof Messages.Events ev) {
+                for (Messages.FxEvent e : ev.items()) {
+                    fxKinds.merge(e.kind(), 1, Integer::sum);
+                    // verdeckte Karten duerfen nur beim Besitzer mit Name/Bild ankommen
+                    if (Boolean.TRUE.equals(e.hidden()) && !in.seat().playerId().equals(e.ownerId()) && (e.name() != null || e.card() != null)) {
+                        fxLeaks++;
+                    }
                 }
             } else if (msg instanceof Messages.Toast t && verbose) {
                 out("  TOAST %s", t.rich());
@@ -241,6 +268,23 @@ public final class HumanSpike {
         }
         if (driver.swarm) {
             out("  Mehrfach-Angriff: %s", driver.macroResult == null ? "NICHT GETESTET" : driver.macroResult);
+            out("  Angriff zuruecksetzen: %s", driver.resetResult == null ? "NICHT GETESTET" : driver.resetResult);
+        }
+        if (driver.gemstone) {
+            out("  Starthand-Aktion (Gemstone): %s", driver.gemResult == null ? "FEHLER: keine Frage bekommen" : driver.gemResult);
+        }
+        if (driver.necro) {
+            out("  Necro x5: %s", driver.necroResult == null ? "FEHLER: nicht ausgeloest (Phase " + driver.necroPhase + ")" : driver.necroResult);
+        }
+        if (driver.convoke) {
+            out("  Convoke/X/Stopps: %s%s", driver.cvErrors.isEmpty() && driver.cvPhase >= 99 ? "OK" : "FEHLER (Phase " + driver.cvPhase + ")",
+                    driver.cvNotes.isEmpty() ? "" : " | " + String.join(" | ", driver.cvNotes));
+            for (String e : driver.cvErrors) {
+                out("    !! %s", e);
+            }
+        }
+        if (driver.specialPays > 0) {
+            out("  Einberufen per Klick (Zufallsspiel): %d", driver.specialPays);
         }
         boolean replOk = true;
         if (driver.dredge) {
@@ -253,14 +297,19 @@ public final class HumanSpike {
         if (recovered.get() > 0) {
             out("  Verlorene Antworten neu zugestellt (XMage-Race): %d", recovered.get());
         }
+        out("  Ereignisse (events): %s%s", fxKinds.isEmpty() ? "KEINE" : fxKinds, fxLeaks > 0 ? " | FEHLER: " + fxLeaks + " verdeckte Karten an Fremde" : "");
         chains.report();
         out("  Sitzordnung (UI): %s", turnOrder.seats);
         out("  Zugfolge: %s", turnOrder.sequence);
         if (turnOrder.errors > 0) {
             out("  FEHLER: Zugfolge weicht %dx von der Sitzordnung ab", turnOrder.errors);
         }
-        boolean macroOk = !driver.swarm || (driver.macroResult != null && driver.macroResult.startsWith("OK"));
-        return !stalled && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
+        boolean macroOk = !driver.swarm || (driver.macroResult != null && driver.macroResult.startsWith("OK")
+                && driver.resetResult != null && driver.resetResult.startsWith("OK"));
+        boolean gemOk = !driver.gemstone || (driver.gemResult != null && driver.gemResult.startsWith("OK"));
+        boolean necroOk = !driver.necro || (driver.necroResult != null && driver.necroResult.startsWith("OK"));
+        boolean convokeOk = !driver.convoke || (driver.cvErrors.isEmpty() && driver.cvPhase >= 99);
+        return !stalled && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
     }
 
     /**
@@ -373,6 +422,9 @@ public final class HumanSpike {
         final boolean landsOnly;
         final boolean swarm;
         final boolean dredge;
+        final boolean gemstone;
+        final boolean necro;
+        final boolean convoke;
         volatile StateDto state;
         PromptDto lastPrompt;
         final Map<String, Integer> kinds = new HashMap<>();
@@ -386,6 +438,16 @@ public final class HumanSpike {
         List<UUID> macroIds;
         UUID macroDefender;
         String macroResult;
+        /** "Angriff zuruecksetzen" nach dem Mehrfach-Angriff: angefordert / Ergebnis */
+        boolean resetAsked;
+        String resetResult;
+        /** Starthand-Aktion (Szenario gemstone) */
+        boolean gemAsked;
+        String gemResult;
+        /** Mehrfach-Aktivierung (Szenario necro): 0 = wartet auf Prioritaet, 1 = Picker offen, 2 = laeuft, 3 = fertig */
+        int necroPhase;
+        int necroLife, necroExile;
+        String necroResult;
         /** Ersatzeffekte (Szenario dredge) */
         int replDialogs, replErrors;
         /** bis zum naechsten anderen Prompt darf keine "Dredge ...?"-Frage kommen */
@@ -393,6 +455,16 @@ public final class HumanSpike {
         boolean replAlways;
         String replAccepted;
         boolean replAcceptedOk;
+        /** Szenario convoke: 0 = Main 1 (Blaze), 1 = Blaze laeuft, 2 = Guardian gewirkt, 3 = Einberufen, 4 = wartet auf Main 2, 6-11 = F9/Stopp, 99 = fertig */
+        int cvPhase;
+        int cvTurn;
+        Integer cvX;
+        UUID cvWolf;
+        int cvClicks;
+        final List<String> cvErrors = new ArrayList<>();
+        final List<String> cvNotes = new ArrayList<>();
+        /** Einberufen per Klick in Zufallsspielen */
+        int specialPays;
 
         Driver(GameHost host, GameHost.HumanSeat seat, Random rnd, boolean verbose, String scenario) {
             this.host = host;
@@ -402,10 +474,25 @@ public final class HumanSpike {
             this.landsOnly = scenario != null;
             this.swarm = "swarm".equalsIgnoreCase(scenario);
             this.dredge = "dredge".equalsIgnoreCase(scenario);
+            this.gemstone = "gemstone".equalsIgnoreCase(scenario);
+            this.necro = "necro".equalsIgnoreCase(scenario);
+            this.convoke = "convoke".equalsIgnoreCase(scenario);
         }
 
         void handle(PromptDto p) {
             if (dredge && replacement(p)) {
+                return;
+            }
+            if (gemstone && openingHand(p)) {
+                return;
+            }
+            if (necro && necroMacro(p)) {
+                return;
+            }
+            if (convoke && convokeFlow(p)) {
+                return;
+            }
+            if (!convoke && specialPay(p)) {
                 return;
             }
             if (swarm && "SELECT".equals(p.kind) && "attackers".equals(p.mode) && macroAttack(p)) {
@@ -548,8 +635,380 @@ public final class HumanSpike {
         }
 
         /**
+         * Szenario necro: Necropotence anklicken, im Picker "Pay 1 life" 5-mal ueber {@code GameHost.repeat}; sobald der
+         * Stapel wieder leer ist: Leben -5 und Exil +5 pruefen. Jeder andere Prompt waehrend des Makros ist ein Fehler.
+         */
+        boolean necroMacro(PromptDto p) {
+            StateDto s = state;
+            if (s == null || necroPhase >= 3) {
+                return false;
+            }
+            PlayerDto me = s.players.stream().filter(pl -> pl.me).findFirst().orElse(null);
+            if (me == null) {
+                return false;
+            }
+            boolean prio = "SELECT".equals(p.kind) && "priority".equals(p.mode);
+            if (necroPhase == 0) {
+                if (!prio || !me.active || !s.stack.isEmpty() || !"PRECOMBAT_MAIN".equals(s.step)) {
+                    return false;
+                }
+                UUID necroId = me.battlefield.stream().filter(c -> "Necropotence".equals(c.name)).map(c -> c.id).findFirst().orElse(null);
+                if (necroId == null || s.actions == null || !s.actions.contains(necroId)) {
+                    return false;
+                }
+                necroLife = me.life;
+                necroExile = me.exile == null ? 0 : me.exile.size();
+                necroPhase = 1;
+                lastPrompt = p;
+                host.respond(seat, p.id, GameHost.Response.ofUuid(necroId));
+                return true;
+            }
+            if (necroPhase == 1) {
+                if (!"CHOOSE_ABILITY".equals(p.kind) || p.choices == null) {
+                    necroResult = "FEHLER: statt Picker kam " + p.kind + " '" + trim(p.messageText, 60) + "'";
+                    necroPhase = 3;
+                    return false;
+                }
+                PromptDto.Item item = p.choices.stream().filter(i -> i.text().contains("Pay 1 life")).findFirst().orElse(null);
+                if (item == null) {
+                    necroResult = "FEHLER: 'Pay 1 life' nicht im Picker: " + p.choices;
+                    necroPhase = 3;
+                    return false;
+                }
+                necroPhase = 2;
+                lastPrompt = p;
+                if (!host.repeat(seat, p.id, UUID.fromString(item.id()), 5)) {
+                    necroResult = "FEHLER: repeat() abgelehnt";
+                    necroPhase = 3;
+                }
+                return true;
+            }
+            // Phase 2: laeuft
+            if (prio && s.stack.isEmpty()) {
+                int dl = necroLife - me.life;
+                int de = (me.exile == null ? 0 : me.exile.size()) - necroExile;
+                necroResult = (dl == 5 && de == 5 ? "OK " : "FEHLER ") + "Leben -" + dl + ", Exil +" + de;
+                necroPhase = 3;
+            } else if (!prio) {
+                necroResult = "FEHLER: unerwarteter Prompt waehrend des Makros: " + p.kind + " '" + trim(p.messageText, 60) + "'";
+                necroPhase = 3;
+            }
+            return false;
+        }
+
+        /** Zufallsspiele: Convoke-Zauber ohne freie Manaquelle -> eine Kreatur per Klick einberufen. */
+        boolean specialPay(PromptDto p) {
+            StateDto s = state;
+            if (!"PLAY_MANA".equals(p.kind) || p.specialTargets == null || p.specialTargets.isEmpty() || s == null) {
+                return false;
+            }
+            PlayerDto me = me(s);
+            if (me != null && s.playable != null && me.battlefield.stream().anyMatch(perm -> !perm.tapped && s.playable.containsKey(perm.id))) {
+                return false; // erst Laender (danach sind sie gesperrt)
+            }
+            lastPrompt = p;
+            kinds.merge("PLAY_MANA/special", 1, Integer::sum);
+            if (host.specialPay(seat, p.id, p.specialTargets.get(0))) {
+                specialPays++;
+                return true;
+            }
+            out("  !! specialPay abgelehnt fuer Prompt %d", p.id);
+            return false;
+        }
+
+        /** Szenario convoke: F9 im Gegnerzug abbrechen (F3), erneut F9, per "Passen manuell" abbrechen. */
+        void convokeState(StateDto s) {
+            PlayerDto me = me(s);
+            if (me == null || s.turn == cvTurn) {
+                return;
+            }
+            boolean f9 = me.skips != null && me.skips.contains("myTurn");
+            switch (cvPhase) {
+                case 6 -> {
+                    if (f9 && !me.active) {
+                        cvNotes.add("F9 aktiv in Zug " + s.turn);
+                        cvPhase = 7;
+                        host.action(seat, "PASS_PRIORITY_CANCEL_ALL_ACTIONS", null);
+                    } else if (me.active) {
+                        cvFail("F9 nie im State gesehen");
+                        cvPhase = 5;
+                    }
+                }
+                case 7 -> {
+                    if (me.skips == null) {
+                        cvNotes.add("F3 bricht ab");
+                        cvPhase = 8;
+                        host.action(seat, "PASS_PRIORITY_UNTIL_MY_NEXT_TURN", null);
+                    }
+                }
+                case 8 -> {
+                    if (f9) {
+                        cvPhase = 11;
+                        host.setAutoPass(seat, false);
+                    }
+                }
+                case 11 -> {
+                    if (me.skips == null) {
+                        cvNotes.add("Passen manuell bricht ab");
+                        cvPhase = 10;
+                    }
+                }
+                default -> {
+                }
+            }
+        }
+
+        private void cvFail(String msg) {
+            cvErrors.add(msg);
+            out("!!! Convoke-Szenario: %s", msg);
+        }
+
+        private UUID handCard(StateDto s, String name) {
+            return s.hand.stream().filter(c -> name.equals(c.name)).map(c -> c.id).findFirst().orElse(null);
+        }
+
+        /**
+         * Szenario convoke (siehe Klassen-Javadoc). Antwortet selbst, solange der Ablauf passt; unerwartete Prompts
+         * gehen an {@link #decide}.
+         */
+        boolean convokeFlow(PromptDto p) {
+            StateDto s = state;
+            if (s == null || cvPhase >= 99) {
+                return false;
+            }
+            PlayerDto me = me(s);
+            if (me == null) {
+                return false;
+            }
+            boolean prio = "SELECT".equals(p.kind) && "priority".equals(p.mode);
+            boolean myEmpty = prio && me.active && s.stack.isEmpty();
+            boolean main1 = myEmpty && "PRECOMBAT_MAIN".equals(s.step);
+            if (cvPhase > 0 && s.turn != cvTurn && cvPhase < 5) {
+                cvFail("Zug " + cvTurn + " vorbei in Phase " + cvPhase + " (Main-2-Stopp nicht gesehen?)");
+                cvPhase = 99;
+                return false;
+            }
+            switch (cvPhase) {
+                case 0 -> {
+                    if (!main1) {
+                        return false;
+                    }
+                    cvTurn = s.turn;
+                    // Kampf nur mit moeglichen Angreifern (die Szenario-Kreaturen sind in Zug 1 noch "krank")
+                    String want = me.battlefield.stream().anyMatch(c -> !c.sick && !c.tapped && c.types != null && c.types.contains("CREATURE")) ? "combat" : "main2";
+                    if (!want.equals(p.nextStop)) {
+                        cvFail("Main 1: nextStop=" + p.nextStop + " statt " + want);
+                    } else {
+                        cvNotes.add("Main 1 -> " + want);
+                    }
+                    if (host.action(seat, "PASS_PRIORITY_UNTIL_STACK_RESOLVED", null)) {
+                        cvFail("F10 bei leerem Stapel nicht abgelehnt");
+                    }
+                    UUID blaze = handCard(s, "Blaze");
+                    if (blaze == null || s.actions == null || !s.actions.contains(blaze)) {
+                        cvFail("Blaze nicht spielbar");
+                        cvPhase = 99;
+                        return false;
+                    }
+                    cvPhase = 1;
+                    lastPrompt = p;
+                    host.respond(seat, p.id, GameHost.Response.ofUuid(blaze));
+                    return true;
+                }
+                case 1 -> {
+                    if ("AMOUNT".equals(p.kind)) {
+                        lastPrompt = p;
+                        host.respond(seat, p.id, GameHost.Response.ofInt(2));
+                        return true;
+                    }
+                    if ("PICK_TARGET".equals(p.kind) && p.targets != null && !p.targets.isEmpty()) {
+                        CardDto top = s.stack.isEmpty() ? null : s.stack.get(0);
+                        if (top != null && "Blaze".equals(top.name)) {
+                            cvX = top.x;
+                        }
+                        UUID opp = s.players.stream().filter(pl -> !pl.me && !pl.lost && p.targets.contains(pl.id)).map(pl -> pl.id).findFirst().orElse(p.targets.get(0));
+                        lastPrompt = p;
+                        host.respond(seat, p.id, GameHost.Response.ofUuid(opp));
+                        return true;
+                    }
+                    if (!main1) {
+                        return false;
+                    }
+                    // Blaze ist durch
+                    if (cvX == null || cvX != 2) {
+                        cvFail("X auf dem Stapel: " + cvX + " statt 2");
+                    } else {
+                        cvNotes.add("Blaze X=2 auf dem Stapel");
+                    }
+                    UUID guardian = handCard(s, "Guardian of Vitu-Ghazi");
+                    if (guardian == null || s.actions == null || !s.actions.contains(guardian)) {
+                        cvFail("Guardian of Vitu-Ghazi nicht spielbar");
+                        cvPhase = 99;
+                        return false;
+                    }
+                    cvWolf = me.battlefield.stream().filter(c -> "Watchwolf".equals(c.name)).map(c -> c.id).findFirst().orElse(null);
+                    cvPhase = 2;
+                    lastPrompt = p;
+                    host.respond(seat, p.id, GameHost.Response.ofUuid(guardian));
+                    return true;
+                }
+                case 2 -> {
+                    if (!"PLAY_MANA".equals(p.kind)) {
+                        return false;
+                    }
+                    long lands = me.battlefield.stream().filter(c -> !c.tapped && c.types != null && c.types.contains("LAND")).count();
+                    int n = p.specialTargets == null ? 0 : p.specialTargets.size();
+                    if (p.specialBtn == null || !p.specialBtn.contains("Einberufen")) {
+                        cvFail("Knopf fehlt: specialBtn=" + p.specialBtn);
+                    }
+                    if (n != 6 || cvWolf == null || !p.specialTargets.contains(cvWolf)) {
+                        cvFail("specialTargets: " + n + " statt 6 (Watchwolf " + (cvWolf != null && n > 0 && p.specialTargets.contains(cvWolf)) + ")");
+                    }
+                    if (lands != 2) {
+                        cvFail("ungetappte Laender " + lands + " statt 2 (Auto-Bezahlen hat von selbst begonnen?)");
+                    }
+                    cvNotes.add("Mana-Prompt: '" + p.specialBtn + "', " + n + " Kreaturen, " + lands + " Laender frei");
+                    cvPhase = 3;
+                    lastPrompt = p;
+                    host.autoPayNow(seat); // nur Laender (Teilzahlung)
+                    return true;
+                }
+                case 3 -> {
+                    if ("PLAY_MANA".equals(p.kind)) {
+                        long lands = me.battlefield.stream().filter(c -> !c.tapped && c.types != null && c.types.contains("LAND")).count();
+                        if (cvClicks == 0 && lands != 0) {
+                            cvFail("nach Automatisch bezahlen noch " + lands + " Laender frei");
+                        }
+                        if (p.specialTargets == null || p.specialTargets.isEmpty()) {
+                            cvFail("Mana-Prompt ohne einberufbare Kreaturen: '" + p.messageText + "'");
+                            cvPhase = 99;
+                            return false;
+                        }
+                        UUID pick = cvClicks == 0 && cvWolf != null && p.specialTargets.contains(cvWolf) ? cvWolf : p.specialTargets.get(0);
+                        cvClicks++;
+                        lastPrompt = p;
+                        if (!host.specialPay(seat, p.id, pick)) {
+                            cvFail("specialPay abgelehnt");
+                            cvPhase = 99;
+                            return false;
+                        }
+                        return true;
+                    }
+                    if ("CHOOSE_ABILITY".equals(p.kind) || "PICK_TARGET".equals(p.kind) || "CHOOSE_CHOICE".equals(p.kind)) {
+                        cvFail("Makro liess Frage durch: " + p.kind + " '" + trim(p.messageText, 60) + "'");
+                        cvPhase = 99;
+                        return false;
+                    }
+                    if (!main1) {
+                        return false;
+                    }
+                    boolean onField = me.battlefield.stream().anyMatch(c -> "Guardian of Vitu-Ghazi".equals(c.name));
+                    long tapped = me.battlefield.stream().filter(c -> c.tapped && List.of("Watchwolf", "Grizzly Bears", "Savannah Lions").contains(c.name)).count();
+                    if (!onField) {
+                        cvFail("Guardian nicht im Spiel");
+                    }
+                    if (tapped != 6 || cvClicks != 6) {
+                        cvFail("eingeberufen: " + tapped + " getappt, " + cvClicks + " Klicks (erwartet 6/6)");
+                    } else {
+                        cvNotes.add("Guardian per 2 Laender + 6 Kreaturen");
+                    }
+                    if (!"main2".equals(p.nextStop)) {
+                        cvFail("nach Guardian: nextStop=" + p.nextStop + " statt main2");
+                    }
+                    cvPhase = 4;
+                    return false;
+                }
+                case 4 -> {
+                    if (myEmpty && "POSTCOMBAT_MAIN".equals(s.step)) {
+                        cvNotes.add("Main-2-Stopp (Aktionen: " + (s.actions == null ? 0 : s.actions.size()) + ")");
+                        if (!"end".equals(p.nextStop)) {
+                            cvFail("Main 2: nextStop=" + p.nextStop + " statt end");
+                        }
+                        // F9: bis zu meinem Zug passen (schliesst den Prompt selbst)
+                        cvPhase = 6;
+                        lastPrompt = p;
+                        if (!host.action(seat, "PASS_PRIORITY_UNTIL_MY_NEXT_TURN", null)) {
+                            cvFail("F9 abgelehnt");
+                            cvPhase = 5;
+                            return false;
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+                case 6, 7, 8 -> {
+                    if (prio && !me.active) {
+                        cvFail("Prioritaet im Gegnerzug trotz F9 (Phase " + cvPhase + ", " + s.step + ")");
+                        cvPhase = 99;
+                    }
+                    return false;
+                }
+                case 10 -> {
+                    // "Passen manuell" + abgebrochen: Endphase eines Gegners muss halten
+                    if (prio && !me.active && "END_TURN".equals(s.step)) {
+                        cvNotes.add("Stopp in der Endphase eines Gegners (Zug " + s.turn + ")");
+                        host.setAutoPass(seat, true);
+                        cvPhase = 5;
+                        return false;
+                    }
+                    if (me.active && s.turn != cvTurn) {
+                        cvFail("kein Stopp in einer gegnerischen Endphase vor Zug " + s.turn);
+                        host.setAutoPass(seat, true);
+                        cvPhase = 5;
+                    }
+                    return false;
+                }
+                case 5 -> {
+                    // naechster eigener Zug: gesunde, ungetappte Kreaturen -> "Zum Kampf"
+                    if (!main1 || s.turn == cvTurn) {
+                        return false;
+                    }
+                    boolean attackers = me.battlefield.stream().anyMatch(c -> !c.sick && !c.tapped && c.types != null && c.types.contains("CREATURE"));
+                    String want = attackers ? "combat" : "main2";
+                    if (!want.equals(p.nextStop)) {
+                        cvFail("Zug " + s.turn + " Main 1: nextStop=" + p.nextStop + " statt " + want);
+                    } else {
+                        cvNotes.add("Zug " + s.turn + " Main 1 -> " + want);
+                    }
+                    cvPhase = 99;
+                    return false;
+                }
+                default -> {
+                    return false;
+                }
+            }
+        }
+
+        /**
+         * Szenario gemstone: die Starthand-Frage mit Ja beantworten; sobald Gemstone Caverns auf meinem Spielfeld liegt
+         * (und eine Karte im Exil), ist der Test bestanden. Die Exil-Wahl beantwortet {@link #decide} (PICK_TARGET).
+         */
+        boolean openingHand(PromptDto p) {
+            StateDto s = state;
+            if (gemAsked && gemResult == null && s != null) {
+                PlayerDto me = s.players.stream().filter(pl -> pl.me).findFirst().orElse(null);
+                if (me != null && me.battlefield.stream().anyMatch(c -> "Gemstone Caverns".equals(c.name))) {
+                    gemResult = "OK (auf dem Spielfeld, Exil=" + me.exile.size() + ")";
+                } else if (s.turn >= 2) {
+                    gemResult = "FEHLER: nach Zug 2 nicht auf dem Spielfeld";
+                }
+            }
+            if (!gemAsked && "ASK".equals(p.kind) && p.messageText != null && p.messageText.startsWith("Put Gemstone Caverns")) {
+                if (s != null && s.step != null) {
+                    gemResult = "FEHLER: Frage kam nicht vor dem Spiel (step=" + s.step + ")";
+                }
+                gemAsked = true;
+                lastPrompt = p;
+                host.respond(seat, p.id, GameHost.Response.ofBool(true));
+                return true;
+            }
+            return false;
+        }
+
+        /**
          * Szenario: erster Angriffs-Prompt -> alle moeglichen Angreifer per Mehrfach-Angriff auf einen Gegner;
-         * zweiter Angriffs-Prompt (nach dem Makro) -> pruefen und bestaetigen.
+         * zweiter Angriffs-Prompt (nach dem Makro) -> pruefen, dann per combatReset alles zuruecknehmen;
+         * dritter Angriffs-Prompt -> pruefen, dass niemand mehr angreift, und bestaetigen (kein Angriff).
          */
         boolean macroAttack(PromptDto p) {
             StateDto s = state;
@@ -578,7 +1037,20 @@ public final class HumanSpike {
                     }
                 }
                 macroResult = (ok == macroIds.size() ? "OK " : "FEHLER ") + ok + "/" + macroIds.size() + " greifen an";
-                attacks += ok;
+                lastPrompt = p;
+                resetAsked = true;
+                if (!host.combatReset(seat)) {
+                    resetResult = "FEHLER: combatReset() abgelehnt";
+                    host.respond(seat, p.id, GameHost.Response.ofBool(true));
+                }
+                return true;
+            }
+            if (resetAsked && resetResult == null) {
+                int still = 0;
+                for (var g : s.combat) {
+                    still += g.attackers().size();
+                }
+                resetResult = (still == 0 ? "OK " : "FEHLER ") + still + " greifen noch an";
                 lastPrompt = p;
                 host.respond(seat, p.id, GameHost.Response.ofBool(true));
                 return true;

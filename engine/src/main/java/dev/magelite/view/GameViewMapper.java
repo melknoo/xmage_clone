@@ -154,6 +154,7 @@ public final class GameViewMapper {
             if (obj != null) {
                 d.controllerId = game.getControllerId(v.getId());
             }
+            d.x = xValue(game, v.getId());
             d.targetRefs = targetRefs(game, v.getId(), d.targets, myId);
             if (d.targets == null && d.targetRefs != null) {
                 d.targets = d.targetRefs.stream().map(t -> t.id).toList();
@@ -206,6 +207,26 @@ public final class GameViewMapper {
             id = reversed ? list.getPrevious() : list.getNext();
         }
         return order;
+    }
+
+    /**
+     * Angesagtes X eines Stapelobjekts (Kosten-Tag "X", gesetzt beim Ansagen, also schon waehrend Zielwahl/Bezahlen).
+     * Exakte id-Suche: {@code getStackObject} trifft auch die {@code sourceId} und koennte einen Trigger liefern.
+     * Nur der eigene Tag - XMages Rueckfall auf die Quelle wuerde Triggern das X ihres Permanents geben.
+     */
+    private static Integer xValue(Game game, UUID stackId) {
+        try {
+            for (StackObject so : game.getStack()) {
+                if (so.getId().equals(stackId)) {
+                    Ability a = so.getStackAbility();
+                    Map<String, Object> tags = a == null ? null : a.getCostsTagMap();
+                    return tags != null && tags.get("X") instanceof Integer i ? i : null;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // nur Anzeige
+        }
+        return null;
     }
 
     /**

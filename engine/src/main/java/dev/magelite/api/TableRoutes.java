@@ -89,6 +89,11 @@ public final class TableRoutes implements HttpServer.Module {
             JsonNode b = body(ctx);
             ctx.json(view(tables.update(u, ctx.pathParam("id"), b.path("name").asText(null), tempo(b)), u));
         });
+        app.post("/api/tables/{id}/chat", ctx -> {
+            User u = Auth.user(ctx);
+            JsonNode b = body(ctx);
+            ctx.json(view(tables.chat(u, ctx.pathParam("id"), b.path("text").asText("")), u));
+        });
         app.post("/api/tables/{id}/start", ctx -> {
             User u = Auth.user(ctx);
             ctx.json(view(tables.start(u, ctx.pathParam("id")), u));
@@ -154,6 +159,16 @@ public final class TableRoutes implements HttpServer.Module {
         m.put("mySeat", mySeat < 0 ? null : mySeat);
         m.put("host", t.hostUserId == me.id());
         m.put("humans", seats.stream().filter(s -> "HUMAN".equals(s.get("kind"))).count());
+        List<Map<String, Object>> chat = new ArrayList<>();
+        for (TableManager.ChatMsg c : t.chat) {
+            Map<String, Object> cm = new LinkedHashMap<>();
+            cm.put("ts", c.ts());
+            cm.put("userId", c.userId());
+            cm.put("name", c.name());
+            cm.put("text", c.text());
+            chat.add(cm);
+        }
+        m.put("chat", chat);
         return m;
     }
 }

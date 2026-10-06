@@ -46,6 +46,8 @@ export interface Card {
   kind?: 'spell' | 'ability'
   sourceId?: UUID
   controllerId?: UUID
+  /** angesagtes X (nur Stapelobjekte) */
+  x?: number
 }
 
 export interface Permanent extends Card {
@@ -143,6 +145,33 @@ export interface GameState {
   replDeclines?: string[]
 }
 
+/** Chat-Zeile im Spiel (WS "chat") */
+export interface ChatEntry {
+  ts: number
+  playerId: UUID
+  name: string
+  text: string
+}
+
+/** Spielereignis fuer Animationen/Ereignisleiste (WS "events") */
+export interface FxEvent {
+  kind: 'died' | 'tokenDied' | 'exiled' | 'bounced' | 'tucked' | 'discarded' | 'milled' | 'resolved' | 'command' | 'countered' | 'damage' | 'life' | 'counter'
+  objectId?: UUID
+  name?: string
+  card?: Card
+  from?: string
+  to?: string
+  playerId?: UUID
+  ownerId?: UUID
+  sourceId?: UUID
+  sourceName?: string
+  amount?: number
+  token?: boolean
+  combat?: boolean
+  hidden?: boolean
+  ts: number
+}
+
 export type RichSeg = { text?: string; obj?: string; color?: string; i?: boolean; b?: boolean; br?: boolean }
 
 export type PromptKind =
@@ -196,7 +225,11 @@ export interface Prompt {
   leftBtn?: string
   rightBtn?: string
   specialBtn?: string
+  /** PLAY_MANA: Kreaturen, die per Klick eingeberufen werden koennen (Convoke) */
+  specialTargets?: UUID[]
   mode?: 'priority' | 'attackers' | 'blockers'
+  /** Prioritaet im eigenen Zug bei leerem Stapel: wohin "Weiter" fuehrt */
+  nextStop?: 'main1' | 'combat' | 'main2' | 'end'
   possibleAttackers?: UUID[]
   possibleBlockers?: UUID[]
   mulligan?: boolean
@@ -206,6 +239,8 @@ export interface Prompt {
   cards?: Card[]
   defenderPick?: boolean
   choices?: PromptItem[]
+  /** CHOOSE_ABILITY: Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren") */
+  sourceId?: UUID
   choice?: {
     message?: string
     subMessage?: string
@@ -213,6 +248,8 @@ export interface Prompt {
     keyed?: boolean
     search?: boolean
     manaColor?: boolean
+    /** "card": Kartennamen (Bildvorschau per Name) */
+    hint?: 'text' | 'card' | 'card_dungeon' | 'game_object'
     items?: ChoiceItem[]
     specialText?: string
     /** nur bei der Ersatzeffekt-Wahl: gleiche Effekte (Regeltext) zusammengefasst */
@@ -325,6 +362,8 @@ export type ServerMessage =
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }
   | { t: 'pong' }
+  | { t: 'events'; items: FxEvent[] }
+  | { t: 'chat'; entries: ChatEntry[] }
 
 export type Answer =
   | { uuid: UUID }

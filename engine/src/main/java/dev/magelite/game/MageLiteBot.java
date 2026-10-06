@@ -8,6 +8,8 @@ import mage.constants.RangeOfInfluence;
 import mage.game.Game;
 import mage.game.permanent.Permanent;
 import mage.player.ai.ComputerPlayerControllableProxy;
+import mage.player.ai.SimulationNode2;
+import mage.player.ai.score.GameStateEvaluator2;
 import mage.player.ai.util.CombatInfo;
 import mage.player.ai.util.CombatUtil;
 import org.apache.log4j.Logger;
@@ -19,7 +21,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * XMage-"mad"-Bot mit einstellbarem Tempo.
@@ -49,6 +55,8 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
     private transient boolean quickPassing;
     /** in diesem priority()-Aufruf wirklich etwas getan (Nicht-Mana-Faehigkeit, Zauber, Land) */
     private transient boolean acted;
+    /** Suche abbrechen (statt Thread.interrupt, siehe addActionsTimed) */
+    private transient volatile boolean simStop;
 
     public MageLiteBot(String name, RangeOfInfluence range, TempoSettings tempo) {
         super(name, range, tempo.preset().skill);
@@ -119,6 +127,53 @@ public class MageLiteBot extends ComputerPlayerControllableProxy {
             passedSigs(game).add(sig);
         }
         return result;
+    }
+
+    /**
+     * Wie {@code ComputerPlayer6.addActionsTimed}, aber ohne {@code task.cancel(true)}: XMage unterbricht den
+     * Simulations-Thread per {@code Thread.interrupt()}. Steckt der gerade in einem H2-Lesezugriff (z.B.
+     * {@code CardRepository.getNames()} fuer Demonic Consultation), schliesst Java den Dateikanal und die Karten-DB
+     * ist fuer den ganzen Prozess kaputt. Hier stattdessen kooperativer Stopp ueber {@link #simStop}, den
+     * {@link #addActions} an denselben Stellen prueft wie XMage den Interrupt.
+     */
+    @Override
+    protected Integer addActionsTimed() {
+        ThreadPoolExecutor pool = SimPool.POOL;
+        if (pool == null) {
+            return super.addActionsTimed();
+        }
+        simStop = false;
+        FutureTask<Integer> task = new FutureTask<>(() -> addActions(root, maxDepth, Integer.MIN_VALUE, Integer.MAX_VALUE));
+        pool.execute(task);
+        try {
+            return task.get(maxThinkTimeSecs, TimeUnit.SECONDS);
+        } catch (TimeoutException | InterruptedException e) {
+            LOG.warn("AI player thinks too long: " + getName() + " - battlefield size: "
+                    + root.getGame().getBattlefield().getAllPermanents().size() + ", stack: " + root.getGame().getStack());
+            simStop = true;
+            task.cancel(false);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+        } catch (ExecutionException e) {
+            LOG.error("AI player catch game error in simulation - " + getName() + ": " + e.getCause(), e.getCause());
+            simStop = true;
+            task.cancel(false);
+        } catch (RuntimeException e) {
+            LOG.error("AI player catch unknown error in simulation - " + getName() + ": " + e, e);
+            simStop = true;
+            task.cancel(false);
+        }
+        return 0;
+    }
+
+    @Override
+    protected int addActions(SimulationNode2 node, int depth, int alpha, int beta) {
+        if (simStop) {
+            // gleiche Semantik wie XMages Interrupt-Check am Anfang von addActions
+            return GameStateEvaluator2.evaluate(playerId, node.getGame()).getTotalScore();
+        }
+        return super.addActions(node, depth, alpha, beta);
     }
 
     /** Passt ohne Suche (wie ComputerPlayer7 bei UPKEEP/DRAW). */

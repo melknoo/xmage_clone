@@ -22,7 +22,7 @@ public final class Scenarios {
     }
 
     public static boolean exists(String name) {
-        return name != null && List.of("swarm", "dredge").contains(name.toLowerCase(Locale.ROOT));
+        return name != null && List.of("swarm", "dredge", "gemstone", "necro", "convoke").contains(name.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -36,6 +36,19 @@ public final class Scenarios {
         }
         if ("dredge".equals(name.toLowerCase(Locale.ROOT))) {
             dredge(game, humanId);
+            return;
+        }
+        if ("gemstone".equals(name.toLowerCase(Locale.ROOT))) {
+            gemstone(game, humanId);
+            return;
+        }
+        if ("convoke".equals(name.toLowerCase(Locale.ROOT))) {
+            convoke(game, humanId);
+            return;
+        }
+        if ("necro".equals(name.toLowerCase(Locale.ROOT))) {
+            cheat(game, humanId, List.of(), battlefield("Necropotence", 1), List.of());
+            game.setStartingPlayerId(humanId);
             return;
         }
         List<PutToBattlefieldInfo> mine = new ArrayList<>();
@@ -70,6 +83,40 @@ public final class Scenarios {
         }
         if (starter != null) {
             game.setStartingPlayerId(starter);
+        }
+    }
+
+    /**
+     * {@code gemstone}: Starthand-Aktion vor dem ersten Zug. Gemstone Caverns auf der Hand, ein Bot beginnt (nur dann
+     * darf sie ins Spiel): XMage fragt "Put Gemstone Caverns onto the battlefield?", danach "exile a card from hand".
+     */
+    private static void gemstone(Game game, UUID humanId) {
+        cheat(game, humanId, cards("Gemstone Caverns"), List.of(), List.of());
+        botStarts(game, humanId);
+    }
+
+    /**
+     * {@code convoke}: X-Zauber und Einberufen. Ich beginne mit 3 Bergen, 2 Suempfen, Watchwolf (gruen-weiss),
+     * 3 Grizzly Bears und 2 Savannah Lions; auf der Hand Blaze ({X}{R}) und Guardian of Vitu-Ghazi ({6}{G}{W},
+     * Convoke). Keine gruenen/weissen Laender: G und W muessen die Kreaturen zahlen, Watchwolf bekommt die Farbwahl.
+     */
+    private static void convoke(Game game, UUID humanId) {
+        List<PutToBattlefieldInfo> mine = new ArrayList<>();
+        mine.addAll(battlefield("Mountain", 3));
+        mine.addAll(battlefield("Swamp", 2));
+        mine.addAll(battlefield("Watchwolf", 1));
+        mine.addAll(battlefield("Grizzly Bears", 3));
+        mine.addAll(battlefield("Savannah Lions", 2));
+        cheat(game, humanId, cards("Blaze", "Guardian of Vitu-Ghazi"), mine, List.of());
+        game.setStartingPlayerId(humanId);
+    }
+
+    private static void botStarts(Game game, UUID humanId) {
+        for (Player p : game.getPlayers().values()) {
+            if (!p.getId().equals(humanId)) {
+                game.setStartingPlayerId(p.getId());
+                return;
+            }
         }
     }
 

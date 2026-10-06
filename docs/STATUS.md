@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-05. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-06. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -91,6 +91,95 @@ Fallback auf manuelles Klicken.
   (35 Prioritäts-States: 0 ungetappte eigene Länder fehlen, 2× Mountain beide spielbar). Nicht visuell geprüft: Die
   Dev-Engine startet gerade nicht (uncommittete `V3__games_per_user.sql`: SQLite „near ','“).
 
+- 2026-10-06 **Playtest-Runde 2** (`notes.md`):
+  - **Karten-DB-Absturz (Demonic Consultation) behoben.** Ursache war kein Speichermangel: Bot-Timeout →
+    `ComputerPlayer6.addActionsTimed` → `task.cancel(true)` unterbricht den Sim-Thread mitten in
+    `CardRepository.getNames()` → `ClosedByInterruptException` → H2 „file length -1“, Liste leer und nicht gecacht →
+    später beim Menschen „Critical error, can't find card names“. Dreifach abgesichert: Namenslisten beim Start
+    vorladen (`CardDbManager.warmNames`, 9 Listen/161k Einträge, ~1,6–1,9 s), `MageLiteBot.addActionsTimed` ohne
+    `Thread.interrupt` (kooperativer Stopp), H2-`retry:`-Dateisystem über unsere `DatabaseUtils` (Classpath-Vorrang).
+    Geprüft: `dbInterruptSpike` 4/4 OK (**ohne** Negativkontrolle – mit warmem Page-Cache liest die Abfrage evtl. gar
+    nicht aus der Datei), `humanSpike` 2/2 mit 20 Bot-Timeouts, 0 DB-Fehler im Log.
+  - Kartennamen-Dialog: `choice.hint = card`, Sortierung einmalig, Filter verzögert, Hover zeigt das Kartenbild per Name.
+  - UI: Kartenvorschau liegt über dem Dialog-Overlay (`z-[55]`), Dialoge zentrieren sich in der Hauptfläche
+    (`--modal-inset-right`). „Alle angreifen“ braucht zwei Klicks; neu „Angriff zurücksetzen“ (`combatReset`-Makro)
+    und „Abbrechen – kein Angriff“ in der Verteidiger-Wahl; Hinweis „Klick auf einen Angreifer nimmt ihn zurück“.
+    Starthand-Aktionen (Gemstone Caverns, Leylines) bekommen einen eigenen Dialog (vorher nur Ja/Nein in der Leiste,
+    Esc = Nein – Gemstone selbst war **kein** Engine-Fehler; sie darf regelgemäß nur rein, wenn man nicht beginnt).
+  - **„N-mal aktivieren“** (Necropotence & Co.): ×N-Stepper im Fähigkeiten-Picker, WS `repeat`, Engine hält
+    dazwischen die Priorität (`HOLD_PRIORITY` auf dem CALL-Thread vor der Antwort), Ziele/Fragen stoppen das Makro.
+  - **Ereignis-Animationen** (`FxWatcher` → WS `events` → `FxLayer`): Geisterkarte fliegt in Friedhof/Exil/Hand,
+    schwebende Zahlen bei Schaden/Leben, Ereignisleiste (~5 s) links über der Prompt-Leiste; Toggle im Pausemenü.
+    Verdeckte Karten nur an den Besitzer (im `humanSpike --humans=2` geprüft: 0 Lecks).
+  - **Chat:** im Spiel (WS `chat`, Tab „Verlauf | Chat“ ab 2 Menschen, Ungelesen-Badge + Toast, Replay nach
+    Reconnect) und am Tisch (REST, Polling). 300 Zeichen, 5 Nachrichten / 5 s.
+  - **Konto sichern:** Einladungscode = Gast; optional E-Mail + Passwort (PBKDF2), danach Login auch damit. Alle Logins
+    laufen jetzt über Sessions (`sessions`, Cookie `ml_sess`; Legacy `ml_code` wird noch akzeptiert – später entfernen).
+    Code bleibt gültig (Recovery ohne Mailversand), „Neuer Code“ beendet alle Sessions, Passwortwechsel die anderen.
+    UI: Login-Tabs, Konto-Screen, Hinweis „Du spielst als Gast“ auf der Startseite, Admin-Spalte „Anmeldung“.
+  - Geprüft: `humanSpike` Szenarien `gemstone` OK, `necro` ×5 OK (Leben −5, Exil +5), `swarm` 15/15 + Zurücksetzen 0,
+    `--humans=2` 0 Fehler; `e2e-login` 46/46, `e2e-online` und `e2e-tables` grün (Chat-Fälle inklusive); `test` grün;
+    Regression `humanSpike --games=2 --turnCap=32` 0 fehlgeschlagen.
+    Visuell geprüft (`steps-modal-hover/-gemstone/-necro/-attack-undo/-fx.json`, `steps-server.json`): Vorschau über
+    dem Mulligan-Dialog, Starthand-Dialog, ×5-Picker + Stapel mit 5 Fähigkeiten, „Wirklich alle?“ → Verteidiger-Wahl
+    → Abbrechen (0 Angreifer) → alle 16 greifen an → Zurücksetzen (0), Ereignisleiste „Rakdos Carnarium → Hand“,
+    Login-Tabs, Gast-Hinweis auf der Startseite, Konto-Screen. **Nicht visuell geprüft:** Spiel-Chat-Tab (nur e2e),
+    Tisch-Chat (nur e2e), Geisterkarten-Animation nur schemenhaft (Shot-Werkzeug hinkt beim versteckten Fenster
+    einen Schritt hinterher – `steps-server.json` loggt deshalb jetzt zuerst aus).
+    **Live (fly, 2026-10-06):** deployt; Log zeigt Migration V4, Namen vorgeladen (3,4 s), retry-FS aktiv.
+    `e2e-tables` live grün (Tisch-Chat inklusive), `e2e-login` live 45/46 – einzige FAIL: „WS ohne Cookie → Close
+    4401“ kommt über den fly-Proxy als Timeout (−1) an, kein Regress (Server schließt mit 4403 wegen fehlendem Origin).
+    `e2e-online` nicht live (erwartet die Dev-Grenze 5 s fürs „aufgeben lassen“). Achtung: nach `e2e-login` greift
+    das Login-Rate-Limit (10/min/IP) eine Minute lang für alle weiteren Skripte.
+
+- 2026-10-05 **Stärkere Bots (ohne LLM)**, Begründung in `DECISIONS.md`:
+  - **FFA-Bewertung:** Ersatzklasse `mage.player.ai.score.GameStateEvaluator2`. Bewertet gegen alle Gegner statt nur
+    den ersten. Das Original wertete „erster Gegner auf 0 Leben“ als Partiesieg.
+  - **`FfaAttack`:** Angriffsziel unter allen Gegnern, Blocker gegen Gegenschlag zurückhalten.
+  - **`reactInCombat`** (Normal).
+  - **`MageLiteBot.SimPool`:** keine neue Suche, solange eine abgebrochene noch läuft.
+  - Engine-Jar zuerst auf dem Classpath (harte Regel 10).
+  - **Messung mit `gradlew botArena`** (2 verbesserte gegen 2 Original-Bots, Spiegel-Spiele, Blitz, Zuglimit 80):
+    - 42 Spiele, davon 8 abgebrochen (6× OutOfMemoryError, 1× Spiel-Thread hängt, 1× OOM im Profiling-Lauf).
+    - Von 34 sauberen Spielen: Siege 18:14, Platzierungspunkte pro Sitz 1,63 : 1,37 (gleich stark = 1,50).
+    - Mehr Punkte als die Gegenseite in 13 Spielen, weniger in 7; Vorzeichentest p ≈ 0,26, also Trend, nicht
+      signifikant.
+  - **Think-Timeouts** der verbesserten Bots ca. 1,6× so häufig: Mehr Züge sehen lohnend aus. Die Bewertung selbst
+    kostet laut JFR nur 1,2 % CPU; Spielkopien kosten 24 %.
+  - **MCTS** nicht gemessen.
+  - Gemessen **vor** dem kooperativen Stopp in `MageLiteBot.addActionsTimed` (Playtest-Runde 2), danach nicht erneut.
+  - Geprüft: `test` 8/8, `humanSpike` 2/2 ohne STALL, `blockerSpike` 2/2, API-Diff der Ersatzklasse (nur Marker
+    `MAGELITE_FFA` neu), Start-Log „KI-Bewertung: MageLite-FFA aktiv“.
+
+- 2026-10-06 **Playtest-Runde 3:**
+  - **„Weiter“ zeigt das Ziel** im eigenen Zug: „Zu Main 1“ / „Zum Kampf“ / „Zu Main 2“ / „Zug beenden“
+    (`NextStop`, `PromptDto.nextStop`). Mögliche Angreifer pro Gegner – XMages `getAvailableAttackers(game)` ist vor
+    Kampfbeginn immer leer.
+  - **Main 2 wurde übersprungen:** Auto-Passen griff auch in den eigenen Main-Phasen, wenn `getPlayable` nichts
+    fand. Jetzt halten eigene Main 1/2 immer. Dazu Doppelklick-Schutz: „Weiter“ in den ersten 250 ms eines neuen
+    Prioritäts-Prompts wird ignoriert.
+  - **F9 „Bis zu meinem Zug“ abbrechbar:** „⏹ Stopp“ in der Prompt-Leiste + klickbares Badge (F3), „Passen manuell“
+    bricht ebenfalls ab (nur beim Umschalten). Neu: Stopp in der **Endphase jedes Gegners**, wenn Spontanes spielbar
+    ist (sonst Auto-Passen). F10 bei leerem Stapel hängte das Spiel auf (Prompt zu, XMage ignoriert) – jetzt abgelehnt.
+  - **Convoke ging nicht:** XMage bietet Sonderbezahlung nur per Antwort „special“, MageLite zeigte nie einen Knopf.
+    Jetzt Knopf „Einberufen“ (bzw. Wühlen/Improvisieren/Beistand), einberufbare Kreaturen leuchten lila, Klick tappt
+    sie (Makro `GameHost.specialPay`: Aktion → Kreatur → Farbe nach Engpass). Bei möglicher Sonderbezahlung startet
+    Auto-Mana nicht von selbst (Länder sind nach dem ersten Einberufen gesperrt); „Länder automatisch“ zahlt nur mit
+    Manaquellen. Bugfix: Auto-Mana-Fehlschlag wurde mitten in einer Bezahlung zurückgesetzt.
+  - **X auf dem Stapel:** Badge „X = n“ (`CardDto.x` aus dem Kosten-Tag, schon während Zielwahl/Bezahlen).
+  - **Passwort-Auge** (`PasswordInput`) in Login und Konto.
+  - **Freunde-Fixes:** Schnellstart/„Nochmal“ zeigen Fehler (409 „Gerade spielt …“, Deck fehlt) statt still nichts
+    zu tun; Tisch-Polling verlässt den Tisch nur noch bei 4xx (Netz/5xx/Neustart → „Verbindung wackelt“); fly-502
+    als HTML gibt eine lesbare Meldung; `#table=`-Link überlebt den Login; Einladungstext in `SERVER.md` ergänzt.
+  - Geprüft: `humanSpike --scenario=convoke` (neu: Ziel „combat“, F10-Schutz, Blaze X=2, Einberufen-Knopf + 6
+    Kreaturen, kein Auto-Start, „Länder automatisch“ tappt 2 Länder, 6 Klicks ohne Rückfrage, Main-2-Stopp mit
+    0 Aktionen, F9 → F3 bricht ab, F9 → „Passen manuell“ bricht ab, Stopp in gegnerischer Endphase, Zug 5 „combat“),
+    `necro`/`gemstone`/`swarm`/`dredge` OK, `--games=2 --turnCap=32` 2/2 (ein früherer Lauf: bekannter KI-Heap-OOM
+    bei vollem Board), `--humans=4` OK, `test` grün, `tsc`. Visuell (`steps-convoke.json`, `steps-pass-ui.json`):
+    „Zum Kampf“, „X = 2“, lila Kreaturen + „Länder automatisch“/„Einberufen“, „Zu Main 2“ nach dem Einberufen,
+    F9-Leiste + Stopp (Klick bricht im Gegnerzug ab), Startfehler auf der Startseite, Login mit Auge.
+    Nicht visuell: Konto-Screen (gleiche Komponente), Fallback-Knopf „Einberufen“ ohne Kreatur-Klick.
+
 ## Offene Punkte (priorisiert)
 
 0. **Online (fly.io)** – Plan `docs/ONLINE-PLAN.md`, Betrieb `docs/SERVER.md`.
@@ -143,15 +232,20 @@ Fallback auf manuelles Klicken.
    - „Immer Ja/Nein“ für wiederkehrende Fragen (`REQUEST_AUTO_ANSWER_*`, UI fehlt; Engine erlaubt die Actions).
      Für Ersatzeffekte (Dredge & Co.) gibt es das seit 2026-10-05 („Keinen anwenden“ + „für dieses Spiel merken“).
    - Trigger-Reihenfolge merken (`TRIGGER_AUTO_ORDER_*`, UI fehlt).
-   - Animationen (Karte fliegt aufs Feld, Schaden), Sounds aus `vendor/xmage/sounds` statt Synth-Töne.
+   - Animationen fürs **Betreten** des Spielfelds (Stapel → Feld) fehlen noch; Zonenwechsel weg vom Feld, Schaden,
+     Leben gibt es seit 2026-10-06 (`FxLayer`). Sounds aus `vendor/xmage/sounds` statt Synth-Töne.
 4. **Moxfield-Import**: Server-Abruf wird von Cloudflare geblockt (HTTP 403). Der Fallback über Electron
    (`window.magelite.fetchText` → `net.fetch`) ist eingebaut, aber **nicht verifiziert**.
    Ersatz: Moxfield-Text-Export einfügen.
 5. **Bilder**: Set-Code-Mapping XMage → Scryfall fehlt (Fallback per Kartenname funktioniert). Optional
    `ScryfallImageSupportCards/Tokens` aus dem XMage-Client exportieren, Vorabladen über `/cards/collection`,
    LRU-Grenze für den Cache. Token-Bilder (Scryfall-Suche) nur stichprobenhaft gesehen.
-6. **KI-Tempo/-Stärke**: siehe bekannte Probleme. Idee: `fastOpponentTurns` nur greifen lassen, wenn der Bot keine
-   Spontanzauber und kein offenes Mana hat.
+6. **KI-Stärke**: FFA-Bewertung, `FfaAttack` und `reactInCombat` umgesetzt (2026-10-05, siehe oben). Offen:
+   - mehr Arena-Spiele für ein signifikantes Ergebnis (je 30 Spiele ≈ 1,5 h),
+     z. B. `gradlew botArena -PspikeArgs="--games=30 --turnCap=80 --tempo=BLITZ"`,
+   - Gewicht `--w` und `--elim` abstimmen, einzelne Hebel über `--levers=` messen,
+   - Commander-Schaden im Lethal-Check von `FfaAttack`,
+   - MCTS (`--a=mcts`) messen.
 7. **Startzeit**: AppCDS (`-XX:ArchiveClassesAtExit` / `SharedArchiveFile`), Sample-Deck-Warmup.
 
 ## Bekannte Probleme / Grenzen
@@ -162,7 +256,13 @@ Fallback auf manuelles Klicken.
 - Mehrfach-Angriff markiert immer den ganzen Stapel (×N); nur einen Teil davon zu markieren geht noch nicht
   (einzelne Karten per normalem Klick).
 - In Blitz/Normal (`fastOpponentTurns`) reagieren Bots in fremden Zügen nur, wenn etwas auf dem Stapel liegt
-  (keine Flash-Kreaturen/Removal am Zugende). Blocken funktioniert unabhängig davon.
+  (keine Flash-Kreaturen/Removal am Zugende). Blocken funktioniert unabhängig davon. Ausnahme Normal
+  (`reactInCombat`): In fremden Kampfschritten rechnen sie, wenn eine Spontanaktion möglich ist. Am Zugende handelt
+  auch die Original-XMage-KI nie (`ComputerPlayer7` passt in `END_TURN`).
+- **KI-Heap-OOM:** Eine einzelne XMage-Suche kann den Heap (3 GB) füllen, wenn `SimulatedPlayer2` alle
+  Zielkombinationen einer Fähigkeit als Kopien erzeugt („too many possible targets?“, z. B. Opfer-Fähigkeiten im
+  Vampir-Deck). In der Bot-Arena betraf das ca. 15–19 % der Blitz-Spiele, mit Original-Bots genauso. `SimPool`
+  verhindert nur das Stapeln mehrerer solcher Läufe, nicht den einzelnen.
 - UI-Dialoge `CHOOSE_PILE`, `MULTI_AMOUNT` und die Mulligan-Unten-Auswahl sind nur über die Spikes getestet,
   nicht visuell.
 - Kontrollwechsel-Karten (Mindslaver & Co.) sind nur nach dem XMage-Gating-Muster umgesetzt, nicht getestet.
@@ -170,8 +270,16 @@ Fallback auf manuelles Klicken.
 - Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
 - Es läuft immer nur **ein** Spiel (`GameRegistry`, `--max-games`, lokal 1): ein neues eigenes Spiel beendet das
   eigene laufende; im Server-Modus bekommt ein anderer Nutzer 409 „Gerade spielt …“.
+- **Tischspiel-Abbruch:** Wer am Tisch aufgibt und dann solo startet („Schnellstart“/„Nochmal“), beendet das
+  Tischspiel für alle (`GameRegistry.start` beendet jedes Spiel mit diesem Nutzer, auch nach Aufgabe). Für später
+  geplant, zusammen mit „2 Tische parallel“ (8 GB, `MAGELITE_MAX_GAMES=2`, `SimPool.awaitIdle` pro Spiel statt global).
+- Sonderbezahlung: Klick-Einberufen nur für Convoke-Kreaturen ohne eigene Manafähigkeit (sonst Mana); Delve,
+  Improvise, Assist nur über den Knopf (Aktion wird automatisch gewählt, Ziel/Farbe von Hand).
 - Server-Modus: ein Spiel pro Nutzer, nur der Besitzer darf sich verbinden; Moxfield-Import im Browser ohne
-  Electron-Fallback (Text-Export einfügen).
+  Electron-Fallback (Text-Export einfügen). Kein Mailversand: „Passwort vergessen“ = Gastgeber erzeugt neuen Code.
+  Legacy-Cookie `ml_code` wird noch akzeptiert – nach ein paar Wochen entfernen (`Auth.resolve`).
+- `events`-Zwischenzustände: Ereignisse werden vor dem nächsten State gebündelt (bzw. nach 150 ms vom Wachhund);
+  bei sehr vielen gleichzeitigen Zonenwechseln zeigt die Leiste nur die letzten 6, Token-Tode werden zu „×N“.
 - **Hänger durch verlorene Antwort (XMage-Race) – umgangen 2026-10-02:** `HumanPlayer.waitForResponse` setzt
   `responseOpenedForAnswer = true` *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau
   dazwischen, geht `notifyAll()` verloren und das Spiel wartet ewig. Vorher: 3 STALLs in 9 `humanSpike`-Spielen.
@@ -190,6 +298,14 @@ Fallback auf manuelles Klicken.
   enthalten. Der Import zeigt beide Fälle getrennt an (`XmageUnfinished`). Auch 1.4.61V1 sperrt diese Karten noch;
   erst `master` hat sie freigeschaltet. Sobald ein Release (≥ 1.4.62) erscheint: `scripts\import-xmage.ps1 -XmageDir …`,
   danach `build.ps1` (die DB wird beim ersten Start neu aufgebaut).
+
+## Redesign (UX/UI) – in Vorbereitung
+
+- 2026-10-06: Paket für **Claude Design** in `design/claude-design/` (nicht eingecheckt): `PROMPT.md` (fertiger Prompt,
+  Deutsch), `KONTEXT.md` (Zielgruppe, Maße, Screens, Zustände, Tech, No-Gos), `current-theme.css` (Kopie von
+  `ui/src/index.css`), `screenshots/` (55 PNGs aller Screens/Dialoge/Zustände, lokal + Server, plus 1280×760) mit
+  `INDEX.md`. Aufnahme reproduzierbar über `desktop/tools/steps-design-*.json` (+ `design-mate.mjs` für den zweiten
+  Menschen), siehe `DEVELOPMENT.md`. Nächster Schritt: Stilrichtung in Claude Design wählen, Handoff zurück nach Claude Code.
 
 ## Ideen (nicht beauftragt)
 

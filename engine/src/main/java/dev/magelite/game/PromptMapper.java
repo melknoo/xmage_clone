@@ -96,6 +96,23 @@ public final class PromptMapper {
                 }
                 AbilityPickerView view = new AbilityPickerView(null, objectName, event.getAbilities(), event.getMessage());
                 p.choices = items(view.getChoices());
+                boolean special = event.getAbilities() != null
+                        && event.getAbilities().stream().anyMatch(a -> a instanceof mage.abilities.SpecialAction);
+                if (special) {
+                    // Sonderbezahlung nach "special" (Convoke & Co.): kein sourceId (sonst "N-mal aktivieren"),
+                    // XMage schickt als Text den Spielernamen
+                    if (SpecialPay.relabel(game, event.getAbilities(), p)) {
+                        p.message = RichText.parse("Wie willst du bezahlen?");
+                        p.messageText = "Wie willst du bezahlen?";
+                    }
+                } else if (event.getAbilities() != null) {
+                    for (Ability a : event.getAbilities()) {
+                        if (a.getSourceId() != null) {
+                            p.sourceId = a.getSourceId();
+                            break;
+                        }
+                    }
+                }
             }
             case CHOOSE_MODE -> {
                 AbilityPickerView view = new AbilityPickerView(null, event.getModes(), event.getMessage());
@@ -137,6 +154,9 @@ public final class PromptMapper {
             case PLAY_MANA, PLAY_X_MANA -> {
                 if (options != null && options.get(Constants.Option.SPECIAL_BUTTON) != null) {
                     p.specialBtn = options.get(Constants.Option.SPECIAL_BUTTON).toString();
+                } else if (event.getQueryType() == PlayerQueryEvent.QueryType.PLAY_MANA) {
+                    // XMage setzt hier keinen Knopf; Sonderbezahlung nur per Antwort "special"
+                    SpecialPay.describe(game, p.playerId, p);
                 }
             }
             default -> {
@@ -204,6 +224,7 @@ public final class PromptMapper {
         d.keyed = c.isKeyChoice();
         d.search = c.isSearchEnabled();
         d.manaColor = c.isManaColorChoice();
+        d.hint = c.getHintType() == null ? null : c.getHintType().name().toLowerCase(java.util.Locale.ROOT);
         if (c.isSpecialEnabled()) {
             d.specialText = c.getSpecialText();
         }

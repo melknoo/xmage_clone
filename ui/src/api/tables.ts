@@ -15,6 +15,13 @@ export interface TableSeat {
   ready?: boolean
 }
 
+export interface TableChat {
+  ts: number
+  userId: number
+  name: string
+  text: string
+}
+
 export interface Table {
   id: string
   name: string
@@ -30,6 +37,7 @@ export interface Table {
   mySeat: number | null
   host: boolean
   humans: number
+  chat: TableChat[]
 }
 
 export const tablesApi = {
@@ -43,6 +51,7 @@ export const tablesApi = {
   setSeat: (id: string, n: number, kind: SeatKind, deck?: DeckSpec | null) => api.put<Table>(`/api/tables/${encodeURIComponent(id)}/seats/${n}`, { kind, deck: deck ?? null }),
   update: (id: string, patch: { name?: string; tempo?: Tempo }) => api.put<Table>(`/api/tables/${encodeURIComponent(id)}`, patch),
   start: (id: string) => api.post<Table>(`/api/tables/${encodeURIComponent(id)}/start`),
+  chat: (id: string, text: string) => api.post<Table>(`/api/tables/${encodeURIComponent(id)}/chat`, { text }),
 }
 
 export function tableLink(id: string): string {

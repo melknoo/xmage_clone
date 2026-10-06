@@ -8,8 +8,9 @@ import mage.players.net.UserSkipPrioritySteps;
  * UserData fuer den menschlichen Spieler. {@code HumanPlayer} liest Stops/Auto-Pass daraus
  * und wirft ohne UserData eine NPE.
  * <p>
- * Defaults (Goldfish-tauglich): Stop nur in den eigenen Mainphasen, bei Angriffen auf mich,
- * bei Blocks und bei neuen Objekten auf dem Stack; nach eigenem Cast automatisch passen.
+ * Defaults (Goldfish-tauglich): Stop in den eigenen Mainphasen, in der Endphase der Gegner, bei Angriffen auf mich,
+ * bei Blocks und bei neuen Objekten auf dem Stack; nach eigenem Cast automatisch passen. {@code GameHost} passt
+ * zusaetzlich automatisch, wenn nichts (ausser Mana) spielbar ist - nie in den eigenen Mainphasen.
  */
 public final class HumanSettings {
 
@@ -34,7 +35,9 @@ public final class HumanSettings {
         opp.setBeforeCombat(false);
         opp.setEndOfCombat(false);
         opp.setMain2(false);
-        opp.setEndOfTurn(false);
+        // Endphase jedes Gegners: letzte Gelegenheit fuer Spontanes vor dem eigenen Zug. GameHost passt automatisch,
+        // wenn nichts spielbar ist (Auto-Passen); noetig auch, damit Abbrechen von "bis zu meinem Zug" etwas bringt.
+        opp.setEndOfTurn(true);
         skips.setStopOnDeclareAttackersDuringSkipActions(true);
         skips.setStopOnDeclareBlockersWithAnyPermanents(true);
         skips.setStopOnDeclareBlockersWithZeroPermanents(false);

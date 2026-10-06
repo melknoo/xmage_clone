@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import { useAuth } from '../store/auth'
 import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
 
@@ -22,7 +23,13 @@ export function HomeScreen() {
   const connect = useGame((s) => s.connect)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [busy, setBusy] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
   const [editName, setEditName] = useState<string | null>(null)
+  const mode = useAuth((s) => s.mode)
+  const me = useAuth((s) => s.me)
+  const secureDismissed = useAuth((s) => s.secureDismissed)
+  const dismissSecure = useAuth((s) => s.dismissSecure)
+  const showSecure = mode === 'server' && !!me && !me.hasPassword && !secureDismissed
 
   useEffect(() => {
     api.get<Profile>('/api/profile').then(setProfile).catch(() => setProfile(null))
@@ -31,10 +38,14 @@ export function HomeScreen() {
   const quick = async () => {
     if (!lastSetup) return
     setBusy(true)
+    setStartError(null)
     try {
       const res = await api.post<{ gameId: string }>('/api/games', lastSetup)
       connect(res.gameId)
       go('game')
+    } catch (e) {
+      // z.B. 409 "Gerade spielt ..." (online nur ein Spiel gleichzeitig) oder Deck geloescht
+      setStartError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -52,6 +63,22 @@ export function HomeScreen() {
     <div className="relative h-full overflow-y-auto p-10 scrollbar-thin">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(245,184,74,0.10),transparent_60%)]" />
       <div className="relative mx-auto max-w-4xl">
+        {showSecure && (
+          <div className="mb-4 flex flex-wrap items-center gap-4 rounded-2xl border border-gold-400/30 bg-gold-400/10 px-5 py-4">
+            <div className="text-2xl">🔐</div>
+            <div className="min-w-0 flex-1 text-sm text-ink-200">
+              <b className="text-gold-200">Du spielst als Gast.</b> Sichere dein Konto mit E-Mail und Passwort, dann kommst du auch ohne den Einladungscode wieder rein (z.&nbsp;B. auf einem anderen Gerät).
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="btn-primary !py-1.5 !text-xs" onClick={() => go('account')}>
+                Konto sichern
+              </button>
+              <button className="btn-ghost !py-1.5 !text-xs" onClick={dismissSecure}>
+                Als Gast weiterspielen
+              </button>
+            </div>
+          </div>
+        )}
         <div className="glass relative overflow-hidden rounded-3xl p-8">
           <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-gold-400/10 blur-3xl" />
           <div className="relative flex items-center gap-6">
@@ -110,6 +137,7 @@ export function HomeScreen() {
             <div className="text-sm text-ink-300">{lastSetup ? 'Letzte Konfiguration erneut spielen' : 'Erst ein Spiel einrichten'}</div>
           </button>
         </div>
+        {startError && <div className="mt-3 rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{startError}</div>}
       </div>
     </div>
   )

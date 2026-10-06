@@ -47,7 +47,10 @@ node scripts\e2e-tables.mjs         # Server-Modus: Lobby/Tische (eroeffnen, bei
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB
+cd engine; .\gradlew.bat dbInterruptSpike   # Karten-DB ueberlebt Thread-Interrupt (Demonic-Consultation-Absturz)
+cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=8 --scenario=necro"   # Szenarien: necro|gemstone|swarm|dredge|convoke
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32"   # Prompt-API-Stresstest
+cd engine; .\gradlew.bat botArena -PspikeArgs="--games=30 --turnCap=80"     # KI-Vergleich verbessert vs. Original (CSV in run\arena)
 node scripts\e2e-flow.mjs [archidekt-url]                     # REST+WS-End-to-End gegen Dev-Engine
 cd ui; npx tsc -b                   # Typecheck
 ```

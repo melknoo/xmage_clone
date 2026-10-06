@@ -42,4 +42,7 @@ public class CardDto {
     public String kind;
     public UUID sourceId;
     public UUID controllerId;
+    /** angesagtes/bezahltes X (nur Stack-Objekte); X = 0 wird mitgesendet */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public Integer x;
 }

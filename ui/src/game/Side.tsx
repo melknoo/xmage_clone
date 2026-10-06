@@ -219,6 +219,78 @@ function LogLine({ line, color, onObject }: { line: Line; color?: string; onObje
   )
 }
 
+/** Chat zwischen den Menschen am Tisch (nur bei >= 2 Menschen sichtbar). */
+export function ChatPanel() {
+  const chat = useGame((s) => s.chat)
+  const players = useGame((s) => s.state?.players)
+  const myId = useGame((s) => s.hello?.myPlayerId)
+  const sendChat = useGame((s) => s.sendChat)
+  const [text, setText] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  const [stick, setStick] = useState(true)
+  const colorOf = (playerId: string) => {
+    const i = (players ?? []).findIndex((p) => p.id === playerId)
+    return i >= 0 ? SEAT_COLORS[i % SEAT_COLORS.length] : undefined
+  }
+  useEffect(() => {
+    if (stick && ref.current) ref.current.scrollTop = ref.current.scrollHeight
+  }, [chat, stick])
+  const submit = () => {
+    const t = text.trim()
+    if (!t) return
+    sendChat(t)
+    setText('')
+  }
+  return (
+    <div className="flex h-full flex-col">
+      <div
+        ref={ref}
+        className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 text-[12px] leading-snug scrollbar-thin"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
+        }}
+      >
+        {chat.length === 0 && <div className="px-1 py-2 text-[11px] italic text-ink-400">Noch keine Nachrichten. Enter sendet.</div>}
+        {chat.map((c, i) => {
+          const color = colorOf(c.playerId)
+          const time = new Date(c.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          return (
+            <div key={`${c.ts}-${i}`} className="flex items-start gap-1.5 rounded-r border-l-2 py-0.5 pl-1.5 pr-1" style={{ borderColor: color ?? 'rgba(141,151,179,0.25)' }}>
+              <span className="shrink-0 tabular-nums text-[10px] text-ink-500">{time}</span>
+              <span className="min-w-0 flex-1 break-words">
+                <span className="font-semibold" style={{ color }}>
+                  {c.playerId === myId ? 'Du' : c.name}
+                </span>
+                <span className="text-ink-400">: </span>
+                <span className="text-ink-100">{c.text}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="shrink-0 border-t border-white/10 p-1.5">
+        <input
+          className="w-full rounded-lg bg-ink-950/70 px-2.5 py-1.5 text-[12px] ring-1 ring-white/15 outline-none placeholder:text-ink-500 focus:ring-gold-400/60"
+          placeholder="Nachricht … (Enter)"
+          maxLength={300}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              submit()
+            } else if (e.key === 'Escape') {
+              e.preventDefault()
+              ;(e.target as HTMLInputElement).blur()
+            }
+          }}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function Toasts() {
   const toasts = useGame((s) => s.toasts)
   const dismiss = useGame((s) => s.dismissToast)

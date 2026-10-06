@@ -30,6 +30,8 @@ export function PauseMenu({ logFilter, setLogFilter }: { logFilter: LogFilter; s
   const autoMana = useGame((s) => s.autoMana)
   const setAutoMana = useGame((s) => s.setAutoMana)
   const autoPass = useGame((s) => s.autoPass)
+  const fxEnabled = useGame((s) => s.fxEnabled)
+  const setFxEnabled = useGame((s) => s.setFxEnabled)
   const setAutoPass = useGame((s) => s.setAutoPass)
   const leave = useGame((s) => s.leave)
   const reset = useGame((s) => s.reset)
@@ -76,6 +78,7 @@ export function PauseMenu({ logFilter, setLogFilter }: { logFilter: LogFilter; s
               }}
             />
             <Toggle on={logFilter === 'all'} label="Verlauf: alles" hint="Aus = nur Wichtiges im Spielverlauf" onClick={() => setLogFilter(logFilter === 'all' ? 'important' : 'all')} />
+            <Toggle on={fxEnabled} label="Animationen" hint="Zonenwechsel, Schaden und Lebensänderungen einblenden (die Ereignisleiste bleibt)" onClick={() => setFxEnabled(!fxEnabled)} />
           </div>
           <div className="mt-3 flex items-center gap-2">
             <span className="text-sm text-ink-300">Bot-Tempo</span>

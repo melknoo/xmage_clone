@@ -7,6 +7,33 @@ export interface PromptButton {
   run: () => void
   kind: 'primary' | 'ghost' | 'danger' | 'arcane'
   hotkey?: string
+  /** Zwei-Klick-Bestaetigung: Beschriftung nach dem ersten Klick (z.B. "Wirklich alle?") */
+  confirm?: string
+  title?: string
+}
+
+/** Pregame-Frage zu einer Starthand-Aktion (Gemstone Caverns, Leylines, Chancellors): eigener Dialog, keine Leisten-Knoepfe */
+export const OPENING_HAND_RE = /^Put .+ onto? the battlefield\?$/i
+export function isOpeningHandAsk(p: { kind: string; messageText?: string } | null | undefined, step: string | undefined | null): boolean {
+  return !!p && p.kind === 'ASK' && !step && OPENING_HAND_RE.test(p.messageText ?? '')
+}
+
+/** Ziel von "Weiter" im eigenen Zug (Engine: PromptDto.nextStop) */
+export const NEXT_STOP_LABEL: Record<string, string> = {
+  main1: 'Zu Main 1',
+  combat: 'Zum Kampf',
+  main2: 'Zu Main 2',
+  end: 'Zug beenden',
+}
+
+/** Laufendes F-Tasten-Passen (PlayerDto.skips) als Text */
+export const SKIP_LABEL: Record<string, string> = {
+  myTurn: 'Passe bis zu deinem Zug',
+  nextTurn: 'Passe bis zum nächsten Zug',
+  endOfTurn: 'Passe bis Zugende',
+  nextMain: 'Passe bis zur nächsten Hauptphase',
+  stackResolved: 'Passe, bis der Stapel leer ist',
+  endStepBeforeMyTurn: 'Passe bis zur Endphase vor deinem Zug',
 }
 
 export interface SkipButton {
@@ -38,7 +65,10 @@ export const HOTKEY_ACTIONS: Record<string, string> = {
 export function usePromptButtons(inter: Interaction): PromptButton[] {
   const answer = useGame((s) => s.answer)
   const autoPay = useGame((s) => s.autoPay)
+  const combatReset = useGame((s) => s.combatReset)
   const stackSize = useGame((s) => s.state?.stack.length ?? 0)
+  const step = useGame((s) => s.state?.step)
+  const attacking = useGame((s) => (s.state?.combat ?? []).reduce((n, g) => n + g.attackers.length, 0))
   const p = inter.prompt
 
   return useMemo(() => {
@@ -46,28 +76,42 @@ export function usePromptButtons(inter: Interaction): PromptButton[] {
     const out: PromptButton[] = []
     switch (p.kind) {
       case 'ASK':
-        if (p.mulligan) break
+        if (p.mulligan || isOpeningHandAsk(p, step)) break
         out.push({ label: p.leftBtn ?? 'Ja', run: () => answer({ bool: true }), kind: 'primary', hotkey: 'Space' })
         out.push({ label: p.rightBtn ?? 'Nein', run: () => answer({ bool: false }), kind: 'ghost', hotkey: 'Esc' })
         break
       case 'SELECT':
         if (inter.mode === 'attack') {
           out.push({ label: 'Angriff bestätigen', run: () => answer({ bool: true }), kind: 'primary', hotkey: 'Space' })
-          if (p.specialBtn) out.push({ label: 'Alle angreifen', run: () => answer({ str: 'special' }), kind: 'danger' })
+          if (p.specialBtn) out.push({ label: 'Alle angreifen', run: () => answer({ str: 'special' }), kind: 'danger', confirm: 'Wirklich alle?' })
+          if (attacking > 0) out.push({ label: 'Angriff zurücksetzen', run: combatReset, kind: 'ghost', title: 'Alle Angreifer wieder zurücknehmen' })
         } else if (inter.mode === 'block') {
           out.push({ label: 'Blocker bestätigen', run: () => answer({ bool: true }), kind: 'primary', hotkey: 'Space' })
         } else {
-          out.push({ label: stackSize > 0 ? 'Auflösen lassen' : 'Weiter', run: () => answer({ bool: false }), kind: 'primary', hotkey: 'Space' })
+          out.push({
+            label: stackSize > 0 ? 'Auflösen lassen' : (p.nextStop && NEXT_STOP_LABEL[p.nextStop]) || 'Weiter',
+            run: () => answer({ bool: false }),
+            kind: 'primary',
+            hotkey: 'Space',
+          })
           if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'arcane' })
         }
         break
       case 'PICK_TARGET':
-        if (p.rightBtn || !p.required) {
+        if (p.defenderPick) {
+          // Verteidiger-Wahl nach "Alle angreifen": Abbrechen = Angriff komplett zuruecknehmen (nicht bool:false -
+          // bei Pflicht-Zielen fragt XMage sonst endlos neu)
+          out.push({ label: 'Abbrechen – kein Angriff', run: combatReset, kind: 'ghost', hotkey: 'Esc' })
+        } else if (p.rightBtn || !p.required) {
           out.push({ label: translate(p.rightBtn) ?? (p.chosen?.length ? 'Fertig' : 'Abbrechen'), run: () => answer({ bool: false }), kind: p.chosen?.length ? 'primary' : 'ghost', hotkey: 'Space' })
         }
         break
       case 'PLAY_MANA':
-        out.push({ label: 'Automatisch bezahlen', run: autoPay, kind: 'arcane', hotkey: 'Space' })
+        out.push(
+          p.specialBtn
+            ? { label: 'Länder automatisch', run: autoPay, kind: 'arcane', hotkey: 'Space', title: `Nur Manaquellen automatisch tappen – Rest per ${p.specialBtn}` }
+            : { label: 'Automatisch bezahlen', run: autoPay, kind: 'arcane', hotkey: 'Space' },
+        )
         if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'arcane' })
         out.push({ label: 'Abbrechen', run: () => answer({ bool: false }), kind: 'ghost', hotkey: 'Esc' })
         break
@@ -76,7 +120,7 @@ export function usePromptButtons(inter: Interaction): PromptButton[] {
         break
     }
     return out
-  }, [p, inter.mode, answer, autoPay, stackSize])
+  }, [p, inter.mode, answer, autoPay, stackSize, step, attacking, combatReset])
 }
 
 function translate(s?: string): string | undefined {

@@ -13,14 +13,20 @@ import io.javalin.http.SameSite;
 import io.javalin.http.UnauthorizedResponse;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * Login per Einladungscode, {@code /api/me} und die Admin-Verwaltung der Einladungen.
+ * Login (Einladungscode oder E-Mail + Passwort), {@code /api/me}, Konto sichern/aendern und die Admin-Verwaltung
+ * der Einladungen. Jeder Login erzeugt eine Session (Cookie {@link Auth#SESSION_COOKIE}).
  */
 public final class AuthRoutes implements HttpServer.Module {
 
     private static final int COOKIE_MAX_AGE = 365 * 24 * 3600;
+    private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+    private static final int PW_MIN = 8;
+    private static final int PW_MAX = 200;
 
     private final HttpServer.Config config;
     private final Auth auth;
@@ -34,12 +40,18 @@ public final class AuthRoutes implements HttpServer.Module {
 
     @Override
     public void register(Javalin app) {
+        app.exception(AccountService.Conflict.class, (e, ctx) -> ctx.status(HttpStatus.CONFLICT).json(Map.of("error", e.getMessage())));
+
         app.get("/api/me", ctx -> ctx.json(me(Auth.user(ctx))));
         app.post("/api/auth/login", this::login);
         app.post("/api/auth/logout", ctx -> {
+            accounts.deleteSession(ctx.attribute(Auth.SESSION_ATTR));
+            ctx.removeCookie(Auth.SESSION_COOKIE, "/");
             ctx.removeCookie(Auth.COOKIE, "/");
             ctx.json(Map.of("ok", true));
         });
+        app.post("/api/auth/register", this::registerAccount);
+        app.put("/api/auth/account", this::updateAccount);
 
         app.get("/api/admin/invites", ctx -> {
             requireAdmin(ctx);
@@ -70,6 +82,7 @@ public final class AuthRoutes implements HttpServer.Module {
         });
     }
 
+    /** {@code {code}} (Gast) oder {@code {email, password}}; beides erzeugt eine Session. */
     private void login(Context ctx) throws Exception {
         if (!config.server()) {
             ctx.json(me(User.LOCAL));
@@ -80,13 +93,96 @@ public final class AuthRoutes implements HttpServer.Module {
             return;
         }
         JsonNode b = Json.MAPPER.readTree(ctx.body());
-        String code = b.path("code").asText("");
-        User u = auth.resolve(code).orElseThrow(() -> new UnauthorizedResponse("Code unbekannt"));
-        Cookie cookie = new Cookie(Auth.COOKIE, InviteCodes.normalize(code), "/", COOKIE_MAX_AGE,
-                "https".equalsIgnoreCase(ctx.header("X-Forwarded-Proto")), 0, true, null, null, SameSite.LAX);
-        ctx.cookie(cookie);
+        User u;
+        String via;
+        if (b.hasNonNull("email")) {
+            String email = normalizeEmail(b.path("email").asText(""));
+            char[] pw = b.path("password").asText("").toCharArray();
+            u = accounts.byCredentials(email, pw).orElseThrow(() -> new UnauthorizedResponse("Anmeldung fehlgeschlagen"));
+            via = "password";
+        } else {
+            String code = b.path("code").asText("");
+            u = auth.byCode(code).orElseThrow(() -> new UnauthorizedResponse("Code unbekannt"));
+            via = "code";
+        }
+        String token = accounts.createSession(u.id(), via);
+        ctx.cookie(sessionCookie(ctx, token));
         accounts.touch(u.id());
         ctx.json(me(u));
+    }
+
+    /** Konto sichern: E-Mail + Passwort fuer das angemeldete Gast-Konto. */
+    private void registerAccount(Context ctx) throws Exception {
+        if (!config.server()) {
+            throw new IllegalArgumentException("Im lokalen Modus gibt es keine Konten");
+        }
+        User u = Auth.user(ctx);
+        if (u.hasPassword()) {
+            throw new AccountService.Conflict("Dieses Konto hat schon ein Passwort");
+        }
+        JsonNode b = Json.MAPPER.readTree(ctx.body());
+        String email = validEmail(b.path("email").asText(""));
+        char[] pw = validPassword(b.path("password").asText(""));
+        accounts.setCredentials(u.id(), email, Passwords.hash(pw));
+        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true)));
+    }
+
+    /** E-Mail und/oder Passwort aendern; braucht das aktuelle Passwort. Passwortwechsel beendet andere Sessions. */
+    private void updateAccount(Context ctx) throws Exception {
+        if (!config.server()) {
+            throw new IllegalArgumentException("Im lokalen Modus gibt es keine Konten");
+        }
+        if (auth.loginRateLimited(Auth.clientIp(ctx))) {
+            ctx.status(HttpStatus.TOO_MANY_REQUESTS).json(Map.of("error", "Zu viele Versuche, bitte eine Minute warten"));
+            return;
+        }
+        User u = Auth.user(ctx);
+        if (!u.hasPassword()) {
+            throw new IllegalArgumentException("Erst ein Passwort setzen (Konto sichern)");
+        }
+        JsonNode b = Json.MAPPER.readTree(ctx.body());
+        char[] current = b.path("current").asText("").toCharArray();
+        String stored = accounts.passwordHash(u.id()).orElse(null);
+        if (!Passwords.verify(current, stored)) {
+            throw new UnauthorizedResponse("Aktuelles Passwort stimmt nicht");
+        }
+        String email = u.email();
+        if (b.hasNonNull("email")) {
+            email = validEmail(b.path("email").asText(""));
+            if (!email.equalsIgnoreCase(u.email())) {
+                accounts.updateEmail(u.id(), email);
+            }
+        }
+        if (b.hasNonNull("password")) {
+            char[] pw = validPassword(b.path("password").asText(""));
+            accounts.updatePassword(u.id(), Passwords.hash(pw));
+            accounts.deleteOtherSessions(u.id(), ctx.attribute(Auth.SESSION_ATTR));
+        }
+        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true)));
+    }
+
+    private Cookie sessionCookie(Context ctx, String token) {
+        return new Cookie(Auth.SESSION_COOKIE, token, "/", COOKIE_MAX_AGE,
+                "https".equalsIgnoreCase(ctx.header("X-Forwarded-Proto")), 0, true, null, null, SameSite.LAX);
+    }
+
+    private static String normalizeEmail(String s) {
+        return s == null ? "" : s.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private static String validEmail(String s) {
+        String email = normalizeEmail(s);
+        if (email.isEmpty() || email.length() > 120 || !EMAIL.matcher(email).matches()) {
+            throw new IllegalArgumentException("Bitte eine gültige E-Mail-Adresse angeben");
+        }
+        return email;
+    }
+
+    private static char[] validPassword(String s) {
+        if (s == null || s.length() < PW_MIN || s.length() > PW_MAX) {
+            throw new IllegalArgumentException("Passwort: mindestens " + PW_MIN + " Zeichen");
+        }
+        return s.toCharArray();
     }
 
     private void requireAdmin(Context ctx) {
@@ -98,7 +194,13 @@ public final class AuthRoutes implements HttpServer.Module {
     private Map<String, Object> me(User u) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("mode", config.server() ? "server" : "local");
-        m.put("user", Map.of("id", u.id(), "name", u.name(), "admin", u.admin()));
+        Map<String, Object> user = new LinkedHashMap<>();
+        user.put("id", u.id());
+        user.put("name", u.name());
+        user.put("admin", u.admin());
+        user.put("email", u.email());
+        user.put("hasPassword", u.hasPassword());
+        m.put("user", user);
         return m;
     }
 }

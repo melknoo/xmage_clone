@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { Card, Prompt, ReplGroup } from '../api/types'
 import { CardView } from '../components/CardView'
 import { Modal } from '../components/Modal'
 import { Rich, withSymbols } from '../lib/mana'
 import { useGame } from '../store/game'
 import type { Interaction } from './interaction'
+import { isOpeningHandAsk } from './promptActions'
 
 export function PromptDialogs({ inter, onHover }: { inter: Interaction; onHover: (c: Card | null) => void }) {
   const p = inter.prompt
@@ -14,13 +15,14 @@ export function PromptDialogs({ inter, onHover }: { inter: Interaction; onHover:
 }
 
 function PromptDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; onHover: (c: Card | null) => void }) {
+  const step = useGame((s) => s.state?.step)
   switch (p.kind) {
     case 'CHOOSE_ABILITY':
     case 'CHOOSE_MODE':
     case 'PICK_ABILITY':
       return <ChoiceListDialog p={p} />
     case 'CHOOSE_CHOICE':
-      return p.choice?.groups ? <ReplacementDialog p={p} onHover={onHover} /> : <ChoiceDialog p={p} />
+      return p.choice?.groups ? <ReplacementDialog p={p} onHover={onHover} /> : <ChoiceDialog p={p} onHover={onHover} />
     case 'AMOUNT':
       return <AmountDialog p={p} />
     case 'MULTI_AMOUNT':
@@ -28,7 +30,9 @@ function PromptDialog({ p, inter, onHover }: { p: Prompt; inter: Interaction; on
     case 'CHOOSE_PILE':
       return <PileDialog p={p} onHover={onHover} />
     case 'ASK':
-      return p.mulligan ? <MulliganDialog p={p} onHover={onHover} /> : null
+      if (p.mulligan) return <MulliganDialog p={p} onHover={onHover} />
+      if (isOpeningHandAsk(p, step)) return <OpeningHandDialog p={p} onHover={onHover} />
+      return null
     case 'PICK_TARGET':
       return inter.needsCardModal ? <CardPickDialog p={p} inter={inter} onHover={onHover} /> : null
     default:
@@ -40,14 +44,49 @@ function Title({ p }: { p: Prompt }) {
   return <Rich segs={p.message} />
 }
 
+const REPEAT_PRESETS = [1, 3, 5, 10]
+
 function ChoiceListDialog({ p }: { p: Prompt }) {
   const answer = useGame((s) => s.answer)
+  const repeat = useGame((s) => s.repeat)
+  const [times, setTimes] = useState(1)
+  // "N-mal aktivieren" nur fuer aktivierte Faehigkeiten eines Objekts (z.B. Necropotence "Pay 1 life")
+  const repeatable = p.kind === 'CHOOSE_ABILITY' && !!p.sourceId
+  const pick = (id: string) => (repeatable && times > 1 ? repeat(id, times) : answer({ uuid: id }))
   return (
-    <Modal minimizable title={<Title p={p} />} onClose={() => answer({ bool: false })} closable={!p.required}>
+    <Modal
+      minimizable
+      title={<Title p={p} />}
+      onClose={() => answer({ bool: false })}
+      closable={!p.required}
+      footer={
+        repeatable ? (
+          <div className="flex w-full flex-wrap items-center justify-between gap-2 text-xs text-ink-300">
+            <span title="Die Engine hält zwischen den Aktivierungen die Priorität; Ziele oder Fragen stoppen die Wiederholung">
+              Anzahl: <b className="text-ink-100">×{times}</b>
+            </span>
+            <div className="flex items-center gap-1">
+              {REPEAT_PRESETS.map((n) => (
+                <button key={n} className={`rounded px-2 py-1 ring-1 ring-white/10 ${times === n ? 'bg-arcane-500/30 text-ink-100' : 'bg-ink-900/60 hover:bg-ink-700'}`} onClick={() => setTimes(n)}>
+                  ×{n}
+                </button>
+              ))}
+              <button className="rounded px-2 py-1 ring-1 ring-white/10 bg-ink-900/60 hover:bg-ink-700" onClick={() => setTimes((t) => Math.max(1, t - 1))} title="weniger">
+                −
+              </button>
+              <button className="rounded px-2 py-1 ring-1 ring-white/10 bg-ink-900/60 hover:bg-ink-700" onClick={() => setTimes((t) => Math.min(20, t + 1))} title="mehr">
+                +
+              </button>
+            </div>
+          </div>
+        ) : undefined
+      }
+    >
       <div className="flex flex-col gap-2">
         {(p.choices ?? []).map((c) => (
-          <button key={c.id} className="rounded-xl bg-ink-800/80 px-4 py-3 text-left text-sm ring-1 ring-white/10 transition hover:bg-ink-700 hover:ring-gold-400/50" onClick={() => answer({ uuid: c.id })}>
+          <button key={c.id} className="rounded-xl bg-ink-800/80 px-4 py-3 text-left text-sm ring-1 ring-white/10 transition hover:bg-ink-700 hover:ring-gold-400/50" onClick={() => pick(c.id)}>
             {withSymbols(c.text)}
+            {repeatable && times > 1 && <span className="ml-2 rounded bg-arcane-500/30 px-1.5 py-0.5 text-xs text-arcane-300">×{times}</span>}
           </button>
         ))}
       </div>
@@ -55,17 +94,38 @@ function ChoiceListDialog({ p }: { p: Prompt }) {
   )
 }
 
-function ChoiceDialog({ p }: { p: Prompt }) {
+function ChoiceDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) => void }) {
   const answer = useGame((s) => s.answer)
   const [q, setQ] = useState('')
+  const dq = useDeferredValue(q)
   const ch = p.choice
-  const items = useMemo(() => {
-    const all = [...(ch?.items ?? [])]
+  // einmal sortieren (Kartennamen-Wahl hat ~30k Eintraege), Filter getrennt und verzoegert
+  const sorted = useMemo(() => {
+    const all = (ch?.items ?? []).map((i) => ({ ...i, lower: i.value.toLowerCase() }))
     all.sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.value.localeCompare(b.value))
-    const ql = q.trim().toLowerCase()
-    return ql ? all.filter((i) => i.value.toLowerCase().includes(ql)) : all
-  }, [ch, q])
+    return all
+  }, [ch])
+  const items = useMemo(() => {
+    const ql = dq.trim().toLowerCase()
+    return ql ? sorted.filter((i) => i.lower.includes(ql)) : sorted
+  }, [sorted, dq])
   const many = (ch?.items?.length ?? 0) > 12
+  // Kartennamen: Bildvorschau per Name (Engine /img/named), leicht verzoegert gegen Flackern beim Scrollen
+  const cardHint = ch?.hint === 'card'
+  const hoverTimer = useRef<number | null>(null)
+  const hoverName = (name: string | null) => {
+    if (!cardHint) return
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+    if (!name) {
+      onHover(null)
+      return
+    }
+    hoverTimer.current = window.setTimeout(() => onHover({ id: 'name:' + name, name } as Card), 120)
+  }
+  useEffect(() => () => {
+    if (hoverTimer.current) window.clearTimeout(hoverTimer.current)
+    if (cardHint) onHover(null)
+  }, [cardHint, onHover])
   return (
     <Modal
       minimizable
@@ -80,7 +140,13 @@ function ChoiceDialog({ p }: { p: Prompt }) {
       )}
       <div className={many ? 'grid max-h-[50vh] grid-cols-2 gap-1.5 overflow-auto scrollbar-thin' : 'flex flex-col gap-2'}>
         {items.slice(0, 300).map((i) => (
-          <button key={i.key} className="rounded-lg bg-ink-800/80 px-3 py-2 text-left text-sm ring-1 ring-white/10 hover:bg-ink-700 hover:ring-gold-400/50" onClick={() => answer({ str: ch?.keyed ? i.key : i.value })}>
+          <button
+            key={i.key}
+            className="rounded-lg bg-ink-800/80 px-3 py-2 text-left text-sm ring-1 ring-white/10 hover:bg-ink-700 hover:ring-gold-400/50"
+            onClick={() => answer({ str: ch?.keyed ? i.key : i.value })}
+            onMouseEnter={() => hoverName(i.value)}
+            onMouseLeave={() => hoverName(null)}
+          >
             {ch?.manaColor ? <ManaWord v={i.value} /> : withSymbols(i.value)}
           </button>
         ))}
@@ -276,6 +342,37 @@ function MulliganDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) =
         </button>
         <button className="btn-primary min-w-[160px]" onClick={() => answer({ bool: false })}>
           Behalten
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Starthand-Aktion vor dem ersten Zug (Gemstone Caverns, Leylines, Chancellors): XMage fragt nur per Ja/Nein -
+ * in der Prompt-Leiste leicht zu uebersehen oder mit Esc wegzudruecken. Darum ein eigener Dialog mit der Hand.
+ */
+function OpeningHandDialog({ p, onHover }: { p: Prompt; onHover: (c: Card | null) => void }) {
+  const answer = useGame((s) => s.answer)
+  const hand = useGame((s) => s.state?.hand ?? [])
+  const name = /^Put (.+?) (?:onto|on) the battlefield\?$/i.exec(p.messageText ?? '')?.[1]
+  return (
+    <Modal title="Starthand-Aktion" closable={false} wide>
+      <div className="mb-4 text-sm text-ink-300">
+        <Rich segs={p.message} />
+        <div className="mt-1 text-xs text-ink-400">Diese Karte darf schon vor dem ersten Zug ins Spiel kommen.</div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-3">
+        {hand.map((c) => (
+          <CardView key={c.id} card={c} size="xl" onHover={onHover} highlight={name && c.name === name ? 'chosen' : 'none'} dim={!!name && c.name !== name} />
+        ))}
+      </div>
+      <div className="mt-6 flex justify-center gap-3">
+        <button className="btn-ghost min-w-[160px]" onClick={() => answer({ bool: false })}>
+          In der Hand behalten
+        </button>
+        <button className="btn-primary min-w-[160px]" onClick={() => answer({ bool: true })}>
+          Auf das Spielfeld legen
         </button>
       </div>
     </Modal>

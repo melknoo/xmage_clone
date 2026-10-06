@@ -3,7 +3,7 @@ import { cardImageUrl } from '../api/client'
 import type { Card, Permanent } from '../api/types'
 import { ManaCost, RulesText } from '../lib/mana'
 
-export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking'
+export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking' | 'special'
 
 const failed = new Set<string>()
 
@@ -106,6 +106,8 @@ export const CardView = memo(function CardView({ card, size = 'md', highlight = 
           ? 'glow-target'
           : highlight === 'chosen'
             ? 'glow-chosen'
+            : highlight === 'special'
+              ? 'glow-special'
             : highlight === 'attacking' || perm.attacking
               ? 'glow-attacking'
               : highlight === 'blocking' || perm.blocking

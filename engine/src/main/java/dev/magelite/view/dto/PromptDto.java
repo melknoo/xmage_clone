@@ -27,9 +27,13 @@ public class PromptDto {
     public String leftBtn;
     public String rightBtn;
     public String specialBtn;
+    /** PLAY_MANA: Kreaturen, die per Klick eingeberufen werden koennen (Convoke, {@code GameHost.specialPay}) */
+    public List<UUID> specialTargets;
 
     /** SELECT: priority | attackers | blockers */
     public String mode;
+    /** SELECT/priority im eigenen Zug bei leerem Stapel: wohin "Weiter" fuehrt (main1 | combat | main2 | end) */
+    public String nextStop;
     public List<UUID> possibleAttackers;
     public List<UUID> possibleBlockers;
 
@@ -45,6 +49,8 @@ public class PromptDto {
 
     /** PICK_ABILITY / CHOOSE_ABILITY / CHOOSE_MODE */
     public List<Item> choices;
+    /** CHOOSE_ABILITY: das Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren") */
+    public UUID sourceId;
 
     /** CHOOSE_CHOICE */
     public ChoiceDto choice;
@@ -77,6 +83,8 @@ public class PromptDto {
         public boolean keyed;
         public boolean search;
         public boolean manaColor;
+        /** XMage ChoiceHintType: "card" (Kartennamen, Vorschau per Name moeglich), "text", "game_object", "card_dungeon" */
+        public String hint;
         /** key -> Anzeige (bei nicht-keyed: value -> value) */
         public List<ChoiceItem> items;
         public String specialText;
