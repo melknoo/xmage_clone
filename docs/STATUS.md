@@ -179,6 +179,8 @@ Fallback auf manuelles Klicken.
     „Zum Kampf“, „X = 2“, lila Kreaturen + „Länder automatisch“/„Einberufen“, „Zu Main 2“ nach dem Einberufen,
     F9-Leiste + Stopp (Klick bricht im Gegnerzug ab), Startfehler auf der Startseite, Login mit Auge.
     Nicht visuell: Konto-Screen (gleiche Komponente), Fallback-Knopf „Einberufen“ ohne Kreatur-Klick.
+    Server-Modus e2e (eigene Engine): `e2e-login` 46/46, `e2e-online` 34/34, `e2e-tables` 35/35.
+    **Live:** Commit `b10937a` deployt (Repo = Live-Stand), neues Bundle ausgeliefert, `e2e-tables` live 35/35.
 
 ## Offene Punkte (priorisiert)
 
