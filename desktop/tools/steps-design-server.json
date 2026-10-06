@@ -1,0 +1,348 @@
+{
+  "url": "http://localhost:5173/",
+  "width": 1680,
+  "height": 1000,
+  "timeout": 600000,
+  "steps": [
+    {
+      "waitFor": "#root div",
+      "timeout": 60000
+    },
+    {
+      "js": "fetch('/api/auth/logout',{method:'POST'}).then(()=>{location.reload();return 'logout'})"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "waitFor": "#root form input",
+      "timeout": 60000
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/Einladungscode/.test(e.textContent));if(!b)return 'kein Tab';b.click();return 'Code-Tab'})()"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/80-login-einladungscode.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/80-login-einladungscode.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/E-Mail/.test(e.textContent));if(!b)return 'kein Knopf /E-Mail/';b.click();return 'klick '+b.textContent.trim().slice(0,30)})()"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/81-login-email-passwort.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/81-login-email-passwort.png"
+    },
+    {
+      "js": "location.href='http://localhost:5173/#invite=DEV-OWNER-CODE';location.reload();'owner'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "waitFor": "#root nav",
+      "timeout": 60000
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "js": "fetch('/api/tables/mine').then(r=>r.ok?r.json():null).then(t=>t&&t.id?fetch('/api/tables/'+t.id+'/leave',{method:'POST'}).then(()=>'alter Tisch geschlossen'):'kein alter Tisch')"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/82-server-home-owner.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/82-server-home-owner.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('admin');'admin'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "(()=>{const el=document.querySelector(\"input[placeholder=\\\"Name des Freundes\\\"]\");if(!el)return 'kein Feld';const set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(el,\"Anna\");el.dispatchEvent(new Event('input',{bubbles:true}));return 'getippt'})()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^s*Anlegens*$/.test(e.textContent));if(!b)return 'kein Knopf /^s*Anlegens*$/';b.click();return 'klick '+b.textContent.trim().slice(0,30)})()"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/83-admin-einladungen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/83-admin-einladungen.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('account');'account'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/84-konto-owner.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/84-konto-owner.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('play');'play'"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/85-lobby-leer.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/85-lobby-leer.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^s*Eröffnens*$/.test(e.textContent));if(!b)return 'kein Knopf /^s*Eröffnens*$/';b.click();return 'klick '+b.textContent.trim().slice(0,30)})()"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(async()=>{try{if(await (fetch('/api/tables/mine').then(r=>r.json()).then(t=>t.humans>=2&&t.chat&&t.chat.length>=1))){clearInterval(t);r('Bob sitzt + Chat')}}catch(e){}},500);setTimeout(()=>{clearInterval(t);r('Timeout Bob sitzt + Chat')},90000)})"
+    },
+    {
+      "js": "fetch('/api/tables/mine').then(r=>r.json()).then(async t=>{const s=await fetch('/api/samples').then(r=>r.json());const pick=(re)=>({type:'sample',id:(s.find(x=>re.test(x.name))||s[0]).id});const put=(p,b)=>fetch(p,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});await put('/api/tables/'+t.id+'/seat',{deck:pick(/Merciless Rage/)});await put('/api/tables/'+t.id+'/seats/2',{kind:'BOT',deck:pick(/Arcane Maelstrom/)});await put('/api/tables/'+t.id+'/seats/3',{kind:'BOT'});await fetch('/api/tables/'+t.id+'/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'Willkommen! Zwei Bots sind gesetzt, gleich gehts los.'})});return 'Tisch vorbereitet '+t.id})"
+    },
+    {
+      "wait": 4500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/86-tisch-zwei-spieler-chat.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/86-tisch-zwei-spieler-chat.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('play');'play'"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/87-lobby-mit-tisch.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/87-lobby-mit-tisch.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('table');'table'"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/Spiel starten/.test(e.textContent));if(!b)return 'kein Knopf /Spiel starten/';b.click();return 'klick '+b.textContent.trim().slice(0,30)})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(async()=>{try{if(await (Promise.resolve(!!(window.__ml.game.getState().state)))){clearInterval(t);r('Spiel laeuft')}}catch(e){}},500);setTimeout(()=>{clearInterval(t);r('Timeout Spiel laeuft')},90000)})"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "jsFile": "autoplay.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(async()=>{try{if(await (Promise.resolve(window.__ml.game.getState().chat.length>=1))){clearInterval(t);r('Chat im Spiel')}}catch(e){}},500);setTimeout(()=>{clearInterval(t);r('Timeout Chat im Spiel')},90000)})"
+    },
+    {
+      "js": "window.__ml.game.getState().sendChat('Viel Glück euch!');'gesendet'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/^chat/i.test(e.textContent.trim()));if(!b)return 'kein Chat-Tab';b.click();return 'Chat-Tab'})()"
+    },
+    {
+      "wait": 20000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/88-spiel-online-chat.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/88-spiel-online-chat.png"
+    },
+    {
+      "js": "clearInterval(window.__auto);window.__auto=null;window.__ml.game.getState().leave();'aufgegeben'"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "window.__ml.game.getState().setMenuOpen(true);'Menue'"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/89-spiel-aufgegeben-andere-spielen-weiter.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/89-spiel-aufgegeben-andere-spielen-weiter.png"
+    },
+    {
+      "js": "fetch('/api/admin/invites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Neuling'})}).then(r=>r.json()).then(async j=>{await fetch('/api/auth/logout',{method:'POST'});location.href='http://localhost:5173/#invite='+j.code;location.reload();return 'Gast '+j.code})"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "waitFor": "#root nav",
+      "timeout": 60000
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/90-gast-home-konto-sichern.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/90-gast-home-konto-sichern.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('decks');'decks'"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/91-gast-decks-leer.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/91-gast-decks-leer.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('stats');'stats'"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/92-gast-statistik-leer.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/92-gast-statistik-leer.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('account');'account'"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/93-gast-konto-sichern-formular.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/93-gast-konto-sichern-formular.png"
+    }
+  ]
+}

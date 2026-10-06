@@ -1,0 +1,12 @@
+{
+  "url": "file:///D:/xmage_clone/desktop/src/splash.html",
+  "timeout": 30000,
+  "steps": [
+    {
+      "wait": 1500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/00-splash-engine-start.png"
+    }
+  ]
+}

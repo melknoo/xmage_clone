@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@latest/css/mana.min.css">
+<link rel="stylesheet" href="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/colors_and_type.css">
+<script src="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+body{margin:0;background:#0d0c0b;color:#ece7de;-webkit-font-smoothing:antialiased;overflow:hidden}
+a{color:#ff7a3d;text-decoration:none}a:hover{color:#ff8f5a}
+input{font-family:'IBM Plex Sans',sans-serif;color:#ece7de;background:transparent;border:0;outline:0;font-size:14px;width:100%}
+input::placeholder{color:#6f6a62}
+</style>
+</helmet>
+<div style="position:fixed; inset:0; display:flex; flex-direction:column; background:#0d0c0b; font-family:'IBM Plex Sans', sans-serif; color:#ece7de">
+
+  <div style="height:48px; flex:none; display:flex; align-items:center; gap:4px; padding:0 14px; border-bottom:1px solid #2a2824; background:#121110; overflow-x:auto">
+    <span style="font:700 14px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ff7a3d; margin-right:10px; white-space:nowrap">ONLINE · PROTOTYP</span>
+    <sc-for list="{{ protoScreens }}" as="b" hint-placeholder-count="7"><span onClick="{{ b.go }}" style="cursor:pointer; white-space:nowrap; padding:7px 9px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:{{ b.fg }}; background:{{ b.bg }}">{{ b.l }}</span></sc-for>
+    <span style="width:1px; height:22px; background:#34312c; margin:0 8px; flex:none"></span>
+    <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="5"><span onClick="{{ t.on }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; white-space:nowrap; padding:7px 8px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8"><span style="width:24px; height:14px; border-radius:2px; position:relative; background:{{ t.track }}; flex:none"><span style="position:absolute; top:2px; left:{{ t.knob }}px; width:10px; height:10px; border-radius:1px; background:#121110"></span></span>{{ t.l }}</span></sc-for>
+    <span style="flex:1; min-width:12px"></span>
+    <sc-for list="{{ sizeBtns }}" as="b" hint-placeholder-count="2"><span onClick="{{ b.go }}" style="cursor:pointer; white-space:nowrap; padding:7px 9px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:{{ b.fg }}; box-shadow:{{ b.sh }}">{{ b.l }}</span></sc-for>
+  </div>
+
+  <div style="flex:1; min-height:0; position:relative; overflow:hidden">
+    <div style="position:absolute; left:50%; top:50%; width:{{ L.W }}px; height:{{ L.H }}px; transform:translate(-50%,-50%) scale({{ scale }}); display:flex; flex-direction:column; overflow:hidden; background:#121110; box-shadow:0 0 0 1px #2a2824">
+
+      <sc-if value="{{ connLost }}" hint-placeholder-val="{{ false }}">
+        <div style="height:36px; flex:none; display:flex; align-items:center; justify-content:center; gap:10px; background:#2a1619; border-bottom:1px solid rgba(239,62,86,.4); font-size:13.5px"><span style="display:flex; color:#ef3e56; font-size:15px">{{ i.wifi }}</span>Keine Verbindung zum Server. Neuer Versuch in 4 s.<span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.08em; color:#ef3e56; cursor:pointer">JETZT VERSUCHEN</span></div>
+      </sc-if>
+
+      <!-- LOGIN -->
+      <sc-if value="{{ is.login }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+          <div style="display:flex; align-items:center; justify-content:center; padding:40px">
+            <div style="width:400px; display:flex; flex-direction:column; gap:22px">
+              <div style="display:flex; flex-direction:column; gap:10px"><span style="font:700 46px/1 'Barlow Condensed'; letter-spacing:.08em; color:#ff7a3d">MAGELITE</span><span style="font-size:15px; color:#9b958a; line-height:1.5">Commander gegen Bots oder mit Freunden an einem Tisch.</span></div>
+              <div style="display:flex; padding:3px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em">
+                <sc-for list="{{ loginTabs }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.on }}" style="cursor:pointer; flex:1; text-align:center; padding:9px 0; border-radius:2px; background:{{ t.bg }}; color:{{ t.fg }}">{{ t.l }}</span></sc-for>
+              </div>
+              <sc-if value="{{ loginCode }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">EINLADUNGSCODE</span><div style="height:44px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #ff7a3d; font:500 16px/1 'IBM Plex Mono'; letter-spacing:.12em">MAGE-7Q2K-XR</div><span style="font-size:12.5px; color:#9b958a; line-height:1.45">Den Code bekommst du vom Gastgeber deiner Runde. Danach spielst du als Gast und kannst später ein Konto sichern.</span></div>
+              </sc-if>
+              <sc-if value="{{ loginMail }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">E-MAIL</span><div style="height:44px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px">anna@example.de</div></div>
+                <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">PASSWORT</span><div style="height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #ff7a3d; font-size:14px; letter-spacing:.2em">••••••••••<span style="flex:1"></span><span style="display:flex; color:#9b958a; letter-spacing:0">{{ i.eye }}</span></div></div>
+              </sc-if>
+              <span onClick="{{ doLogin }}" style="cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; height:48px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 19px/1 'Barlow Condensed'; letter-spacing:.08em">ANMELDEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16); letter-spacing:0">Enter</span></span>
+              <span style="font-size:12.5px; color:#6f6a62">Server: magelite.example.de · v0.9</span>
+            </div>
+          </div>
+          <div style="position:relative; background:#1a1917 url({{ art.kaalia }}) center / cover no-repeat"><div style="position:absolute; inset:0; background:linear-gradient(90deg,#121110, rgba(18,17,16,.35) 40%, rgba(18,17,16,.2))"></div></div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ is.loading }}" hint-placeholder-val="{{ false }}">
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:18px">
+          <span style="font:700 34px/1 'Barlow Condensed'; letter-spacing:.08em; color:#ff7a3d">MAGELITE</span>
+          <div style="width:240px; height:2px; background:#2a2824; overflow:hidden"><div style="width:{{ loadPct }}%; height:100%; background:#ff7a3d; transition:width .3s"></div></div>
+          <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">{{ loadText }}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ inApp }}" hint-placeholder-val="{{ true }}">
+        <div style="flex:1; min-height:0; display:flex">
+          <div style="width:84px; flex:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:22px 0 14px; border-right:1px solid #2a2824">
+            <div style="font:700 20px/1 'Barlow Condensed'; letter-spacing:.06em; color:#ff7a3d; margin-bottom:22px">ML</div>
+            <sc-for list="{{ nav }}" as="n" hint-placeholder-count="5">
+              <div onClick="{{ n.go }}" style="cursor:pointer; width:84px; padding:12px 0; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; color:{{ n.fg }}">
+                <sc-if value="{{ n.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; right:-1px; top:8px; bottom:8px; width:2px; background:#ff7a3d"></span></sc-if>
+                <span style="position:relative; font-size:21px; display:flex">{{ n.ico }}<sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; right:-12px; top:-7px; min-width:18px; height:18px; box-sizing:border-box; padding:0 4px; border-radius:2px; background:#ff7a3d; color:#121110; font:700 12px/18px 'Barlow Condensed'; text-align:center; box-shadow:0 0 0 2px #121110">{{ n.badge }}</span></sc-if></span>
+                <span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.1em">{{ n.l }}</span>
+              </div>
+            </sc-for>
+            <span style="flex:1"></span>
+            <sc-if value="{{ seated }}" hint-placeholder-val="{{ true }}"><div onClick="{{ goTisch }}" style="cursor:pointer; width:68px; padding:10px 0; margin-bottom:8px; display:flex; flex-direction:column; align-items:center; gap:6px; border-radius:3px; box-shadow:inset 0 0 0 1px #ff7a3d; color:#ff7a3d"><span style="font-size:19px; display:flex">{{ i.table }}</span><span style="font:600 11px/1 'Barlow Condensed'; letter-spacing:.1em">ZUM TISCH</span></div></sc-if>
+            <div onClick="{{ goKonto }}" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:6px; color:{{ kontoFg }}"><span style="width:34px; height:34px; border-radius:3px; display:flex; align-items:center; justify-content:center; background:#23211e; font:600 16px/1 'Barlow Condensed'; box-shadow:{{ kontoSh }}">A</span><span style="font:600 11px/1 'Barlow Condensed'; letter-spacing:.1em">KONTO</span></div>
+          </div>
+
+          <div style="flex:1; min-width:0; position:relative; display:flex">
+
+            <!-- HELD (server) -->
+            <sc-if value="{{ is.held }}" hint-placeholder-val="{{ true }}">
+              <div style="flex:1; min-width:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px">
+                <sc-if value="{{ guest }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #34312c; font-size:13.5px"><span style="display:flex; color:#9b958a; font-size:16px">{{ i.user }}</span><span>Du spielst als Gast. Level, Decks und Freunde gehen verloren, wenn du dich abmeldest.</span><span style="flex:1"></span><span onClick="{{ goKonto }}" style="cursor:pointer; display:flex; align-items:center; height:34px; padding:0 12px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; white-space:nowrap">KONTO SICHERN</span></div>
+                </sc-if>
+                <div style="display:flex; align-items:flex-end; gap:28px">
+                  <div style="display:flex; flex-direction:column; gap:6px"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.16em; color:#9b958a">LEVEL</span><span style="font:600 {{ L.heroNum }}px/0.78 'Barlow Condensed'">03</span></div>
+                  <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:12px; padding-bottom:6px">
+                    <div style="display:flex; align-items:baseline; gap:14px"><span style="font:600 40px/1 'Barlow Condensed'; letter-spacing:.02em; text-transform:uppercase">Anna</span><span style="font-size:16px; color:#ffd23f; font-weight:600">Lehrling</span></div>
+                    <div style="height:4px; background:#2a2824"><div style="width:10.4%; height:100%; background:#ffd23f"></div></div>
+                    <div style="display:flex; justify-content:space-between; font-size:13px; color:#9b958a"><span><span style="color:#ece7de; font-weight:600">69</span> / 661 XP bis Level 4</span><span>9 Spiele · 2 Siege · Serie 1</span></div>
+                  </div>
+                </div>
+                <sc-if value="{{ seated }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; align-items:center; gap:16px; padding:16px 18px; border-radius:4px; background:#1a1917; box-shadow:inset 0 0 0 1px #ff7a3d">
+                    <span style="width:44px; height:44px; border-radius:3px; display:flex; align-items:center; justify-content:center; background:rgba(255,122,61,.1); color:#ff7a3d; font-size:22px">{{ i.table }}</span>
+                    <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:5px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ff7a3d">DU SITZT AM TISCH</span><span style="font:600 24px/1 'Barlow Condensed'">Annas Tisch · {{ seatCount }}/4 · Blitz</span></div>
+                    <div style="position:relative">
+                      <span onClick="{{ toggleInvitePop }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.userPlus }}</span>EINLADEN</span>
+                      <sc-if value="{{ invitePop }}" hint-placeholder-val="{{ false }}">
+                        <div style="position:absolute; right:0; top:48px; width:300px; z-index:15; background:#1a1917; border-radius:4px; box-shadow:0 18px 48px rgba(0,0,0,.6), 0 0 0 1px #34312c; padding:8px">
+                          <div style="padding:8px 8px 10px; font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">FREUNDE EINLADEN · GILT 10 MIN</div>
+                          <sc-for list="{{ friendInv }}" as="f" hint-placeholder-count="4">
+                            <div style="display:flex; align-items:center; gap:10px; padding:8px; border-radius:3px">
+                              <span style="width:8px; height:8px; flex:none; border-radius:50%; background:{{ f.dot }}; box-shadow:{{ f.ring }}"></span>
+                              <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px"><span style="font-size:13.5px; font-weight:600">{{ f.n }}</span><span style="font-size:11.5px; color:#9b958a">{{ f.st }}</span></div>
+                              <span onClick="{{ f.inv }}" style="cursor:pointer; display:flex; align-items:center; height:30px; padding:0 10px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; white-space:nowrap; color:{{ f.bfg }}; background:{{ f.bbg }}; box-shadow:{{ f.bsh }}; opacity:{{ f.bop }}">{{ f.bl }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </div>
+                    <span onClick="{{ goTisch }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">ZUM TISCH</span>
+                  </div>
+                </sc-if>
+                <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:{{ L.gap }}px">
+                  <div onClick="{{ goLobby }}" style="cursor:pointer; height:{{ L.ctaH }}px; box-sizing:border-box; padding:24px 26px; border-radius:4px; background:#1a1917; display:flex; flex-direction:column; justify-content:space-between"><span style="font-size:26px; display:flex; color:#ff7a3d">{{ i.grid }}</span><div style="display:flex; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 32px/1 'Barlow Condensed'; text-transform:uppercase">Lobby</span><span style="font-size:14px; color:#9b958a">{{ lobbySub }}</span></div><span style="font-size:22px; color:#9b958a; display:flex">{{ i.chev }}</span></div></div>
+                  <div style="height:{{ L.ctaH }}px; box-sizing:border-box; padding:24px 26px; border-radius:4px; box-shadow:inset 0 0 0 1px #34312c; display:flex; flex-direction:column; justify-content:space-between"><span style="font-size:26px; display:flex">{{ i.zap }}</span><div style="display:flex; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 32px/1 'Barlow Condensed'; text-transform:uppercase">Allein üben</span><span style="font-size:14px; color:#9b958a">Merciless Rage · gegen 3 Bots</span></div><span style="font-size:22px; color:#9b958a; display:flex">{{ i.chev }}</span></div></div>
+                </div>
+                <div style="flex:1; min-height:0; display:flex; flex-direction:column">
+                  <div style="display:flex; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid #34312c"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">LETZTE PARTIEN</span><a href="MageLite Meta.dc.html" style="font-size:13px">Statistik</a></div>
+                  <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+                    <div style="display:grid; grid-template-columns:44px minmax(0,1fr) auto; align-items:center; gap:14px; padding:11px 0; border-bottom:1px solid #24221f"><span style="font:600 28px/1 'Barlow Condensed'; color:{{ r.pc }}">{{ r.p }}.</span><div style="display:flex; flex-direction:column; gap:3px; min-width:0"><span style="font-size:14.5px; font-weight:600">{{ r.deck }}</span><span style="font-size:12.5px; color:#9b958a">{{ r.meta }}</span></div><span style="font:600 19px/1 'Barlow Condensed'; color:#ffd23f">{{ r.xp }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="width:{{ L.side }}px; flex:none; display:flex; flex-direction:column; border-left:1px solid #2a2824; background:#161513; min-height:0">
+                <div style="display:flex; gap:22px; padding:16px 18px 0; border-bottom:1px solid #2a2824">
+                  <sc-for list="{{ sideTabs }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.on }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-bottom:11px; font:600 15px/1 'Barlow Condensed'; letter-spacing:.08em; color:{{ t.fg }}; box-shadow:{{ t.sh }}">{{ t.l }}<sc-if value="{{ t.badge }}" hint-placeholder-val="{{ false }}"><span style="min-width:16px; height:16px; padding:0 4px; box-sizing:border-box; border-radius:2px; background:#ff7a3d; color:#121110; font:700 11px/16px 'Barlow Condensed'; text-align:center">{{ t.badge }}</span></sc-if></span></sc-for>
+                </div>
+
+                <sc-if value="{{ chatView }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; align-items:center; gap:10px; padding:10px 18px; border-bottom:1px solid #22201d">
+                    <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.1em; color:#9b958a">{{ memberCount }} IM CHAT</span><span style="flex:1"></span>
+                    <span onClick="{{ leaveChat }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:3px; color:#c9c3b8; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.logout }}</span>VERLASSEN</span>
+                  </div>
+                  <div style="display:flex; flex-wrap:wrap; gap:6px; padding:10px 18px; border-bottom:1px solid #22201d; position:relative">
+                    <sc-for list="{{ members }}" as="m" hint-placeholder-count="6">
+                      <div style="position:relative">
+                        <span onClick="{{ m.on }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding:5px 8px; border-radius:2px; background:{{ m.bg }}; font-size:12.5px; font-weight:600; color:{{ m.fg }}"><span style="width:6px; height:6px; border-radius:50%; background:#7ee08a"></span>{{ m.n }}<sc-if value="{{ m.fr }}" hint-placeholder-val="{{ false }}"><span style="display:flex; color:#9b958a; font-size:11px">{{ i.users }}</span></sc-if></span>
+                        <sc-if value="{{ m.menu }}" hint-placeholder-val="{{ false }}">
+                          <div style="position:absolute; left:0; top:32px; z-index:12; width:220px; background:#23211e; border-radius:3px; box-shadow:0 14px 36px rgba(0,0,0,.6), 0 0 0 1px #34312c; padding:6px">
+                            <div style="padding:8px 10px; display:flex; flex-direction:column; gap:3px; border-bottom:1px solid #34312c; margin-bottom:4px"><span style="font-size:14px; font-weight:600">{{ m.n }}</span><span style="font-size:12px; color:#9b958a">{{ m.sub }}</span></div>
+                            <span onClick="{{ m.add }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:2px; font-size:13.5px; color:{{ m.addFg }}"><span style="display:flex">{{ m.addIco }}</span>{{ m.addL }}</span>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; gap:10px; padding:12px 18px">
+                    <span style="align-self:center; font-size:11.5px; color:#6f6a62; text-align:center; line-height:1.4">Verlauf: letzte 100 Nachrichten · wird bei Server-Neustart geleert</span>
+                    <sc-for list="{{ lobbyMsgs }}" as="c" hint-placeholder-count="6">
+                      <div style="display:flex; flex-direction:column; gap:3px"><div style="display:flex; align-items:baseline; gap:8px"><span style="font-size:13px; font-weight:600; color:{{ c.nc }}">{{ c.n }}</span><span style="font:500 10.5px/1 'IBM Plex Mono'; color:#6f6a62">{{ c.t }}</span></div><span style="font-size:13.5px; line-height:1.45; color:{{ c.tc }}">{{ c.m }}</span></div>
+                    </sc-for>
+                  </div>
+                  <div style="padding:12px 18px 16px; border-top:1px solid #22201d"><div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 6px 0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; opacity:{{ inputOp }}"><input value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onDraftKey }}" placeholder="{{ chatPh }}"><span onClick="{{ sendDraft }}" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:2px; color:#ff7a3d; font-size:16px">{{ i.send }}</span></div></div>
+                </sc-if>
+
+                <sc-if value="{{ chatHidden }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px; text-align:center">
+                    <span style="font-size:34px; color:#6f6a62; display:flex">{{ i.eyeOff }}</span>
+                    <span style="font:600 22px/1 'Barlow Condensed'; letter-spacing:.04em">DU BIST UNSICHTBAR</span>
+                    <span style="font-size:13.5px; line-height:1.5; color:#9b958a">Du stehst nicht in der Mitgliederliste und bekommst keine Nachrichten. Gilt für dein Konto, auch nach dem nächsten Anmelden.</span>
+                    <span onClick="{{ joinChat }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:42px; padding:0 16px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 17px/1 'Barlow Condensed'; letter-spacing:.08em; margin-top:4px"><span style="display:flex">{{ i.login }}</span>BEITRETEN</span>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ friendsView }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column">
+                    <div style="padding:14px 18px; display:flex; flex-direction:column; gap:7px; border-bottom:1px solid #22201d">
+                      <span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">FREUND HINZUFÜGEN · EXAKTER NAME</span>
+                      <div style="display:flex; gap:6px"><div style="flex:1; height:38px; display:flex; align-items:center; padding:0 10px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c"><input value="{{ addName }}" onChange="{{ onAddName }}" onKeyDown="{{ onAddKey }}" placeholder="z. B. Hanna"></div><span onClick="{{ sendRequest }}" style="cursor:pointer; display:flex; align-items:center; height:38px; padding:0 12px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em">ANFRAGEN</span></div>
+                      <sc-if value="{{ addErr }}" hint-placeholder-val="{{ false }}"><span style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:#ef3e56"><span style="display:flex">{{ i.alert }}</span>{{ addErr }}</span></sc-if>
+                    </div>
+                    <sc-if value="{{ hasIncoming }}" hint-placeholder-val="{{ true }}">
+                      <div style="padding:12px 18px; display:flex; flex-direction:column; gap:8px; border-bottom:1px solid #22201d">
+                        <span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ff7a3d">ANFRAGEN AN DICH</span>
+                        <sc-for list="{{ incoming }}" as="r" hint-placeholder-count="1"><div style="display:flex; align-items:center; gap:8px"><span style="flex:1; font-size:14px; font-weight:600">{{ r.n }}</span><span onClick="{{ r.no }}" style="cursor:pointer; display:flex; align-items:center; height:30px; padding:0 10px; color:#c9c3b8; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em">ABLEHNEN</span><span onClick="{{ r.yes }}" style="cursor:pointer; display:flex; align-items:center; height:30px; padding:0 10px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em">ANNEHMEN</span></div></sc-for>
+                      </div>
+                    </sc-if>
+                    <div style="padding:12px 18px; display:flex; flex-direction:column; gap:2px">
+                      <span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a; padding-bottom:6px">FREUNDE · {{ friendCount }}</span>
+                      <sc-for list="{{ friendList }}" as="f" hint-placeholder-count="5">
+                        <div style="display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #22201d"><span style="width:8px; height:8px; flex:none; border-radius:50%; background:{{ f.dot }}; box-shadow:{{ f.ring }}"></span><div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px"><span style="font-size:14px; font-weight:600; color:{{ f.nc }}">{{ f.n }}</span><span style="display:flex; align-items:center; gap:5px; font-size:12px; color:#9b958a"><span style="display:flex">{{ f.ico }}</span>{{ f.st }}</span></div><sc-if value="{{ f.canInv }}" hint-placeholder-val="{{ false }}"><span onClick="{{ f.inv }}" style="cursor:pointer; display:flex; align-items:center; height:30px; padding:0 10px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; white-space:nowrap; color:{{ f.bfg }}; background:{{ f.bbg }}; box-shadow:{{ f.bsh }}">{{ f.bl }}</span></sc-if></div>
+                      </sc-for>
+                      <sc-for list="{{ outgoing }}" as="r" hint-placeholder-count="1"><div style="display:flex; align-items:center; gap:10px; padding:9px 0; border-bottom:1px solid #22201d; color:#9b958a"><span style="width:8px; height:8px; flex:none; border-radius:50%; box-shadow:inset 0 0 0 1px #6f6a62"></span><span style="flex:1; font-size:14px">{{ r }}</span><span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em">ANFRAGE GESENDET</span></div></sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <!-- LOBBY -->
+            <sc-if value="{{ is.lobby }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; min-width:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px">
+                <div style="display:flex; align-items:center; gap:16px"><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em">LOBBY</span><span style="font-size:14px; color:#9b958a">{{ lobbySub }}</span><span style="flex:1"></span>
+                  <span style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.zap }}</span>ALLEIN ÜBEN</span>
+                  <span onClick="{{ openTable }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.plus }}</span>TISCH ERÖFFNEN</span>
+                </div>
+                <sc-if value="{{ lobbyEmpty }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center"><span style="font-size:44px; color:#6f6a62; display:flex">{{ i.grid }}</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.03em">GERADE KEIN OFFENER TISCH</span><span style="max-width:440px; font-size:15px; line-height:1.5; color:#9b958a">Eröffne einen Tisch und lade Freunde ein. Freie Plätze füllen Bots auf.</span><span onClick="{{ openTable }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; margin-top:6px"><span style="display:flex">{{ i.plus }}</span>TISCH ERÖFFNEN</span></div>
+                </sc-if>
+                <sc-if value="{{ lobbyFull }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex; flex-direction:column">
+                    <div style="display:grid; grid-template-columns:minmax(200px,1.6fr) minmax(200px,1.4fr) 100px 120px 150px; gap:16px; padding:0 14px 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>TISCH</span><span>PLÄTZE</span><span>TEMPO</span><span>STATUS</span><span></span></div>
+                    <sc-for list="{{ tables }}" as="t" hint-placeholder-count="3">
+                      <div style="display:grid; grid-template-columns:minmax(200px,1.6fr) minmax(200px,1.4fr) 100px 120px 150px; gap:16px; align-items:center; padding:14px; border-bottom:1px solid #22201d; background:{{ t.bg }}; box-shadow:{{ t.sh }}">
+                        <div style="display:flex; flex-direction:column; gap:4px"><span style="font:600 20px/1 'Barlow Condensed'">{{ t.n }}</span><span style="font-size:12.5px; color:#9b958a">Gastgeber {{ t.host }}</span></div>
+                        <div style="display:flex; gap:6px"><sc-for list="{{ t.seats }}" as="p" hint-placeholder-count="4"><span style="display:flex; align-items:center; gap:5px; height:28px; padding:0 8px; border-radius:2px; font-size:12.5px; font-weight:600; background:{{ p.bg }}; color:{{ p.fg }}; box-shadow:{{ p.sh }}"><span style="display:flex; font-size:12px">{{ p.ico }}</span>{{ p.n }}</span></sc-for></div>
+                        <span style="font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8">{{ t.tempo }}</span>
+                        <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.08em; color:{{ t.stc }}">{{ t.st }}</span>
+                        <span onClick="{{ t.on }}" style="cursor:pointer; justify-self:end; display:flex; align-items:center; gap:6px; height:36px; padding:0 14px; border-radius:3px; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em; white-space:nowrap; background:{{ t.bbg }}; color:{{ t.bfg }}; box-shadow:{{ t.bsh }}">{{ t.bl }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <!-- TISCH -->
+            <sc-if value="{{ is.tisch }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; min-width:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px">
+                <div style="display:flex; align-items:center; gap:16px">
+                  <div style="display:flex; flex-direction:column; gap:6px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">TISCH · DU BIST GASTGEBER</span><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.02em">Annas Tisch</span></div>
+                  <span style="flex:1"></span>
+                  <div style="display:flex; align-items:center; gap:8px; height:40px; padding:0 6px 0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:500 12.5px/1 'IBM Plex Mono'; color:#9b958a">magelite.example.de/t/7QX2<span onClick="{{ copyLink }}" style="cursor:pointer; display:flex; align-items:center; gap:6px; height:30px; padding:0 9px; border-radius:2px; background:#23211e; color:#ece7de; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.copy }}</span>KOPIEREN</span></div>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px">
+                  <sc-for list="{{ tableSeats }}" as="p" hint-placeholder-count="4">
+                    <div style="display:flex; flex-direction:column; border-radius:4px; overflow:hidden; background:{{ p.bg }}; box-shadow:{{ p.sh }}">
+                      <div style="position:relative; height:{{ L.seatArtH }}px; background:#23211e url({{ p.art }}) center / cover no-repeat"><span style="position:absolute; left:10px; top:10px; display:flex; align-items:center; gap:5px; padding:4px 6px; border-radius:2px; background:rgba(18,17,16,.88); font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em; color:#c9c3b8"><span style="display:flex">{{ p.ico }}</span>{{ p.kind }}</span><sc-if value="{{ p.ready }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; right:10px; top:10px; display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:2px; background:{{ p.readyBg }}; color:#121110; font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em">{{ p.ready }}</span></sc-if></div>
+                      <div style="padding:12px 14px; display:flex; flex-direction:column; gap:6px">
+                        <div style="display:flex; align-items:center; gap:8px"><span style="font:600 20px/1 'Barlow Condensed'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ p.n }}</span><sc-if value="{{ p.host }}" hint-placeholder-val="{{ false }}"><span style="display:flex; color:#ffd23f; font-size:14px">{{ i.crown }}</span></sc-if></div>
+                        <span style="font-size:12.5px; color:#9b958a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ p.deck }}</span>
+                        <span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em; color:{{ p.actC }}; margin-top:4px">{{ p.act }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:{{ L.gap }}px">
+                  <div style="display:flex; flex-direction:column; min-height:0">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline; padding-bottom:10px; border-bottom:1px solid #34312c"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">FREUNDE EINLADEN</span><span style="font-size:12px; color:#9b958a">Einladung gilt 10 Minuten</span></div>
+                    <sc-for list="{{ friendInv }}" as="f" hint-placeholder-count="5">
+                      <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #22201d"><span style="width:8px; height:8px; flex:none; border-radius:50%; background:{{ f.dot }}; box-shadow:{{ f.ring }}"></span><div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px"><span style="font-size:14px; font-weight:600">{{ f.n }}</span><span style="display:flex; align-items:center; gap:5px; font-size:12px; color:#9b958a"><span style="display:flex">{{ f.ico }}</span>{{ f.st }}</span></div><span onClick="{{ f.inv }}" style="cursor:pointer; display:flex; align-items:center; height:32px; padding:0 12px; border-radius:3px; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; white-space:nowrap; color:{{ f.bfg }}; background:{{ f.bbg }}; box-shadow:{{ f.bsh }}; opacity:{{ f.bop }}">{{ f.bl }}</span></div>
+                    </sc-for>
+                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:auto; padding-top:16px">
+                      <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">BOT-TEMPO</span>
+                      <div style="display:flex; padding:3px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; align-self:flex-start"><span style="padding:8px 12px; border-radius:2px; background:#34312c">BLITZ</span><span style="padding:8px 12px; color:#9b958a">NORMAL</span><span style="padding:8px 12px; color:#9b958a">BEDACHT</span><span style="padding:8px 12px; color:#9b958a">MAX</span></div>
+                    </div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; min-height:0; border-radius:4px; background:#161513; box-shadow:inset 0 0 0 1px #2a2824">
+                    <div style="padding:12px 16px; border-bottom:1px solid #2a2824; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">TISCH-CHAT</div>
+                    <div style="flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; gap:10px; padding:12px 16px">
+                      <sc-for list="{{ tableMsgs }}" as="c" hint-placeholder-count="4"><div style="display:flex; flex-direction:column; gap:3px"><div style="display:flex; align-items:baseline; gap:8px"><span style="font-size:13px; font-weight:600; color:{{ c.nc }}">{{ c.n }}</span><span style="font:500 10.5px/1 'IBM Plex Mono'; color:#6f6a62">{{ c.t }}</span></div><span style="font-size:13.5px; line-height:1.45; color:{{ c.tc }}">{{ c.m }}</span></div></sc-for>
+                    </div>
+                    <div style="padding:10px 16px 14px"><div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 6px 0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c"><input value="{{ tDraft }}" onChange="{{ onTDraft }}" onKeyDown="{{ onTDraftKey }}" placeholder="Nachricht an den Tisch"><span onClick="{{ sendT }}" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:30px; height:30px; color:#ff7a3d; font-size:16px">{{ i.send }}</span></div></div>
+                  </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; padding-top:14px; border-top:1px solid #2a2824">
+                  <span onClick="{{ leaveTable }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.logout }}</span>TISCH VERLASSEN</span>
+                  <span style="flex:1"></span>
+                  <span style="font-size:13px; color:#9b958a">{{ startHint }}</span>
+                  <a href="MageLite Spielbrett.dc.html" style="display:flex; align-items:center; gap:10px; height:48px; padding:0 22px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 19px/1 'Barlow Condensed'; letter-spacing:.08em; opacity:{{ startOp }}"><span style="display:flex">{{ i.play }}</span>SPIEL STARTEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16); letter-spacing:0">Enter</span></a>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- KONTO -->
+            <sc-if value="{{ is.konto }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; min-width:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px; overflow:auto">
+                <span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em">KONTO</span>
+                <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:48px; max-width:1100px">
+                  <div style="display:flex; flex-direction:column; gap:22px">
+                    <div style="display:flex; align-items:center; gap:16px; padding-bottom:20px; border-bottom:1px solid #2a2824"><span style="width:56px; height:56px; border-radius:3px; display:flex; align-items:center; justify-content:center; background:#23211e; font:600 26px/1 'Barlow Condensed'">A</span><div style="display:flex; flex-direction:column; gap:5px"><span style="font:600 26px/1 'Barlow Condensed'">Anna</span><span style="font-size:13px; color:#9b958a">{{ accountSub }}</span></div></div>
+                    <div style="display:flex; flex-direction:column; gap:14px">
+                      <span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">{{ accountFormTitle }}</span>
+                      <span style="font-size:13.5px; color:#c9c3b8; line-height:1.5">{{ accountFormText }}</span>
+                      <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">E-MAIL</span><div style="height:42px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px; color:{{ mailC }}">{{ mailVal }}</div></div>
+                      <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">NEUES PASSWORT</span><div style="height:42px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px; color:#6f6a62">mindestens 10 Zeichen<span style="flex:1"></span><span style="display:flex; color:#9b958a">{{ i.eye }}</span></div></div>
+                      <span onClick="{{ saveAccount }}" style="cursor:pointer; align-self:flex-start; display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">{{ accountBtn }}</span>
+                    </div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; gap:22px">
+                    <div style="display:flex; flex-direction:column; gap:12px; padding-bottom:20px; border-bottom:1px solid #2a2824">
+                      <span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">LOBBY-CHAT</span>
+                      <div style="display:flex; align-items:center; gap:12px; font-size:14px"><span onClick="{{ toggleChat }}" style="cursor:pointer; position:relative; width:34px; height:20px; border-radius:2px; background:{{ chatTrack }}; flex:none"><span style="position:absolute; top:3px; left:{{ chatKnob }}px; width:14px; height:14px; border-radius:1px; background:{{ chatKnobC }}"></span></span>In der Mitgliederliste sichtbar und Nachrichten empfangen</div>
+                      <span style="font-size:12.5px; color:#9b958a; line-height:1.45">Wird für dein Konto gespeichert. Gleich wie „Verlassen“ und „Beitreten“ in der Startseite.</span>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:12px">
+                      <span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">SITZUNG</span>
+                      <span style="font-size:13.5px; color:#c9c3b8">Angemeldet auf magelite.example.de seit heute, 19:12</span>
+                      <span onClick="{{ logout }}" style="cursor:pointer; align-self:flex-start; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; color:#ef3e56; box-shadow:inset 0 0 0 1px rgba(239,62,86,.5); font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.logout }}</span>ABMELDEN</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- ADMIN -->
+            <sc-if value="{{ is.admin }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; min-width:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px; overflow:auto">
+                <div style="display:flex; align-items:baseline; gap:16px"><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em">EINLADUNGEN</span><span style="font-size:14px; color:#9b958a">Nur für dich als Admin sichtbar</span></div>
+                <div style="display:flex; align-items:flex-end; gap:10px; max-width:720px">
+                  <div style="flex:1; display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">NAME DES FREUNDES</span><div style="height:42px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c"><input value="{{ newName }}" onChange="{{ onNewName }}" placeholder="z. B. Jonas"></div></div>
+                  <span onClick="{{ makeCode }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:42px; padding:0 16px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 17px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.key }}</span>CODE ERZEUGEN</span>
+                </div>
+                <sc-if value="{{ codeShown }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; align-items:center; gap:18px; padding:16px 18px; border-radius:4px; background:#1a1917; box-shadow:inset 0 0 0 1px #ffd23f; max-width:980px">
+                    <div style="flex:1; display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ffd23f">NEUER CODE FÜR {{ codeFor }} · NUR JETZT SICHTBAR</span><div style="display:flex; align-items:baseline; gap:16px"><span style="font:500 24px/1 'IBM Plex Mono'; letter-spacing:.12em">MAGE-K4P9-WD</span><span style="font:500 12.5px/1 'IBM Plex Mono'; color:#9b958a">magelite.example.de/join/K4P9WD</span></div></div>
+                    <span onClick="{{ copyCode }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.copy }}</span>LINK KOPIEREN</span>
+                  </div>
+                </sc-if>
+                <div style="display:flex; flex-direction:column; max-width:1100px">
+                  <div style="display:grid; grid-template-columns:minmax(140px,1fr) minmax(160px,1fr) minmax(120px,.8fr) 130px; gap:16px; padding:0 12px 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>NAME</span><span>STATUS</span><span>ERSTELLT</span><span></span></div>
+                  <sc-for list="{{ invites }}" as="v" hint-placeholder-count="5">
+                    <div style="display:grid; grid-template-columns:minmax(140px,1fr) minmax(160px,1fr) minmax(120px,.8fr) 130px; gap:16px; align-items:center; padding:11px 12px; border-bottom:1px solid #22201d">
+                      <span style="font-size:14px; font-weight:600">{{ v.n }}</span>
+                      <span style="display:flex; align-items:center; gap:7px; font-size:13px; color:{{ v.sc }}"><span style="width:7px; height:7px; border-radius:50%; background:{{ v.dot }}; box-shadow:{{ v.ring }}"></span>{{ v.st }}</span>
+                      <span style="font-size:13px; color:#9b958a">{{ v.d }}</span>
+                      <span style="display:flex; justify-content:flex-end; gap:4px"><span title="Link kopieren" onClick="{{ copyCode }}" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:3px; color:#c9c3b8; box-shadow:inset 0 0 0 1px #34312c">{{ i.copy }}</span><span title="Code rotieren" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:3px; color:#c9c3b8; box-shadow:inset 0 0 0 1px #34312c">{{ i.refresh }}</span><span title="Löschen" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:3px; color:#c9c3b8; box-shadow:inset 0 0 0 1px #34312c">{{ i.trash }}</span></span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ inviteCard }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; right:20px; bottom:20px; z-index:25; width:340px; background:#1a1917; border-radius:4px; box-shadow:0 24px 56px rgba(0,0,0,.6), 0 0 0 1px #ff7a3d; overflow:hidden">
+                <div style="height:3px; background:#2a2824"><div style="width:94%; height:100%; background:#ff7a3d"></div></div>
+                <div style="padding:16px 16px 14px; display:flex; flex-direction:column; gap:10px">
+                  <div style="display:flex; align-items:center; gap:8px"><span style="display:flex; color:#ff7a3d; font-size:16px">{{ i.mail }}</span><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ff7a3d">EINLADUNG</span><span style="flex:1"></span><span style="font:500 11px/1 'IBM Plex Mono'; color:#9b958a">noch 9:24</span></div>
+                  <span style="font-size:15px; line-height:1.4"><span style="font-weight:600">Clara</span> lädt dich an ihren Tisch ein.</span>
+                  <div style="display:flex; gap:14px; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8"><span>FREITAGSRUNDE</span><span>2/4</span><span>NORMAL</span></div>
+                  <div style="display:flex; gap:8px; margin-top:4px"><span onClick="{{ declineInvite }}" style="cursor:pointer; flex:1; display:flex; align-items:center; justify-content:center; height:40px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABLEHNEN</span><span onClick="{{ acceptInvite }}" style="cursor:pointer; flex:1; display:flex; align-items:center; justify-content:center; height:40px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 16px/1 'Barlow Condensed'; letter-spacing:.08em">BEITRETEN</span></div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; left:50%; top:16px; transform:translateX(-50%); z-index:30; display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:3px; background:#23211e; box-shadow:0 12px 32px rgba(0,0,0,.5); font-size:13.5px; white-space:nowrap"><span style="display:flex; font-size:16px; color:#7ee08a">{{ i.check }}</span>{{ toastText }}</div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { screen: 'held', size: '1680', seated: true, chatIn: true, side: 'chat', menu: null, inviteCard: false, conn: false, guest: false, loginTab: 'code', lobbyEmpty: false, invitePop: false,
+    friends: { Bob: 'tisch', Clara: 'online', David: 'spiel', Emil: 'offline' }, incoming: ['Fritz'], outgoing: ['Greta'], invited: {}, bobJoined: true,
+    msgs: [], tmsgs: [], draft: '', tDraft: '', addName: '', addErr: '', newName: '', codeFor: '', unread: 3, load: 0, toast: null, u: {}, vw: window.innerWidth, vh: window.innerHeight };
+
+  componentDidMount() {
+    try { const s = JSON.parse(localStorage.getItem('ml-online') || '{}'); if (s.screen) this.setState({ screen: s.screen === 'loading' ? 'held' : s.screen, size: s.size || '1680', chatIn: s.chatIn !== false }); } catch (e) {}
+    this.onR = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    this.onK = e => { if (e.key === 'Escape') this.setState({ menu: null, invitePop: false }); };
+    window.addEventListener('resize', this.onR); window.addEventListener('keydown', this.onK);
+    if (!window.__sf) {
+      const cache = {}, q = []; let busy = false;
+      const pump = () => { if (busy || !q.length) return; busy = true; const [n, res] = q.shift();
+        fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(n)).then(r => r.json()).then(j => res(j.image_uris || (j.card_faces && j.card_faces[0].image_uris) || {})).catch(() => res({}))
+          .finally(() => setTimeout(() => { busy = false; pump(); }, 110)); };
+      window.__sf = n => cache[n] || (cache[n] = new Promise(res => { q.push([n, res]); pump(); }));
+    }
+    ['Kaalia of the Vast', 'Anje Falkenrath', 'Sliver Gravemother', 'Teferi, Temporal Archmage'].forEach(n => window.__sf(n).then(u => this.setState(s => ({ u: { ...s.u, [n]: u } }))));
+    if (!window.lucide) this.t = setInterval(() => { if (window.lucide) { clearInterval(this.t); this.forceUpdate(); } }, 150);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onR); window.removeEventListener('keydown', this.onK); clearInterval(this.t); clearInterval(this.lt); clearTimeout(this.tt); }
+  ico(names) {
+    const L = window.lucide; if (!L || !L.icons) return null;
+    let node; for (const n of names) if (L.icons[n]) { node = L.icons[n]; break; }
+    if (!node) return null; if (node[0] === 'svg') node = node[2];
+    return React.createElement('svg', { width: '1em', height: '1em', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block' } }, node.map(([t, a], k) => React.createElement(t, { ...a, key: k })));
+  }
+  save() { try { localStorage.setItem('ml-online', JSON.stringify({ screen: this.state.screen, size: this.state.size, chatIn: this.state.chatIn })); } catch (e) {} }
+  go(screen, extra) { this.setState({ screen, menu: null, invitePop: false, ...(screen === 'held' ? { unread: 0 } : {}), ...(extra || {}) }, () => this.save()); }
+  toast(t) { clearTimeout(this.tt); this.setState({ toast: t }); this.tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+  login() {
+    this.setState({ screen: 'loading', load: 10 }); clearInterval(this.lt);
+    this.lt = setInterval(() => { const l = this.state.load + 18; if (l >= 100) { clearInterval(this.lt); this.go('held'); } else this.setState({ load: l }); }, 260);
+  }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  send() { const t = this.state.draft.trim(); if (!t || !this.state.chatIn || this.state.conn) return; this.setState(s => ({ msgs: [...s.msgs, { n: 'Anna', t: this.now(), m: t }], draft: '' })); }
+  sendT() { const t = this.state.tDraft.trim(); if (!t) return; this.setState(s => ({ tmsgs: [...s.tmsgs, { n: 'Anna', t: this.now(), m: t }], tDraft: '' })); }
+  request(name) {
+    const s = this.state, n = (name || '').trim();
+    const known = ['Bob', 'Clara', 'David', 'Emil', 'Fritz', 'Greta', 'Hanna', 'Ilias', 'Jonas'];
+    if (!n) return;
+    if (!known.includes(n)) return this.setState({ addErr: `Kein Konto mit dem Namen „${n}“. Groß- und Kleinschreibung beachten.` });
+    if (s.friends[n]) return this.setState({ addErr: `${n} ist schon dein Freund.` });
+    if (s.incoming.includes(n)) { this.setState(st => ({ incoming: st.incoming.filter(x => x !== n), friends: { ...st.friends, [n]: 'online' }, addName: '', addErr: '', menu: null })); return this.toast(`${n} hatte dich schon angefragt. Ihr seid jetzt befreundet`); }
+    if (s.outgoing.includes(n)) return this.setState({ addErr: `Anfrage an ${n} läuft bereits.` });
+    this.setState(st => ({ outgoing: [...st.outgoing, n], addName: '', addErr: '', menu: null })); this.toast(`Anfrage an ${n} gesendet`);
+  }
+  invite(n) { this.setState(s => ({ invited: { ...s.invited, [n]: true } })); this.toast(`${n} eingeladen · gilt 10 Minuten`); }
+
+  renderVals() {
+    const s = this.state;
+    const art = n => (s.u[n] || {}).art_crop || '';
+    const i = {}; const im = { held: ['Shield'], swords: ['Swords'], layers: ['Layers'], stat: ['ChartColumn', 'BarChart3'], ticket: ['Ticket'], table: ['LogIn'], login: ['LogIn'], logout: ['LogOut'], zap: ['Zap'], play: ['Play'], chev: ['ChevronRight'], plus: ['Plus'], grid: ['LayoutGrid'], user: ['User'], userPlus: ['UserPlus'], users: ['Users'], userCheck: ['UserCheck'], bot: ['Bot'], crown: ['Crown'], copy: ['Copy'], send: ['SendHorizontal', 'Send'], eye: ['Eye'], eyeOff: ['EyeOff'], wifi: ['WifiOff'], check: ['Check'], alert: ['TriangleAlert', 'AlertTriangle'], key: ['KeyRound'], refresh: ['RefreshCw'], trash: ['Trash2'], mail: ['Mail'], hourglass: ['Hourglass'] };
+    for (const k in im) i[k] = this.ico(im[k]);
+    const big = s.size !== '1280';
+    const L = big ? { W: 1680, H: 1000, pad: '44px 56px', gap: 26, heroNum: 130, ctaH: 170, side: 400, seatArtH: 130 } : { W: 1280, H: 760, pad: '26px 32px', gap: 16, heroNum: 96, ctaH: 124, side: 320, seatArtH: 84 };
+    const scale = Math.min((s.vw - 24) / L.W, (s.vh - 48 - 24) / L.H, 1);
+    const scr = s.screen;
+    const inGameFriend = n => s.friends[n] === 'spiel';
+
+    const stInfo = { online: ['online', '#7ee08a', 'none', i.user], tisch: ['am Tisch', 'transparent', 'inset 0 0 0 1.5px #c9c3b8', i.table], spiel: ['im Spiel', 'transparent', 'inset 0 0 0 1.5px #c9c3b8', i.swords], offline: ['offline', 'transparent', 'inset 0 0 0 1px #5a564f', null] };
+    const atMyTable = n => n === 'Bob' && s.bobJoined;
+    const friendNames = Object.keys(s.friends);
+    const friendRow = n => {
+      const st = s.friends[n]; const [lbl, dot, ring, ico] = stInfo[st];
+      const at = atMyTable(n), inv = !!s.invited[n], off = st === 'offline';
+      let bl = 'EINLADEN', bfg = '#ece7de', bbg = 'transparent', bsh = 'inset 0 0 0 1px #4a463f', bop = 1, on = () => this.invite(n);
+      if (at) { bl = 'AM TISCH'; bfg = '#9b958a'; bsh = 'none'; on = () => {}; }
+      else if (inv) { bl = 'EINGELADEN · 9:41'; bfg = '#ff7a3d'; bsh = 'inset 0 0 0 1px rgba(255,122,61,.5)'; on = () => {}; }
+      else if (off) { bop = 0.4; on = () => {}; }
+      return { n, st: at ? 'an deinem Tisch' : (st === 'tisch' ? 'am Tisch' : lbl) + (st === 'spiel' && !at ? ' · sieht die Einladung nach der Partie' : ''), dot, ring, ico, nc: off ? '#9b958a' : '#ece7de', bl, bfg, bbg, bsh, bop, inv: on, canInv: s.seated };
+    };
+    const order = { online: 0, tisch: 1, spiel: 2, offline: 3 };
+    const friendList = friendNames.sort((a, b) => order[s.friends[a]] - order[s.friends[b]]).map(friendRow);
+
+    const baseMembers = ['Anna', 'Bob', 'Clara', 'Fritz', 'Hanna', 'Ilias'].filter(n => n !== 'Anna' || s.chatIn);
+    const members = baseMembers.map(n => {
+      const me = n === 'Anna', fr = !!s.friends[n], out = s.outgoing.includes(n), inc = s.incoming.includes(n);
+      return { n: me ? 'Anna (du)' : n, fr, bg: s.menu === n ? '#34312c' : '#23211e', fg: me ? '#ff7a3d' : '#ece7de', menu: s.menu === n && !me,
+        on: me ? () => {} : () => this.setState(st => ({ menu: st.menu === n ? null : n })),
+        sub: fr ? 'Dein Freund' : inc ? 'Hat dir eine Anfrage geschickt' : out ? 'Anfrage gesendet' : 'Im Lobby-Chat',
+        addL: fr ? 'Schon befreundet' : out ? 'Anfrage gesendet' : inc ? 'Anfrage annehmen' : 'Als Freund hinzufügen',
+        addIco: fr || out ? i.userCheck : i.userPlus, addFg: fr || out ? '#9b958a' : '#ece7de',
+        add: fr || out ? () => this.setState({ menu: null }) : () => this.request(n) };
+    });
+    const baseMsgs = [
+      { n: 'Clara', t: '20:41', m: 'Wer hat Lust auf eine Runde mit Präkons? Normales Tempo.' },
+      { n: 'Ilias', t: '20:43', m: 'Bin gleich fertig, Zug 14 :)' },
+      { n: 'System', t: '20:47', m: 'Hanna ist dem Lobby-Chat beigetreten', sys: true },
+      { n: 'Bob', t: '20:52', m: 'Sitze bei Anna. Ein Platz ist noch frei.' },
+      { n: 'Hanna', t: '20:53', m: 'Hat jemand Kotori schon gegen Teferi getestet?' }
+    ];
+    const lobbyMsgs = baseMsgs.concat(s.msgs).slice(-100).slice(big ? -7 : -4).map(c => ({ ...c, nc: c.sys ? '#6f6a62' : c.n === 'Anna' ? '#ff7a3d' : '#ece7de', tc: c.sys ? '#6f6a62' : '#c9c3b8', n: c.sys ? '' : c.n }));
+    const tableMsgs = [{ n: 'Bob', t: '20:50', m: 'Nehme Sliver Swarm, ok?' }, { n: 'Anna', t: '20:51', m: 'Klar. Ich lade noch Clara ein.' }].concat(s.tmsgs).slice(-6).map(c => ({ ...c, nc: c.n === 'Anna' ? '#ff7a3d' : '#ece7de', tc: '#c9c3b8' }));
+
+    const seatCount = s.bobJoined ? 2 : 1;
+    const tableSeats = [
+      { n: 'Anna', host: true, kind: 'MENSCH', ico: i.user, deck: 'Merciless Rage · Anje Falkenrath', art: art('Anje Falkenrath'), ready: 'BEREIT', readyBg: '#7ee08a', act: 'DECK ÄNDERN', actC: '#ff7a3d', bg: '#1a1917', sh: 'inset 0 0 0 1px #ff7a3d' },
+      s.bobJoined ? { n: 'Bob', host: false, kind: 'MENSCH', ico: i.user, deck: 'Sliver Swarm · Sliver Gravemother', art: art('Sliver Gravemother'), ready: 'WÄHLT DECK', readyBg: '#ffd23f', act: 'ENTFERNEN', actC: '#9b958a', bg: '#1a1917', sh: 'none' }
+        : { n: 'Offener Platz', host: false, kind: 'OFFEN', ico: i.userPlus, deck: 'Freunde einladen oder Link teilen', art: '', ready: '', readyBg: '', act: 'MIT BOT FÜLLEN', actC: '#ff7a3d', bg: 'transparent', sh: 'inset 0 0 0 1px #34312c' },
+      { n: 'Offener Platz', host: false, kind: 'OFFEN', ico: i.userPlus, deck: 'Wird beim Start mit einem Bot gefüllt', art: '', ready: '', readyBg: '', act: 'BOT JETZT SETZEN', actC: '#ff7a3d', bg: 'transparent', sh: 'inset 0 0 0 1px #34312c' },
+      { n: 'Bot', host: false, kind: 'BOT', ico: i.bot, deck: 'Peer Through Time · Teferi, Temporal Archmage', art: art('Teferi, Temporal Archmage'), ready: 'BEREIT', readyBg: '#7ee08a', act: 'DECK ÄNDERN', actC: '#ff7a3d', bg: '#1a1917', sh: 'none' }
+    ];
+
+    const seatChip = (n, kind) => ({ n, ico: kind === 'bot' ? i.bot : kind === 'open' ? i.userPlus : i.user, bg: kind === 'open' ? 'transparent' : '#23211e', fg: kind === 'open' ? '#6f6a62' : '#ece7de', sh: kind === 'open' ? 'inset 0 0 0 1px #34312c' : 'none' });
+    const tables = [
+      { n: 'Annas Tisch', host: 'Anna (du)', seats: [seatChip('Anna'), s.bobJoined ? seatChip('Bob') : seatChip('frei', 'open'), seatChip('frei', 'open'), seatChip('Bot', 'bot')], tempo: 'BLITZ', st: 'DU SITZT HIER', stc: '#ff7a3d', bl: 'ÖFFNEN', bbg: '#ff7a3d', bfg: '#121110', bsh: 'none', bg: 'rgba(255,122,61,.05)', sh: 'inset 2px 0 0 #ff7a3d', on: () => this.go('tisch') },
+      { n: 'Freitagsrunde', host: 'Clara', seats: [seatChip('Clara'), seatChip('Hanna'), seatChip('frei', 'open'), seatChip('frei', 'open')], tempo: 'NORMAL', st: 'OFFEN · 2/4', stc: '#7ee08a', bl: 'SETZEN', bbg: 'transparent', bfg: '#ece7de', bsh: 'inset 0 0 0 1px #4a463f', bg: 'transparent', sh: 'none', on: () => this.toast('Prototyp: Wechsel an Claras Tisch') },
+      { n: "Ilias' Tisch", host: 'Ilias', seats: [seatChip('Ilias'), seatChip('David'), seatChip('Bot', 'bot'), seatChip('Bot', 'bot')], tempo: 'BEDACHT', st: 'LÄUFT · ZUG 14', stc: '#9b958a', bl: 'ZUSCHAUEN', bbg: 'transparent', bfg: '#c9c3b8', bsh: 'none', bg: 'transparent', sh: 'none', on: () => this.toast('Zuschauen startet am Spielbrett') }
+    ];
+
+    const unreadBadge = s.chatIn && scr !== 'held' && s.unread ? s.unread : '';
+    const nav = [['held', 'HELD', i.held, unreadBadge], ['lobby', 'SPIELEN', i.swords, ''], ['decks', 'DECKS', i.layers, ''], ['stat', 'STATISTIK', i.stat, ''], ['admin', 'EINLADUNGEN', i.ticket, '']].map(([k, l, ico, badge]) => ({ l, ico, badge, on: scr === k || (k === 'lobby' && scr === 'tisch'), fg: scr === k || (k === 'lobby' && scr === 'tisch') ? '#ece7de' : '#7d786f',
+      go: k === 'decks' || k === 'stat' ? () => { window.location.href = 'MageLite Meta.dc.html'; } : () => this.go(k) }));
+
+    const invites = [
+      { n: 'Bob', st: 'Angemeldet · Konto gesichert', d: '12. Sep.', sc: '#c9c3b8', dot: '#7ee08a', ring: 'none' },
+      { n: 'Clara', st: 'Angemeldet · Gast', d: '12. Sep.', sc: '#c9c3b8', dot: '#7ee08a', ring: 'none' },
+      { n: 'David', st: 'Angemeldet · Konto gesichert', d: '20. Sep.', sc: '#c9c3b8', dot: '#7ee08a', ring: 'none' },
+      { n: 'Emil', st: 'Code noch nicht benutzt', d: '2. Okt.', sc: '#9b958a', dot: 'transparent', ring: 'inset 0 0 0 1px #9b958a' }
+    ].concat(s.codeFor ? [{ n: s.codeFor, st: 'Code noch nicht benutzt', d: 'heute', sc: '#9b958a', dot: 'transparent', ring: 'inset 0 0 0 1px #9b958a' }] : []);
+
+    const protoScreens = [['login', 'LOGIN'], ['held', 'START'], ['lobby', 'LOBBY'], ['tisch', 'TISCH'], ['konto', 'KONTO'], ['admin', 'EINLADUNGEN']].map(([k, l]) => ({ l, go: () => k === 'login' ? this.setState({ screen: 'login' }) : this.go(k), fg: scr === k ? '#121110' : '#c9c3b8', bg: scr === k ? '#ff7a3d' : 'transparent' }));
+    const tg = (l, on, fn) => ({ l, track: on ? '#ff7a3d' : '#34312c', knob: on ? 12 : 2, on: fn });
+    const toggles = [
+      tg('AM TISCH', s.seated, () => this.setState(st => ({ seated: !st.seated, invitePop: false }))),
+      tg('IM CHAT', s.chatIn, () => this.setState(st => ({ chatIn: !st.chatIn }), () => this.save())),
+      tg('EINLADUNG', s.inviteCard, () => this.setState(st => ({ inviteCard: !st.inviteCard }))),
+      tg('GAST', s.guest, () => this.setState(st => ({ guest: !st.guest }))),
+      tg('KEINE LOBBY', s.lobbyEmpty, () => this.setState(st => ({ lobbyEmpty: !st.lobbyEmpty }))),
+      tg('VERBINDUNG WEG', s.conn, () => this.setState(st => ({ conn: !st.conn })))
+    ];
+    const friendBadge = s.incoming.length;
+    return {
+      L, scale: scale.toFixed(4), i, art: { kaalia: art('Kaalia of the Vast') },
+      is: { login: scr === 'login', loading: scr === 'loading', held: scr === 'held', lobby: scr === 'lobby', tisch: scr === 'tisch', konto: scr === 'konto', admin: scr === 'admin' },
+      inApp: scr !== 'login' && scr !== 'loading', connLost: s.conn,
+      loginTabs: [['code', 'EINLADUNGSCODE'], ['mail', 'E-MAIL & PASSWORT']].map(([k, l]) => ({ l, bg: s.loginTab === k ? '#34312c' : 'transparent', fg: s.loginTab === k ? '#ece7de' : '#9b958a', on: () => this.setState({ loginTab: k }) })),
+      loginCode: s.loginTab === 'code', loginMail: s.loginTab === 'mail', doLogin: () => this.login(),
+      loadPct: s.load, loadText: s.load < 50 ? 'VERBINDE MIT SERVER …' : 'LADE KONTO UND DECKS …',
+      nav, seated: s.seated, seatCount, goTisch: () => this.go('tisch'), goKonto: () => this.go('konto'), goLobby: () => this.go('lobby'),
+      kontoFg: scr === 'konto' ? '#ece7de' : '#7d786f', kontoSh: scr === 'konto' ? '0 0 0 1px #ff7a3d' : 'none',
+      guest: s.guest, recent: [{ p: 1, pc: '#ffd23f', deck: 'Merciless Rage', meta: 'Online mit Bob · 26 Züge · heute', xp: '+190 XP' }, { p: 2, pc: '#c9c3b8', deck: 'Sliver Swarm', meta: 'Allein · 31 Züge · heute', xp: '+104 XP' }, { p: 3, pc: '#9b958a', deck: 'Merciless Rage', meta: 'Online mit Clara, David · gestern', xp: '+62 XP' }].slice(0, big ? 3 : 2),
+      lobbySub: s.lobbyEmpty ? 'Kein offener Tisch' : '3 Tische · 6 Spieler online',
+      invitePop: s.invitePop, toggleInvitePop: () => this.setState(st => ({ invitePop: !st.invitePop })),
+      friendInv: friendList, friendList, friendCount: friendNames.length,
+      sideTabs: [['chat', 'LOBBY-CHAT', ''], ['friends', 'FREUNDE', friendBadge || '']].map(([k, l, b]) => ({ l, badge: b, fg: s.side === k ? '#ece7de' : '#7d786f', sh: s.side === k ? 'inset 0 -2px 0 #ff7a3d' : 'none', on: () => this.setState({ side: k, menu: null }) })),
+      chatView: s.side === 'chat' && s.chatIn, chatHidden: s.side === 'chat' && !s.chatIn, friendsView: s.side === 'friends',
+      memberCount: members.length, members, lobbyMsgs,
+      leaveChat: () => { this.setState({ chatIn: false, menu: null }, () => this.save()); this.toast('Lobby-Chat verlassen · du bist unsichtbar'); },
+      joinChat: () => { this.setState({ chatIn: true }, () => this.save()); this.toast('Lobby-Chat beigetreten'); },
+      draft: s.draft, onDraft: e => this.setState({ draft: e.target.value }), onDraftKey: e => { if (e.key === 'Enter') this.send(); }, sendDraft: () => this.send(),
+      chatPh: s.conn ? 'Keine Verbindung' : 'Nachricht an alle in der Lobby', inputOp: s.conn ? 0.5 : 1,
+      addName: s.addName, addErr: s.addErr, onAddName: e => this.setState({ addName: e.target.value, addErr: '' }), onAddKey: e => { if (e.key === 'Enter') this.request(this.state.addName); }, sendRequest: () => this.request(this.state.addName),
+      hasIncoming: s.incoming.length > 0,
+      incoming: s.incoming.map(n => ({ n, yes: () => { this.setState(st => ({ incoming: st.incoming.filter(x => x !== n), friends: { ...st.friends, [n]: 'online' } })); this.toast(`${n} ist jetzt dein Freund`); }, no: () => this.setState(st => ({ incoming: st.incoming.filter(x => x !== n) })) })),
+      outgoing: s.outgoing,
+      tables, lobbyEmpty: s.lobbyEmpty, lobbyFull: !s.lobbyEmpty, openTable: () => { this.setState({ seated: true }); this.go('tisch'); },
+      tableSeats, tableMsgs, tDraft: s.tDraft, onTDraft: e => this.setState({ tDraft: e.target.value }), onTDraftKey: e => { if (e.key === 'Enter') this.sendT(); }, sendT: () => this.sendT(),
+      startHint: s.bobJoined ? 'Bob wählt noch ein Deck · freie Plätze füllen Bots' : 'Freie Plätze füllen Bots', startOp: 1,
+      copyLink: () => this.toast('Einladungslink kopiert'), leaveTable: () => { this.setState({ seated: false }); this.go('lobby'); this.toast('Tisch verlassen'); },
+      accountSub: s.guest ? 'Gast · Admin dieses Servers' : 'Konto gesichert · Admin dieses Servers',
+      accountFormTitle: s.guest ? 'KONTO SICHERN' : 'E-MAIL UND PASSWORT ÄNDERN',
+      accountFormText: s.guest ? 'Mit E-Mail und Passwort kannst du dich auf jedem Gerät anmelden. Level, Decks und Freunde bleiben erhalten.' : 'Anmeldung mit E-Mail und Passwort ist aktiv.',
+      mailVal: s.guest ? 'deine@mail.de' : 'anna@example.de', mailC: s.guest ? '#6f6a62' : '#ece7de', accountBtn: s.guest ? 'KONTO SICHERN' : 'SPEICHERN',
+      saveAccount: () => { if (s.guest) this.setState({ guest: false }); this.toast(s.guest ? 'Konto gesichert' : 'Gespeichert'); },
+      chatTrack: s.chatIn ? '#ff7a3d' : '#34312c', chatKnob: s.chatIn ? 17 : 3, chatKnobC: s.chatIn ? '#121110' : '#9b958a', toggleChat: () => this.setState(st => ({ chatIn: !st.chatIn }), () => this.save()),
+      logout: () => this.setState({ screen: 'login' }),
+      newName: s.newName, onNewName: e => this.setState({ newName: e.target.value }),
+      makeCode: () => { const n = s.newName.trim() || 'Jonas'; this.setState({ codeFor: n, newName: '' }); },
+      codeShown: !!s.codeFor, codeFor: (s.codeFor || '').toUpperCase(), copyCode: () => this.toast('Link kopiert'), invites,
+      inviteCard: s.inviteCard && scr !== 'login' && scr !== 'loading',
+      acceptInvite: () => { this.setState({ inviteCard: false, seated: true }); this.go('tisch'); this.toast('Du sitzt jetzt an der Freitagsrunde'); },
+      declineInvite: () => { this.setState({ inviteCard: false }); this.toast('Einladung abgelehnt'); },
+      protoScreens, toggles,
+      sizeBtns: [['1680', '1680×1000'], ['1280', '1280×760']].map(([k, l]) => ({ l, go: () => this.setState({ size: k }, () => this.save()), fg: s.size === k ? '#ece7de' : '#7d786f', sh: s.size === k ? 'inset 0 0 0 1px #ff7a3d' : 'none' })),
+      toast: !!s.toast, toastText: s.toast || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1680,
+  "height": 1000,
+  "timeout": 600000,
+  "steps": [
+    {
+      "waitFor": "#root div",
+      "timeout": 60000
+    },
+    {
+      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'swarm'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
+    },
+    {
+      "wait": 4000
+    },
+    {
+      "js": "window.__hold={attack:true};'hold'"
+    },
+    {
+      "jsFile": "scenario-pilot.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.stack.length>=8){clearInterval(t);r('Stapel '+s.stack.length)}},50);setTimeout(()=>{clearInterval(t);r('Timeout Stapel')},30000)})"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/56-stapel-mehrere-objekte.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/56-stapel-mehrere-objekte.png"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='SELECT'&&p.mode==='attackers'&&g.answeredPromptId!==p.id){clearInterval(t);r('Angriffs-Prompt, moeglich: '+(p.possibleAttackers||[]).length)}},200)})"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "(()=>{const f=()=>[...document.querySelectorAll('button')].find(e=>/Alle angreifen|Wirklich alle/.test(e.textContent));let b=f();if(!b)return 'kein Knopf';b.click();return 'Klick 1: '+b.textContent})()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/50-angriff-alle-bestaetigen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/50-angriff-alle-bestaetigen.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/Wirklich alle/.test(e.textContent));if(!b)return 'kein Bestaetigen-Knopf';b.click();return 'Klick 2: '+b.textContent})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='PICK_TARGET'&&p.defenderPick&&g.answeredPromptId!==p.id){clearInterval(t);r('Verteidiger-Wahl: '+(p.targets||[]).length+' Ziele, required='+p.required)}},200);setTimeout(()=>{clearInterval(t);r('kein defenderPick (nur ein Gegner?)')},15000)})"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/51-angriff-verteidiger-waehlen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/51-angriff-verteidiger-waehlen.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('kein Angriff'));if(!b)return 'kein Abbrechen-Knopf';b.click();return 'Abbrechen - kein Angriff'})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='attackers'&&g.answeredPromptId!==p.id&&s&&s.combat.every(c=>c.attackers.length===0)){clearInterval(t);r('zurueck beim Angriffs-Prompt, Angreifer: 0')}},200);setTimeout(()=>{clearInterval(t);const s=window.__ml.game.getState().state;r('Timeout, Angreifer: '+s.combat.reduce((n,c)=>n+c.attackers.length,0))},20000)})"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/52-angriff-abgebrochen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/52-angriff-abgebrochen.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>/Alle angreifen/.test(e.textContent));if(!b)return 'kein Knopf';b.click();return 'Klick 1'})()"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "js": "(()=>{const c=[...document.querySelectorAll('button')].find(e=>/Wirklich alle/.test(e.textContent));if(!c)return 'kein Bestaetigen-Knopf';c.click();return 'Klick 2'})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='PICK_TARGET'&&p.defenderPick&&g.answeredPromptId!==p.id){clearInterval(t);g.answer({uuid:p.targets[0]});r('Verteidiger gewaehlt')}},200);setTimeout(()=>{clearInterval(t);r('kein defenderPick')},15000)})"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;const n=s?s.combat.reduce((k,c)=>k+c.attackers.length,0):0;if(p&&p.kind==='SELECT'&&p.mode==='attackers'&&g.answeredPromptId!==p.id&&n>0){clearInterval(t);r('alle greifen an: '+n)}},200);setTimeout(()=>{clearInterval(t);r('Timeout alle angreifen')},30000)})"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/53-angriff-erklaert-pfeile.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/53-angriff-erklaert-pfeile.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Angriff zurücksetzen'));if(!b)return 'kein Reset-Knopf';b.click();return 'Angriff zuruecksetzen'})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;const n=s?s.combat.reduce((k,c)=>k+c.attackers.length,0):0;if(p&&p.kind==='SELECT'&&p.mode==='attackers'&&g.answeredPromptId!==p.id&&n===0){clearInterval(t);r('zurueckgesetzt, Angreifer: 0')}},200);setTimeout(()=>{clearInterval(t);const s=window.__ml.game.getState().state;r('Timeout Reset, Angreifer: '+s.combat.reduce((k,c)=>k+c.attackers.length,0))},30000)})"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/54-angriff-zurueckgesetzt.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/54-angriff-zurueckgesetzt.png"
+    },
+    {
+      "js": "clearInterval(window.__pilot);window.__pilot=null;window.__ml.game.getState().leave();'aufgegeben'"
+    },
+    {
+      "wait": 2500
+    }
+  ]
+}

@@ -1,0 +1,238 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "timeout": 600000,
+  "steps": [
+    {
+      "waitFor": "#root nav",
+      "timeout": 60000
+    },
+    {
+      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'user',id:4},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/30-spiel-laden.png"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='ASK'&&p.mulligan&&g.answeredPromptId!==p.id){clearInterval(t);r('Mulligan-Dialog')}},200);setTimeout(()=>{clearInterval(t);r('kein Mulligan-Prompt')},60000)})"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/31-mulligan.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/31-mulligan.png"
+    },
+    {
+      "js": "(()=>{const el=document.querySelector('.fixed.inset-0 [data-obj]');if(!el)return 'keine Karte im Dialog';el.dispatchEvent(new MouseEvent('mouseenter',{bubbles:true}));el.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));return 'hover '+el.getAttribute('data-obj')})()"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/32-mulligan-hover-zoom.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/32-mulligan-hover-zoom.png"
+    },
+    {
+      "jsFile": "autoplay.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(!p||!s||g.answeredPromptId===p.id)return;const me=s.players.find(x=>x.me);const acts=new Set(s.actions||[]);if(p.kind==='SELECT'&&p.mode==='priority'&&me&&me.active&&s.step==='PRECOMBAT_MAIN'&&s.turn>=5&&s.hand.some(c=>acts.has(c.id))){clearInterval(t);clearInterval(window.__auto);window.__auto=null;r('eigener Zug '+s.turn+', spielbar: '+s.hand.filter(c=>acts.has(c.id)).length)}},40);setTimeout(()=>{clearInterval(t);clearInterval(window.__auto);window.__auto=null;r('Timeout eigener Zug')},150000)})"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/33-spiel-eigener-zug-spielbar.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/33-spiel-eigener-zug-spielbar.png"
+    },
+    {
+      "jsFile": "autoplay.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.turn>=12){clearInterval(t);r('Zug '+s.turn)}},300);setTimeout(()=>{clearInterval(t);r('Timeout Zug 12')},120000)})"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/35-spiel-mitte.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/35-spiel-mitte.png"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='SELECT'&&p.mode==='blockers'&&g.answeredPromptId!==p.id){clearInterval(t);clearInterval(window.__auto);window.__auto=null;window.__blkTurn=g.state.turn;r('Blocker-Prompt Zug '+g.state.turn)}},40);setTimeout(()=>{clearInterval(t);r('kein Blocker-Prompt')},120000)})"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/36-spiel-blocker-waehlen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/36-spiel-blocker-waehlen.png"
+    },
+    {
+      "jsFile": "autoplay.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.turn>=Math.max(22,(window.__blkTurn||0)+4)){clearInterval(t);r('Zug '+s.turn)}},300);setTimeout(()=>{clearInterval(t);r('Timeout spaet')},120000)})"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/37-spiel-spaet.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/37-spiel-spaet.png"
+    },
+    {
+      "js": "clearInterval(window.__auto);window.__auto=null;'Autopilot aus'"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button[title=\"Friedhof\"]')].reverse().find(b=>!b.disabled);if(!b)return 'kein Friedhof';b.click();return 'Friedhof'})()"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/38-friedhof-ansicht.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/38-friedhof-ansicht.png"
+    },
+    {
+      "js": "window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));'Esc'"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "js": "window.__ml.game.getState().setMenuOpen(true);'Menue'"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/39-pausemenue.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/39-pausemenue.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Aufgeben'));if(!b)return 'kein Aufgeben';b.click();return 'Aufgeben'})()"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/40-pausemenue-aufgeben-bestaetigen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/40-pausemenue-aufgeben-bestaetigen.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Ja, aufgeben'));if(!b)return 'kein Ja';b.click();return 'aufgegeben'})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();if(g.gameOver){clearInterval(t);r('gameOver')}},200);setTimeout(()=>{clearInterval(t);r('kein gameOver')},30000)})"
+    },
+    {
+      "wait": 5000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/41-spielende-ergebnis.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/41-spielende-ergebnis.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Tisch ansehen'));if(!b)return 'kein Tisch ansehen';b.click();return 'Tisch ansehen'})()"
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/42-spielende-tisch-ansehen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/42-spielende-tisch-ansehen.png"
+    }
+  ]
+}

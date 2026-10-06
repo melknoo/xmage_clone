@@ -1,0 +1,66 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1680,
+  "height": 1000,
+  "timeout": 600000,
+  "steps": [
+    {
+      "waitFor": "#root div",
+      "timeout": 60000
+    },
+    {
+      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'necro'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
+    },
+    {
+      "wait": 4000
+    },
+    {
+      "js": "window.__hold={necro:true,ability:true};'hold'"
+    },
+    {
+      "jsFile": "scenario-pilot.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='CHOOSE_ABILITY'&&p.sourceId&&g.answeredPromptId!==p.id){clearInterval(t);r('Picker: '+p.choices.map(c=>c.text).join(' | '))}},200)})"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='×5');if(!b)return 'kein x5';b.click();return 'x5'})()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/55-faehigkeit-waehlen-mehrfach.png"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/55-faehigkeit-waehlen-mehrfach.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Pay 1 life'));if(!b)return 'kein Knopf';b.click();return 'Pay 1 life x5'})()"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.stack.length>=5){clearInterval(t);r('Stapel: '+s.stack.length)}},100);setTimeout(()=>{clearInterval(t);r('Timeout Stapel')},20000)})"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "js": "(()=>{const s=window.__ml.game.getState().state;const me=s.players.find(p=>p.me);return 'Leben '+me.life+' Exil '+me.exile.length+' Stapel '+s.stack.length})()"
+    },
+    {
+      "js": "clearInterval(window.__pilot);window.__pilot=null;window.__ml.game.getState().leave();'aufgegeben'"
+    },
+    {
+      "wait": 2500
+    }
+  ]
+}

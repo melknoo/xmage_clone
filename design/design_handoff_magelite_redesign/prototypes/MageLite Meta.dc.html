@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@latest/css/mana.min.css">
+<link rel="stylesheet" href="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/colors_and_type.css">
+<script src="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+body{margin:0;background:#0d0c0b;color:#ece7de;-webkit-font-smoothing:antialiased;overflow:hidden}
+a{color:#ff7a3d;text-decoration:none}a:hover{color:#ff8f5a}
+textarea,input{font-family:inherit}
+</style>
+</helmet>
+<div style="position:fixed; inset:0; display:flex; flex-direction:column; background:#0d0c0b; font-family:'IBM Plex Sans', sans-serif; color:#ece7de">
+
+  <div style="height:48px; flex:none; display:flex; align-items:center; gap:4px; padding:0 14px; border-bottom:1px solid #2a2824; background:#121110; overflow-x:auto">
+    <span style="font:700 14px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ff7a3d; margin-right:10px; white-space:nowrap">META-SCREENS · PROTOTYP</span>
+    <sc-for list="{{ quick }}" as="b" hint-placeholder-count="6"><span onClick="{{ b.go }}" style="cursor:pointer; white-space:nowrap; padding:7px 9px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8">{{ b.l }}</span></sc-for>
+    <span style="flex:1; min-width:16px"></span>
+    <span onClick="{{ toggleEmpty }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; white-space:nowrap; padding:7px 9px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8"><span style="width:26px; height:16px; border-radius:2px; position:relative; background:{{ emptyTrack }}"><span style="position:absolute; top:2px; left:{{ emptyKnob }}px; width:12px; height:12px; border-radius:1px; background:#121110"></span></span>LEERZUSTAND</span>
+    <sc-for list="{{ sizeBtns }}" as="b" hint-placeholder-count="2"><span onClick="{{ b.go }}" style="cursor:pointer; white-space:nowrap; padding:7px 9px; border-radius:3px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:{{ b.fg }}; box-shadow:{{ b.sh }}">{{ b.l }}</span></sc-for>
+  </div>
+
+  <div style="flex:1; min-height:0; position:relative; overflow:hidden">
+    <div style="position:absolute; left:50%; top:50%; width:{{ L.W }}px; height:{{ L.H }}px; transform:translate(-50%,-50%) scale({{ scale }}); display:flex; overflow:hidden; background:#121110; box-shadow:0 0 0 1px #2a2824">
+
+      <div style="width:84px; flex:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:22px 0 16px; border-right:1px solid #2a2824">
+        <div style="font:700 20px/1 'Barlow Condensed'; letter-spacing:.06em; color:#ff7a3d; margin-bottom:22px">ML</div>
+        <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+          <div onClick="{{ n.go }}" style="cursor:pointer; width:84px; padding:12px 0; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; color:{{ n.fg }}"><sc-if value="{{ n.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; right:-1px; top:8px; bottom:8px; width:2px; background:#ff7a3d"></span></sc-if><span style="font-size:21px; display:flex">{{ n.ico }}</span><span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.1em">{{ n.l }}</span></div>
+        </sc-for>
+        <span style="flex:1"></span>
+        <a href="MageLite Spielbrett.dc.html" style="width:68px; padding:10px 0; display:flex; flex-direction:column; align-items:center; gap:6px; border-radius:3px; box-shadow:inset 0 0 0 1px #ff7a3d; color:#ff7a3d"><span style="font-size:19px; display:flex">{{ i.table }}</span><span style="font:600 11px/1 'Barlow Condensed'; letter-spacing:.1em">ZUM TISCH</span></a>
+      </div>
+
+      <div style="flex:1; min-width:0; position:relative; display:flex; flex-direction:column">
+
+        <!-- HELD -->
+        <sc-if value="{{ is.held }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1; min-height:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px">
+            <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:56px; align-items:end">
+              <div style="display:flex; align-items:flex-end; gap:32px; min-width:0">
+                <div style="display:flex; flex-direction:column; gap:6px"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.16em; color:#9b958a">LEVEL</span><span style="font:600 {{ L.heroNum }}px/0.78 'Barlow Condensed'; font-variant-numeric:tabular-nums">{{ H.lvl }}</span></div>
+                <div style="flex:1; display:flex; flex-direction:column; gap:12px; padding-bottom:6px; min-width:0">
+                  <div style="display:flex; align-items:baseline; gap:14px"><span style="font:600 44px/1 'Barlow Condensed'; letter-spacing:.02em; text-transform:uppercase">Planeswalker</span><span style="font-size:16px; color:#ffd23f; font-weight:600">{{ H.title }}</span></div>
+                  <div style="height:4px; background:#2a2824"><div style="width:{{ H.pct }}%; height:100%; background:#ffd23f"></div></div>
+                  <div style="display:flex; justify-content:space-between; gap:16px; font-size:13px; color:#9b958a"><span><span style="color:#ece7de; font-weight:600">{{ H.xp }}</span> / {{ H.need }} XP bis Level {{ H.next }}</span><span>Nächster Titel <span style="color:#ece7de; font-weight:600">{{ H.nextTitle }}</span> · Level {{ H.nextTitleLvl }}</span></div>
+                </div>
+              </div>
+              <div style="display:flex; align-items:flex-end; border-left:1px solid #2a2824; padding-left:40px; gap:40px">
+                <sc-for list="{{ H.stats }}" as="k" hint-placeholder-count="3"><div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">{{ k.l }}</span><span style="font:600 56px/0.85 'Barlow Condensed'; color:{{ k.c }}">{{ k.v }}</span></div></sc-for>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:{{ L.gap }}px">
+              <div style="position:relative; height:{{ L.ctaH }}px; border-radius:4px; overflow:hidden; background:#1a1917">
+                <sc-if value="{{ H.qsArt }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; right:0; top:0; width:62%; height:100%; background:#23211e url({{ H.qsArt }}) center / cover no-repeat"></div></sc-if>
+                <div style="position:absolute; inset:0; background:linear-gradient(90deg,#1a1917 38%, rgba(26,25,23,.4) 70%, rgba(26,25,23,0))"></div>
+                <div style="position:relative; height:100%; box-sizing:border-box; padding:28px 32px; display:flex; flex-direction:column; justify-content:space-between">
+                  <div style="display:flex; flex-direction:column; gap:10px"><span style="display:flex; align-items:center; gap:6px; font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#ff7a3d"><span style="display:flex; font-size:15px">{{ i.zap }}</span>{{ H.qsLabel }}</span><span style="font:600 40px/1 'Barlow Condensed'; letter-spacing:.01em">{{ H.qsDeck }}</span><span style="font-size:14px; color:#c9c3b8">{{ H.qsMeta }}</span></div>
+                  <a href="MageLite Spielbrett.dc.html" style="display:flex; align-items:center; gap:10px; align-self:flex-start; height:46px; padding:0 20px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.play }}</span>SPIEL STARTEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16); letter-spacing:0">Enter</span></a>
+                </div>
+              </div>
+              <div onClick="{{ goSpielen }}" style="cursor:pointer; height:{{ L.ctaH }}px; box-sizing:border-box; padding:28px 32px; border-radius:4px; box-shadow:inset 0 0 0 1px #34312c; display:flex; flex-direction:column; justify-content:space-between">
+                <span style="font-size:28px; display:flex">{{ i.swords }}</span>
+                <div style="display:flex; align-items:flex-end; justify-content:space-between"><div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.02em; text-transform:uppercase">Neues Spiel</span><span style="font-size:14px; color:#9b958a">Deck und Gegner wählen</span></div><span style="font-size:24px; color:#9b958a; display:flex">{{ i.chev }}</span></div>
+              </div>
+            </div>
+            <div style="flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:{{ L.gap }}px">
+              <div style="display:flex; flex-direction:column; min-height:0; overflow:hidden">
+                <div style="display:flex; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid #34312c"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">LETZTE PARTIEN</span><span onClick="{{ goVerlauf }}" style="cursor:pointer; font-size:13px; color:#ff7a3d">Verlauf</span></div>
+                <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 0; font-size:14px; color:#9b958a; line-height:1.5">Noch keine Partien. Nach dem ersten Spiel stehen hier Platz, Deck und verdiente XP.</div></sc-if>
+                <sc-for list="{{ recent }}" as="r" hint-placeholder-count="3">
+                  <div style="display:grid; grid-template-columns:44px 64px minmax(0,1fr) auto; align-items:center; gap:16px; padding:12px 0; border-bottom:1px solid #24221f">
+                    <span style="font:600 32px/1 'Barlow Condensed'; color:{{ r.pc }}">{{ r.p }}.</span>
+                    <div style="width:64px; height:40px; border-radius:2px; overflow:hidden; background:#23211e"><sc-if value="{{ r.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ r.art }}) center / cover no-repeat"></div></sc-if></div>
+                    <div style="display:flex; flex-direction:column; gap:4px; min-width:0"><span style="font-size:15px; font-weight:600">{{ r.deck }}</span><span style="font-size:12.5px; color:#9b958a">{{ r.meta }}</span></div>
+                    <span style="font:600 20px/1 'Barlow Condensed'; color:#ffd23f">{{ r.xp }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex; flex-direction:column; min-height:0; overflow:hidden">
+                <div style="display:flex; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid #34312c"><span style="font:600 14px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">DECK-MEISTERSCHAFT</span><span onClick="{{ goDecks }}" style="cursor:pointer; font-size:13px; color:#ff7a3d">Decks</span></div>
+                <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}"><div style="padding:22px 0; display:flex; flex-direction:column; gap:14px; font-size:14px; color:#9b958a; line-height:1.5">Jedes eigene Deck steigt mit seinen Partien in Stufen auf. Zuerst ein Deck importieren.<span onClick="{{ openImport }}" style="cursor:pointer; align-self:flex-start; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#ece7de; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.download }}</span>DECK IMPORTIEREN</span></div></sc-if>
+                <sc-for list="{{ masteryList }}" as="m" hint-placeholder-count="3">
+                  <div style="display:grid; grid-template-columns:64px minmax(0,1fr) 56px; align-items:center; gap:16px; padding:12px 0; border-bottom:1px solid #24221f">
+                    <div style="width:64px; height:40px; border-radius:2px; overflow:hidden; background:#23211e"><sc-if value="{{ m.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ m.art }}) center / cover no-repeat"></div></sc-if></div>
+                    <div style="display:flex; flex-direction:column; gap:7px; min-width:0"><div style="display:flex; justify-content:space-between; gap:8px"><span style="font-size:15px; font-weight:600; white-space:nowrap">{{ m.name }}</span><span style="font-size:12.5px; color:#9b958a; white-space:nowrap">{{ m.xp }}</span></div><div style="height:3px; background:#2a2824"><div style="width:{{ m.pct }}%; height:100%; background:#ffd23f"></div></div></div>
+                    <span style="display:flex; align-items:center; justify-content:flex-end; gap:4px; font:600 22px/1 'Barlow Condensed'; color:#ffd23f"><span style="display:flex; font-size:14px">{{ i.star }}</span>{{ m.lvl }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- SPIELEN -->
+        <sc-if value="{{ is.spielen }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; min-height:0; padding:{{ L.pad }}; display:grid; grid-template-columns:minmax(0,1fr) {{ L.sumW }}px; gap:{{ L.gap }}px">
+            <div style="display:flex; flex-direction:column; gap:{{ L.gap }}px; min-width:0; min-height:0">
+              <div style="display:flex; align-items:baseline; gap:16px"><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em">SPIELEN</span><span style="font-size:14px; color:#9b958a">Commander · Free-for-All · 40 Leben · gegen drei Bots</span></div>
+              <div style="display:flex; flex-direction:column; gap:12px">
+                <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">DEIN DECK</span>
+                <div style="display:flex; gap:24px; padding:14px; border-radius:4px; background:#1a1917">
+                  <div style="width:{{ L.deckArtW }}px; height:{{ L.deckArtH }}px; flex:none; border-radius:3px; overflow:hidden; background:#23211e"><sc-if value="{{ myDeck.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ myDeck.art }}) center / cover no-repeat"></div></sc-if></div>
+                  <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:10px; padding:6px 0">
+                    <div style="display:flex; align-items:center; gap:12px"><span style="font:600 30px/1 'Barlow Condensed'">{{ myDeck.name }}</span><span style="display:flex; gap:2px; font-size:15px"><sc-for list="{{ myDeck.cols }}" as="m" hint-placeholder-count="2"><i class="{{ m }}"></i></sc-for></span></div>
+                    <span style="font-size:14px; color:#c9c3b8">{{ myDeck.cmdr }} · {{ myDeck.src }}</span>
+                    <div style="display:flex; align-items:center; gap:12px; max-width:360px"><span style="display:flex; align-items:center; gap:4px; font:600 16px/1 'Barlow Condensed'; color:#ffd23f"><span style="display:flex; font-size:13px">{{ i.star }}</span>{{ myDeck.lvlLbl }}</span><div style="flex:1; height:3px; background:#2a2824"><div style="width:{{ myDeck.pct }}%; height:100%; background:#ffd23f"></div></div></div>
+                    <span style="flex:1"></span>
+                    <div style="display:flex; gap:8px">
+                      <span onClick="{{ pickMine }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.layers }}</span>DECK WECHSELN</span>
+                      <span onClick="{{ randMine }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.shuffle }}</span>ZUFÄLLIG</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:12px">
+                <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">BOT-TEMPO</span>
+                <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:10px">
+                  <sc-for list="{{ tempos }}" as="t" hint-placeholder-count="4">
+                    <div onClick="{{ t.on }}" style="cursor:pointer; padding:14px 16px; border-radius:3px; display:flex; flex-direction:column; gap:6px; background:{{ t.bg }}; box-shadow:{{ t.sh }}"><span style="display:flex; align-items:center; justify-content:space-between; font:600 20px/1 'Barlow Condensed'; letter-spacing:.06em; color:{{ t.fg }}">{{ t.l }}<sc-if value="{{ t.sel }}" hint-placeholder-val="{{ false }}"><span style="display:flex; font-size:16px">{{ i.check }}</span></sc-if></span><span style="font-size:12.5px; color:#9b958a">{{ t.d }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+              <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:12px">
+                <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">GEGNER</span>
+                <div style="flex:1; min-height:0; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:{{ L.seatGap }}px">
+                  <sc-for list="{{ seatCards }}" as="s" hint-placeholder-count="3">
+                    <div style="display:flex; flex-direction:column; border-radius:4px; overflow:hidden; background:#1a1917; min-height:0">
+                      <div style="position:relative; flex:1; min-height:80px; background:#23211e"><sc-if value="{{ s.art }}" hint-placeholder-val="{{ false }}"><div style="position:absolute; inset:0; width:100%; height:100%; background:#23211e url({{ s.art }}) center / cover no-repeat"></div></sc-if><span style="position:absolute; left:10px; top:10px; display:flex; align-items:center; gap:5px; padding:4px 6px; border-radius:2px; background:rgba(18,17,16,.88); font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em; color:#c9c3b8"><span style="display:flex">{{ i.bot }}</span>{{ s.seat }} · BOT</span></div>
+                      <div style="padding:12px 14px; display:flex; flex-direction:column; gap:6px">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px"><span style="font:600 20px/1 'Barlow Condensed'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.name }}</span><span style="display:flex; gap:2px; flex:none"><sc-for list="{{ s.cols }}" as="m" hint-placeholder-count="2"><i class="{{ m }}"></i></sc-for></span></div>
+                        <span style="font-size:12.5px; color:#9b958a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ s.cmdr }} · {{ s.set }}</span>
+                        <div style="display:flex; gap:6px; margin-top:4px"><span onClick="{{ s.pick }}" style="cursor:pointer; flex:1; display:flex; align-items:center; justify-content:center; height:34px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em">ÄNDERN</span><span onClick="{{ s.rand }}" style="cursor:pointer; width:34px; height:34px; display:flex; align-items:center; justify-content:center; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8">{{ i.shuffle }}</span></div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:16px; padding:22px; border-radius:4px; box-shadow:inset 0 0 0 1px #34312c; align-self:start">
+              <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">PARTIE</span>
+              <div style="display:flex; flex-direction:column">
+                <sc-for list="{{ summary }}" as="r" hint-placeholder-count="5"><div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid #24221f; font-size:13.5px"><span style="width:8px; height:8px; flex:none; background:{{ r.c }}"></span><span style="color:#9b958a; width:70px; flex:none">{{ r.k }}</span><span style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ r.v }}</span></div></sc-for>
+              </div>
+              <a href="MageLite Spielbrett.dc.html" style="display:flex; align-items:center; justify-content:center; gap:10px; height:52px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 20px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.play }}</span>SPIEL STARTEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16); letter-spacing:0">Enter</span></a>
+              <span style="font-size:12.5px; color:#9b958a; line-height:1.45">Startet mit dieser Konfiguration. Sie wird als Schnellstart auf dem Held-Screen gemerkt.</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- DECKS -->
+        <sc-if value="{{ is.decks }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; min-height:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px; overflow:auto">
+            <div style="display:flex; align-items:center; gap:16px"><span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em">DECKS</span><span style="font-size:14px; color:#9b958a">{{ deckCount }}</span><span style="flex:1"></span>
+              <sc-if value="{{ hasDecks }}" hint-placeholder-val="{{ true }}"><span onClick="{{ openImport }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.download }}</span>DECK IMPORTIEREN</span></sc-if>
+            </div>
+            <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center">
+                <span style="font-size:44px; color:#6f6a62; display:flex">{{ i.layers }}</span>
+                <span style="font:600 32px/1 'Barlow Condensed'; letter-spacing:.03em">NOCH KEINE DECKS</span>
+                <span style="max-width:460px; font-size:15px; line-height:1.5; color:#9b958a">Importiere ein Deck per Link von Archidekt oder Moxfield oder füge eine Textliste ein. Bis dahin kannst du mit einem der 70 vorgefertigten Decks spielen.</span>
+                <div style="display:flex; gap:10px; margin-top:6px"><span onClick="{{ openImport }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.download }}</span>ERSTES DECK IMPORTIEREN</span><span onClick="{{ goSpielen }}" style="cursor:pointer; display:flex; align-items:center; height:44px; padding:0 16px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 16px/1 'Barlow Condensed'; letter-spacing:.06em">VORGEFERTIGT SPIELEN</span></div>
+              </div>
+            </sc-if>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax({{ L.tileMin }}px, 1fr)); gap:{{ L.gap }}px">
+              <sc-for list="{{ deckTiles }}" as="d" hint-placeholder-count="3">
+                <div style="border-radius:4px; overflow:hidden; background:#1a1917; display:flex; flex-direction:column">
+                  <div style="position:relative; height:{{ L.tileArtH }}px; background:#23211e"><sc-if value="{{ d.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ d.art }}) center / cover no-repeat"></div></sc-if><span style="position:absolute; left:10px; top:10px; display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:2px; background:rgba(18,17,16,.88); color:#ffd23f; font:600 13px/1 'Barlow Condensed'; letter-spacing:.04em"><span style="display:flex; font-size:12px">{{ i.star }}</span>STUFE {{ d.lvl }}</span></div>
+                  <div style="padding:14px 16px; display:flex; flex-direction:column; gap:8px">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px"><span style="font:600 22px/1 'Barlow Condensed'; letter-spacing:.02em">{{ d.name }}</span><span style="display:flex; gap:2px"><sc-for list="{{ d.cols }}" as="m" hint-placeholder-count="2"><i class="{{ m }}"></i></sc-for></span></div>
+                    <span style="font-size:12.5px; color:#9b958a">{{ d.cmdr }} · {{ d.cards }} Karten · {{ d.record }}</span>
+                    <div style="display:flex; align-items:center; gap:10px"><div style="flex:1; height:3px; background:#2a2824"><div style="width:{{ d.pct }}%; height:100%; background:#ffd23f"></div></div><span style="font-size:12px; color:#9b958a; white-space:nowrap">{{ d.xp }}</span></div>
+                    <div style="display:flex; gap:6px; margin-top:4px"><a href="MageLite Spielbrett.dc.html" style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; height:36px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 15px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.play }}</span>SPIELEN</a><span onClick="{{ d.edit }}" title="Bearbeiten" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8">{{ i.pencil }}</span><span onClick="{{ d.del }}" title="Löschen" style="cursor:pointer; display:flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8">{{ i.trash }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ hasDecks }}" hint-placeholder-val="{{ true }}">
+                <div onClick="{{ openImport }}" style="cursor:pointer; border-radius:4px; box-shadow:inset 0 0 0 1px #34312c; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; min-height:240px; color:#9b958a"><span style="font-size:30px; display:flex">{{ i.plus }}</span><span style="font:600 16px/1 'Barlow Condensed'; letter-spacing:.08em">DECK IMPORTIEREN</span><span style="font-size:12.5px">Link oder Textliste</span></div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- STATISTIK -->
+        <sc-if value="{{ is.stat }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1; min-height:0; padding:{{ L.pad }}; display:flex; flex-direction:column; gap:{{ L.gap }}px; overflow:auto">
+            <div style="display:flex; align-items:flex-end; gap:28px; border-bottom:1px solid #2a2824">
+              <span style="font:600 36px/1 'Barlow Condensed'; letter-spacing:.03em; padding-bottom:12px">STATISTIK</span>
+              <sc-for list="{{ statTabs }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.on }}" style="cursor:pointer; padding-bottom:12px; font:600 16px/1 'Barlow Condensed'; letter-spacing:.08em; color:{{ t.fg }}; box-shadow:{{ t.sh }}">{{ t.l }}</span></sc-for>
+            </div>
+            <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+              <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; text-align:center">
+                <span style="font-size:44px; color:#6f6a62; display:flex">{{ i.stat }}</span>
+                <span style="font:600 32px/1 'Barlow Condensed'; letter-spacing:.03em">NOCH KEINE PARTIEN</span>
+                <span style="max-width:440px; font-size:15px; line-height:1.5; color:#9b958a">Nach der ersten Partie erscheinen hier Formkurve, Deck-Auswertung, häufigste Gegner und der Verlauf.</span>
+                <span onClick="{{ goSpielen }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; margin-top:6px"><span style="display:flex">{{ i.play }}</span>ERSTES SPIEL</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ showOverview }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); border-bottom:1px solid #2a2824; padding-bottom:20px">
+                <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5"><div style="display:flex; flex-direction:column; gap:10px; padding-left:20px; border-left:1px solid #2a2824"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">{{ k.l }}</span><span style="font:600 52px/0.85 'Barlow Condensed'; color:{{ k.c }}">{{ k.v }}</span><span style="font-size:12.5px; color:#9b958a">{{ k.s }}</span></div></sc-for>
+              </div>
+              <div style="display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:48px">
+                <div style="display:flex; flex-direction:column; gap:14px">
+                  <div style="display:flex; justify-content:space-between"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">FORMKURVE · LETZTE 9 PARTIEN</span><span style="font-size:12.5px; color:#9b958a">Platz pro Partie, höher ist besser</span></div>
+                  <div style="height:{{ L.chartH }}px; display:flex; align-items:flex-end; gap:10px; border-bottom:1px solid #34312c; position:relative">
+                    <sc-for list="{{ form }}" as="f" hint-placeholder-count="9"><div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:6px; height:100%"><span style="font:600 16px/1 'Barlow Condensed'; color:{{ f.c }}">{{ f.p }}</span><div style="width:100%; height:{{ f.h }}%; background:{{ f.bg }}; border-radius:2px 2px 0 0"></div></div></sc-for>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:#6f6a62"><span>älter</span><span>neuer</span></div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px">
+                  <div style="display:flex; flex-direction:column"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a; padding-bottom:10px; border-bottom:1px solid #34312c">TEMPO</span><sc-for list="{{ tempoStats }}" as="r" hint-placeholder-count="2"><div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #22201d; font-size:13.5px"><span>{{ r.k }}</span><span style="font:600 16px/1 'Barlow Condensed'">{{ r.v }}</span></div></sc-for></div>
+                  <div style="display:flex; flex-direction:column"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a; padding-bottom:10px; border-bottom:1px solid #34312c">MULLIGANS</span><sc-for list="{{ mullStats }}" as="r" hint-placeholder-count="2"><div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #22201d; font-size:13.5px"><span>{{ r.k }}</span><span style="font:600 16px/1 'Barlow Condensed'">{{ r.v }}</span></div></sc-for></div>
+                  <div style="grid-column:1 / -1; display:flex; flex-direction:column"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a; padding-bottom:10px; border-bottom:1px solid #34312c">HÄUFIGSTE GEGNER</span><div style="display:flex; gap:20px; padding-top:12px; flex-wrap:wrap"><sc-for list="{{ foes }}" as="f" hint-placeholder-count="4"><div style="display:flex; align-items:center; gap:10px"><div style="width:34px; height:34px; border-radius:3px; overflow:hidden; background:#23211e"><sc-if value="{{ f.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ f.art }}) center / cover no-repeat"></div></sc-if></div><div style="display:flex; flex-direction:column; gap:3px"><span style="font-size:13.5px; font-weight:600">{{ f.n }}</span><span style="font-size:12px; color:#9b958a">{{ f.m }}</span></div></div></sc-for></div></div>
+                </div>
+              </div>
+              <div style="display:flex; flex-direction:column">
+                <div style="display:grid; grid-template-columns:minmax(160px,2fr) repeat(4,minmax(56px,1fr)) minmax(140px,1.5fr) 24px; gap:16px; padding:0 12px 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>DECK</span><span style="text-align:right">SPIELE</span><span style="text-align:right">SIEGE</span><span style="text-align:right">QUOTE</span><span style="text-align:right">Ø PLATZ</span><span>MEISTERSCHAFT</span><span></span></div>
+                <sc-for list="{{ deckRows }}" as="r" hint-placeholder-count="3">
+                  <div onClick="{{ r.on }}" style="cursor:pointer; display:grid; grid-template-columns:minmax(160px,2fr) repeat(4,minmax(56px,1fr)) minmax(140px,1.5fr) 24px; gap:16px; align-items:center; padding:11px 12px; border-bottom:1px solid #22201d; background:{{ r.bg }}; box-shadow:{{ r.sh }}">
+                    <span style="display:flex; align-items:center; gap:12px; min-width:0"><span style="width:44px; height:30px; border-radius:2px; overflow:hidden; background:#23211e; flex:none"><sc-if value="{{ r.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ r.art }}) center / cover no-repeat"></div></sc-if></span><span style="font-size:14px; font-weight:600; white-space:nowrap">{{ r.name }}</span></span>
+                    <span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.g }}</span><span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.w }}</span><span style="text-align:right; font:600 17px/1 'Barlow Condensed'; color:{{ r.qc }}">{{ r.q }}</span><span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.p }}</span>
+                    <span style="display:flex; align-items:center; gap:10px"><span style="display:flex; align-items:center; gap:3px; font:600 15px/1 'Barlow Condensed'; color:#ffd23f; width:34px"><span style="display:flex; font-size:12px">{{ i.star }}</span>{{ r.lvl }}</span><span style="flex:1; height:3px; background:#2a2824"><span style="display:block; width:{{ r.pct }}%; height:100%; background:#ffd23f"></span></span></span>
+                    <span style="display:flex; color:#9b958a; transform:rotate({{ r.rot }}deg)">{{ i.chev }}</span>
+                  </div>
+                  <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:16px 12px 20px 68px; border-bottom:1px solid #2a2824; background:#161513; display:flex; flex-direction:column">
+                      <div style="display:grid; grid-template-columns:minmax(180px,2fr) repeat(4,minmax(70px,1fr)); gap:16px; padding-bottom:8px; border-bottom:1px solid #34312c; font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>KARTE · {{ r.name }}</span><span style="text-align:right">GEZOGEN</span><span style="text-align:right">GESPIELT</span><span style="text-align:right">SPIELQUOTE</span><span style="text-align:right">IN SIEGEN</span></div>
+                      <sc-for list="{{ cardStats }}" as="c" hint-placeholder-count="6"><div style="display:grid; grid-template-columns:minmax(180px,2fr) repeat(4,minmax(70px,1fr)); gap:16px; padding:8px 0; border-bottom:1px solid #22201d; font-size:13.5px; align-items:center"><span style="display:flex; align-items:center; gap:8px">{{ c.n }}<sc-if value="{{ c.tag }}" hint-placeholder-val="{{ false }}"><span style="padding:2px 5px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(255,210,63,.45); color:#ffd23f; font:600 11px/1 'Barlow Condensed'; letter-spacing:.08em">{{ c.tag }}</span></sc-if></span><span style="text-align:right; font:600 16px/1 'Barlow Condensed'">{{ c.d }}</span><span style="text-align:right; font:600 16px/1 'Barlow Condensed'">{{ c.p }}</span><span style="display:flex; align-items:center; justify-content:flex-end; gap:8px"><span style="width:48px; height:3px; background:#2a2824"><span style="display:block; width:{{ c.q }}%; height:100%; background:#c9c3b8"></span></span><span style="font:600 16px/1 'Barlow Condensed'; width:40px; text-align:right">{{ c.q }} %</span></span><span style="text-align:right; font:600 16px/1 'Barlow Condensed'; color:{{ c.wc }}">{{ c.w }}</span></div></sc-for>
+                    </div>
+                  </sc-if>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ showVerlauf }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; flex-direction:column">
+                <div style="display:grid; grid-template-columns:54px minmax(150px,1.4fr) minmax(130px,1fr) repeat(3,minmax(60px,.5fr)) 90px; gap:16px; padding:0 12px 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>PLATZ</span><span>DECK</span><span>GEGNER</span><span style="text-align:right">ZÜGE</span><span style="text-align:right">DAUER</span><span style="text-align:right">TEMPO</span><span style="text-align:right">XP</span></div>
+                <sc-for list="{{ history }}" as="h" hint-placeholder-count="9">
+                  <div style="display:grid; grid-template-columns:54px minmax(150px,1.4fr) minmax(130px,1fr) repeat(3,minmax(60px,.5fr)) 90px; gap:16px; align-items:center; padding:10px 12px; border-bottom:1px solid #22201d">
+                    <span style="font:600 28px/1 'Barlow Condensed'; color:{{ h.pc }}">{{ h.p }}.</span>
+                    <div style="display:flex; flex-direction:column; gap:3px; min-width:0"><span style="font-size:14px; font-weight:600">{{ h.deck }}</span><span style="font-size:12px; color:#9b958a">{{ h.date }}</span></div>
+                    <div style="display:flex; gap:4px"><sc-for list="{{ h.foes }}" as="a" hint-placeholder-count="3"><div style="width:28px; height:28px; border-radius:2px; overflow:hidden; background:#23211e"><sc-if value="{{ a }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ a }}) center / cover no-repeat"></div></sc-if></div></sc-for></div>
+                    <span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ h.turns }}</span><span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ h.dur }}</span><span style="text-align:right; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8">{{ h.tempo }}</span>
+                    <span style="text-align:right; font:600 20px/1 'Barlow Condensed'; color:{{ h.xc }}">{{ h.xp }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- OVERLAYS -->
+        <sc-if value="{{ ov.any }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closeOv }}" style="position:absolute; inset:0; z-index:20; background:rgba(13,12,11,.72)"></div>
+        </sc-if>
+
+        <sc-if value="{{ ov.picker }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; z-index:21; left:{{ L.ovInset }}px; right:{{ L.ovInset }}px; top:{{ L.ovTop }}px; bottom:{{ L.ovTop }}px; background:#1a1917; border-radius:4px; box-shadow:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #34312c; display:flex; flex-direction:column">
+            <div style="display:flex; align-items:center; gap:16px; padding:18px 20px 0">
+              <div style="flex:1; display:flex; flex-direction:column; gap:6px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">DECK WÄHLEN · {{ pickerFor }}</span><span style="font:600 26px/1 'Barlow Condensed'">Deck-Auswahl</span></div>
+              <div style="width:280px; height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; color:#6f6a62; font-size:14px"><span style="display:flex">{{ i.search }}</span>Name, Commander oder Set</div>
+              <span onClick="{{ pickRandom }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.shuffle }}</span>ZUFÄLLIG</span>
+            </div>
+            <div style="display:flex; gap:24px; padding:16px 20px 0; border-bottom:1px solid #2a2824"><sc-for list="{{ pickerTabs }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.on }}" style="cursor:pointer; padding-bottom:10px; font:600 15px/1 'Barlow Condensed'; letter-spacing:.08em; color:{{ t.fg }}; box-shadow:{{ t.sh }}">{{ t.l }}</span></sc-for></div>
+            <div style="flex:1; min-height:0; overflow:auto; padding:18px 20px; display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:14px; align-content:start">
+              <sc-for list="{{ pickerDecks }}" as="d" hint-placeholder-count="8">
+                <div onClick="{{ d.on }}" style="cursor:pointer; border-radius:3px; overflow:hidden; background:#121110; box-shadow:{{ d.sh }}; display:flex; flex-direction:column">
+                  <div style="position:relative; height:112px; background:#23211e"><sc-if value="{{ d.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ d.art }}) center / cover no-repeat"></div></sc-if><sc-if value="{{ d.sel }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; right:8px; top:8px; width:24px; height:24px; border-radius:2px; background:#ff7a3d; color:#121110; display:flex; align-items:center; justify-content:center; font-size:15px">{{ i.check }}</span></sc-if></div>
+                  <div style="padding:10px 12px 12px; display:flex; flex-direction:column; gap:5px">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:6px"><span style="font:600 18px/1 'Barlow Condensed'; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ d.name }}</span><span style="display:flex; gap:1px; flex:none; font-size:12px"><sc-for list="{{ d.cols }}" as="m" hint-placeholder-count="2"><i class="{{ m }}"></i></sc-for></span></div>
+                    <span style="font-size:12px; color:#c9c3b8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ d.cmdr }}</span>
+                    <span style="font-size:12px; color:#9b958a">{{ d.set }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; padding:14px 20px 16px; border-top:1px solid #2a2824"><span style="font-size:13px; color:#9b958a">{{ pickerHint }}</span><span style="flex:1"></span><span onClick="{{ closeOv }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABBRECHEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; letter-spacing:0">Esc</span></span><span onClick="{{ closeOv }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">ÜBERNEHMEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16); letter-spacing:0">Enter</span></span></div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ ov.importer }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; z-index:21; left:{{ L.ovInset }}px; right:{{ L.ovInset }}px; top:{{ L.ovTop }}px; bottom:{{ L.ovTop }}px; background:#1a1917; border-radius:4px; box-shadow:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #34312c; display:flex; flex-direction:column">
+            <div style="padding:18px 20px 14px; border-bottom:1px solid #2a2824; display:flex; flex-direction:column; gap:6px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">{{ imp.label }}</span><span style="font:600 26px/1 'Barlow Condensed'">{{ imp.title }}</span></div>
+            <div style="flex:1; min-height:0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
+              <div style="padding:18px 20px; display:flex; flex-direction:column; gap:16px; border-right:1px solid #2a2824; min-height:0">
+                <div style="display:flex; padding:3px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em; align-self:flex-start"><sc-for list="{{ impTabs }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.on }}" style="cursor:pointer; padding:8px 14px; border-radius:2px; background:{{ t.bg }}; color:{{ t.fg }}">{{ t.l }}</span></sc-for></div>
+                <sc-if value="{{ imp.link }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">DECK-LINK</span><div style="display:flex; gap:8px"><div style="flex:1; height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #ff7a3d; font-size:14px; color:#6f6a62"><span style="display:flex">{{ i.link }}</span>archidekt.com/decks/… oder moxfield.com/decks/…</div><span style="display:flex; align-items:center; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">LADEN</span></div><span style="font-size:12.5px; color:#9b958a">Öffentliche Decks von Archidekt und Moxfield. Der Commander wird automatisch erkannt.</span></div>
+                </sc-if>
+                <sc-if value="{{ imp.text }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">DECK-NAME</span><div style="height:40px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px">{{ imp.name }}</div></div>
+                  <div style="flex:1; min-height:0; display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">TEXTLISTE · EINE KARTE PRO ZEILE</span><div style="flex:1; min-height:0; overflow:hidden; padding:12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:500 13px/1.7 'IBM Plex Mono'; color:#c9c3b8; white-space:pre">{{ imp.list }}</div></div>
+                </sc-if>
+              </div>
+              <div style="padding:18px 20px; display:flex; flex-direction:column; gap:14px; min-height:0; overflow:auto">
+                <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">VORSCHAU</span>
+                <sc-if value="{{ imp.link }}" hint-placeholder-val="{{ false }}">
+                  <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; color:#9b958a; border-radius:3px; box-shadow:inset 0 0 0 1px #2a2824"><span style="font-size:34px; display:flex; color:#6f6a62">{{ i.layers }}</span><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; color:#c9c3b8">NOCH NICHTS GELADEN</span><span style="max-width:300px; font-size:13px; line-height:1.5">Link einfügen und laden. Hier erscheinen dann Commander, Kartenanzahl, Legalität und fehlende Karten.</span></div>
+                </sc-if>
+                <sc-if value="{{ imp.text }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:relative; height:120px; border-radius:3px; overflow:hidden; background:#23211e; flex:none"><sc-if value="{{ imp.art }}" hint-placeholder-val="{{ false }}"><div style="width:100%; height:100%; background:#23211e url({{ imp.art }}) center / cover no-repeat"></div></sc-if><div style="position:absolute; inset:0; background:linear-gradient(0deg, rgba(18,17,16,.9), rgba(18,17,16,0) 60%)"></div><div style="position:absolute; left:14px; bottom:12px; display:flex; flex-direction:column; gap:4px"><span style="font:600 12px/1 'Barlow Condensed'; letter-spacing:.12em; color:#c9c3b8">COMMANDER</span><span style="font:600 22px/1 'Barlow Condensed'">Anje Falkenrath</span></div></div>
+                  <div style="display:flex; flex-wrap:wrap; gap:8px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.08em"><sc-for list="{{ imp.badges }}" as="b" hint-placeholder-count="3"><span style="display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px {{ b.bd }}; color:{{ b.c }}">{{ b.l }}</span></sc-for></div>
+                  <sc-if value="{{ imp.bad }}" hint-placeholder-val="{{ false }}"><div style="display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:3px; background:#2a1619; box-shadow:inset 0 0 0 1px rgba(239,62,86,.4); font-size:13px; line-height:1.45"><span style="display:flex; color:#ef3e56; font-size:16px; padding-top:1px">{{ i.alert }}</span><span>Unbekannte Karte in Zeile 7: <span style="font-family:'IBM Plex Mono'; font-size:12.5px">Bloodhal Priest</span>. Meintest du <span style="font-weight:600">Bloodhall Priest</span>?</span></div></sc-if>
+                  <div style="display:flex; flex-direction:column">
+                    <sc-for list="{{ imp.groups }}" as="g" hint-placeholder-count="4">
+                      <div style="display:flex; flex-direction:column; padding:8px 0; border-bottom:1px solid #22201d"><div style="display:flex; justify-content:space-between; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a; padding-bottom:6px"><span>{{ g.t }}</span><span>{{ g.n }}</span></div><span style="font-size:13px; line-height:1.55; color:#c9c3b8">{{ g.cards }}</span></div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; padding:14px 20px 16px; border-top:1px solid #2a2824">
+              <sc-if value="{{ imp.edit }}" hint-placeholder-val="{{ false }}"><span onClick="{{ openDelete }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border-radius:3px; color:#ef3e56; box-shadow:inset 0 0 0 1px rgba(239,62,86,.5); font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="display:flex">{{ i.trash }}</span>LÖSCHEN</span></sc-if>
+              <span style="flex:1"></span>
+              <span onClick="{{ closeOv }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABBRECHEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; letter-spacing:0">Esc</span></span>
+              <span onClick="{{ saveImport }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; opacity:{{ imp.saveOp }}">{{ imp.save }}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ ov.del }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; z-index:23; left:50%; top:50%; transform:translate(-50%,-50%); width:440px; background:#1a1917; border-radius:4px; box-shadow:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #34312c; display:flex; flex-direction:column">
+            <div style="padding:20px; display:flex; flex-direction:column; gap:10px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ef3e56">DECK LÖSCHEN</span><span style="font:600 24px/1.1 'Barlow Condensed'">{{ delName }} löschen?</span><span style="font-size:14px; line-height:1.5; color:#c9c3b8">Das Deck wird aus der Sammlung entfernt. Vergangene Partien bleiben im Verlauf.</span></div>
+            <div style="display:flex; justify-content:flex-end; gap:8px; padding:0 20px 18px"><span onClick="{{ closeDel }}" style="cursor:pointer; display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABBRECHEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; letter-spacing:0">Esc</span></span><span onClick="{{ confirmDel }}" style="cursor:pointer; display:flex; align-items:center; height:40px; padding:0 14px; border-radius:3px; background:#ef3e56; color:#121110; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">LÖSCHEN</span></div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute; left:50%; top:16px; transform:translateX(-50%); z-index:30; display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:3px; background:#23211e; box-shadow:0 12px 32px rgba(0,0,0,.5); font-size:13.5px; white-space:nowrap"><span style="display:flex; font-size:16px; color:#7ee08a">{{ i.check }}</span>{{ toastText }}</div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { screen: 'held', empty: false, size: '1680', ov: null, pickFor: 'me', pickTab: 'mine', impTab: 'text', edit: false, delId: null, statTab: 'ov', openDeck: 'mr', tempo: 'Blitz', myDeck: 'mr', seats: ['Peer Through Time', 'Sworn to Darkness', 'Buckle Up'], removed: [], toast: null, u: {}, vw: window.innerWidth, vh: window.innerHeight };
+
+  componentDidMount() {
+    try { const s = JSON.parse(localStorage.getItem('ml-meta') || '{}'); if (s.screen) this.setState({ screen: s.screen, size: s.size || '1680' }); } catch (e) {}
+    this.onR = () => this.setState({ vw: window.innerWidth, vh: window.innerHeight });
+    this.onK = e => { if (e.key === 'Escape') { if (this.state.delId) this.setState({ delId: null }); else this.setState({ ov: null }); } if (e.key === 'Enter' && this.state.ov === 'picker') this.setState({ ov: null }); };
+    window.addEventListener('resize', this.onR); window.addEventListener('keydown', this.onK);
+    if (!window.__sf) {
+      const cache = {}, q = []; let busy = false;
+      const pump = () => { if (busy || !q.length) return; busy = true; const [n, res] = q.shift();
+        fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(n)).then(r => r.json()).then(j => res(j.image_uris || (j.card_faces && j.card_faces[0].image_uris) || {})).catch(() => res({}))
+          .finally(() => setTimeout(() => { busy = false; pump(); }, 110)); };
+      window.__sf = n => cache[n] || (cache[n] = new Promise(res => { q.push([n, res]); pump(); }));
+    }
+    const names = ['Anje Falkenrath', 'Sliver Gravemother', 'Lathril, Blade of the Elves', 'Teferi, Temporal Archmage', 'Ob Nixilis of the Black Oath', 'Kotori, Pilot Prodigy', "Atraxa, Praetors' Voice", 'Edgar Markov', 'The Ur-Dragon', 'Meren of Clan Nel Toth', 'Oloro, Ageless Ascetic', 'Kaalia of the Vast'];
+    names.forEach(n => window.__sf(n).then(u => this.setState(s => ({ u: { ...s.u, [n]: u } }))));
+    if (!window.lucide) this.t = setInterval(() => { if (window.lucide) { clearInterval(this.t); this.forceUpdate(); } }, 150);
+  }
+  componentWillUnmount() { window.removeEventListener('resize', this.onR); window.removeEventListener('keydown', this.onK); clearInterval(this.t); clearTimeout(this.tt); }
+  ico(names) {
+    const L = window.lucide; if (!L || !L.icons) return null;
+    let node; for (const n of names) if (L.icons[n]) { node = L.icons[n]; break; }
+    if (!node) return null; if (node[0] === 'svg') node = node[2];
+    return React.createElement('svg', { width: '1em', height: '1em', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block' } }, node.map(([t, a], k) => React.createElement(t, { ...a, key: k })));
+  }
+  nav(screen, extra) { this.setState({ screen, ov: null, ...(extra || {}) }, () => { try { localStorage.setItem('ml-meta', JSON.stringify({ screen, size: this.state.size })); } catch (e) {} }); }
+  toast(t) { clearTimeout(this.tt); this.setState({ toast: t }); this.tt = setTimeout(() => this.setState({ toast: null }), 2400); }
+
+  renderVals() {
+    const s = this.state;
+    const art = n => (s.u[n] || {}).art_crop;
+    const i = {}; const im = { held: ['Shield'], swords: ['Swords'], layers: ['Layers'], stat: ['ChartColumn', 'BarChart3'], table: ['LogIn'], zap: ['Zap'], play: ['Play'], chev: ['ChevronRight'], star: ['Star'], download: ['Download'], check: ['Check'], shuffle: ['Shuffle'], bot: ['Bot'], pencil: ['Pencil'], trash: ['Trash2'], plus: ['Plus'], search: ['Search'], link: ['Link'], alert: ['TriangleAlert', 'AlertTriangle'] };
+    for (const k in im) i[k] = this.ico(im[k]);
+    const big = s.size !== '1280';
+    const L = big ? { W: 1680, H: 1000, pad: '48px 64px', gap: 28, heroNum: 160, ctaH: 230, sumW: 360, deckArtW: 300, deckArtH: 170, seatGap: 16, tileMin: 300, tileArtH: 150, chartH: 200, ovInset: 64, ovTop: 48 }
+                  : { W: 1280, H: 760, pad: '28px 36px', gap: 18, heroNum: 110, ctaH: 170, sumW: 290, deckArtW: 200, deckArtH: 112, seatGap: 12, tileMin: 250, tileArtH: 110, chartH: 140, ovInset: 28, ovTop: 22 };
+    const scale = Math.min((s.vw - 24) / L.W, (s.vh - 48 - 24) / L.H, 1);
+    const C = { w: 'ms ms-w ms-cost', u: 'ms ms-u ms-cost', b: 'ms ms-b ms-cost', r: 'ms ms-r ms-cost', g: 'ms ms-g ms-cost' };
+    const cols = str => str.split('').map(c => C[c]);
+    const empty = s.empty;
+
+    const myDecksAll = [
+      { id: 'mr', name: 'Merciless Rage', cmdr: 'Anje Falkenrath', cols: 'br', lvl: 3, pct: 46, xp: '414 / 900 XP', g: 6, w: 2, p: '2,0', src: 'Archidekt' },
+      { id: 'ss', name: 'Sliver Swarm', cmdr: 'Sliver Gravemother', cols: 'wubrg', lvl: 1, pct: 72, xp: '216 / 300 XP', g: 2, w: 0, p: '2,5', src: 'Moxfield' },
+      { id: 'ec', name: 'Elven Council', cmdr: 'Lathril, Blade of the Elves', cols: 'bg', lvl: 1, pct: 12, xp: '36 / 300 XP', g: 1, w: 0, p: '4,0', src: 'Textliste' }
+    ];
+    const myDecks = empty ? [] : myDecksAll.filter(d => !s.removed.includes(d.id));
+    const precons = [
+      { name: 'Peer Through Time', cmdr: 'Teferi, Temporal Archmage', cols: 'u', set: 'Commander 2014 · C14' },
+      { name: 'Sworn to Darkness', cmdr: 'Ob Nixilis of the Black Oath', cols: 'b', set: 'Commander 2014 · C14' },
+      { name: 'Buckle Up', cmdr: 'Kotori, Pilot Prodigy', cols: 'wu', set: 'Neon Dynasty Commander · NEC' },
+      { name: 'Breed Lethality', cmdr: "Atraxa, Praetors' Voice", cols: 'wubg', set: 'Commander 2016 · C16' },
+      { name: 'Vampiric Bloodlust', cmdr: 'Edgar Markov', cols: 'wbr', set: 'Commander 2017 · C17' },
+      { name: 'Draconic Domination', cmdr: 'The Ur-Dragon', cols: 'wubrg', set: 'Commander 2017 · C17' },
+      { name: 'Plunder the Graves', cmdr: 'Meren of Clan Nel Toth', cols: 'bg', set: 'Commander 2015 · C15' },
+      { name: 'Eternal Bargain', cmdr: 'Oloro, Ageless Ascetic', cols: 'wub', set: 'Commander 2013 · C13' },
+      { name: 'Heavenly Inferno', cmdr: 'Kaalia of the Vast', cols: 'wbr', set: 'Commander 2011 · CMD' }
+    ];
+    const findP = n => precons.find(p => p.name === n) || precons[0];
+
+    // HELD
+    const H = empty
+      ? { lvl: '01', title: 'Novize', pct: 0, xp: 0, need: 120, next: 2, nextTitle: 'Lehrling', nextTitleLvl: 3, stats: [{ l: 'SPIELE', v: 0, c: '#ece7de' }, { l: 'SIEGE', v: 0, c: '#ece7de' }, { l: 'SERIE', v: 0, c: '#ece7de' }], qsLabel: 'ERSTES SPIEL', qsDeck: 'Peer Through Time', qsMeta: 'Vorgefertigtes Deck · Teferi, Temporal Archmage · gegen 3 Bots', qsArt: art('Teferi, Temporal Archmage') }
+      : { lvl: '03', title: 'Lehrling', pct: 10.4, xp: 69, need: 661, next: 4, nextTitle: 'Adept', nextTitleLvl: 5, stats: [{ l: 'SPIELE', v: 9, c: '#ece7de' }, { l: 'SIEGE', v: 2, c: '#ece7de' }, { l: 'SERIE', v: 1, c: '#ff7a3d' }], qsLabel: 'SCHNELLSTART', qsDeck: 'Merciless Rage', qsMeta: 'Anje Falkenrath · gegen 3 Bots · Tempo Blitz', qsArt: art('Anje Falkenrath') };
+    const placeC = p => p === 1 ? '#ffd23f' : p === 2 ? '#c9c3b8' : '#9b958a';
+    const xpFor = p => ({ 1: '+190 XP', 2: '+104 XP', 3: '+62 XP', 4: '+40 XP' }[p]);
+    const games = [
+      [1, 'Merciless Rage', 'heute, 21:40', 26, '1:31', 'BLITZ', ['Teferi, Temporal Archmage', 'Ob Nixilis of the Black Oath', 'Kotori, Pilot Prodigy']],
+      [2, 'Sliver Swarm', 'heute, 21:05', 31, '2:04', 'BLITZ', ['Edgar Markov', 'Teferi, Temporal Archmage', 'Meren of Clan Nel Toth']],
+      [3, 'Merciless Rage', 'gestern, 22:10', 22, '1:12', 'BLITZ', ['Kotori, Pilot Prodigy', 'The Ur-Dragon', 'Oloro, Ageless Ascetic']],
+      [2, 'Merciless Rage', 'gestern, 21:30', 28, '1:48', 'NORMAL', ['Ob Nixilis of the Black Oath', "Atraxa, Praetors' Voice", 'Teferi, Temporal Archmage']],
+      [3, 'Sliver Swarm', 'Mo, 20:15', 25, '1:40', 'BLITZ', ['Kaalia of the Vast', 'Ob Nixilis of the Black Oath', 'Kotori, Pilot Prodigy']],
+      [1, 'Merciless Rage', 'Mo, 19:30', 24, '1:22', 'BLITZ', ['Teferi, Temporal Archmage', 'Edgar Markov', 'Meren of Clan Nel Toth']],
+      [4, 'Elven Council', 'So, 18:00', 19, '1:05', 'NORMAL', ['The Ur-Dragon', 'Kotori, Pilot Prodigy', 'Ob Nixilis of the Black Oath']],
+      [2, 'Merciless Rage', 'So, 17:10', 30, '2:10', 'BLITZ', ['Teferi, Temporal Archmage', "Atraxa, Praetors' Voice", 'Kaalia of the Vast']],
+      [3, 'Merciless Rage', 'Sa, 21:00', 27, '1:55', 'BLITZ', ['Oloro, Ageless Ascetic', 'Edgar Markov', 'Kotori, Pilot Prodigy']]
+    ];
+    const deckArt = n => art((myDecksAll.find(d => d.name === n) || {}).cmdr);
+    const recent = empty ? [] : games.slice(0, 3).map(g => ({ p: g[0], pc: placeC(g[0]), deck: g[1], art: deckArt(g[1]), meta: `${g[3]} Züge · ${g[4]} min · ${g[2]}`, xp: xpFor(g[0]) }));
+    const masteryList = myDecks.map(d => ({ ...d, art: art(d.cmdr) }));
+
+    // SPIELEN
+    const md = myDecksAll.find(d => d.id === s.myDeck) || myDecksAll[0];
+    const myDeck = empty
+      ? { name: 'Peer Through Time', cmdr: 'Teferi, Temporal Archmage', src: 'Vorgefertigt', cols: cols('u'), art: art('Teferi, Temporal Archmage'), lvlLbl: '–', pct: 0 }
+      : { name: md.name, cmdr: md.cmdr, src: md.src, cols: cols(md.cols), art: art(md.cmdr), lvlLbl: 'STUFE ' + md.lvl, pct: md.pct };
+    const tempos = [['Blitz', 'Bots entscheiden sofort'], ['Normal', 'Kurze Bedenkzeit'], ['Bedacht', 'Längere Bedenkzeit'], ['Max', 'Volle Rechenzeit']].map(([l, d]) => { const sel = s.tempo === l; return { l: l.toUpperCase(), d, sel, fg: sel ? '#ff7a3d' : '#ece7de', bg: sel ? 'rgba(255,122,61,.08)' : '#1a1917', sh: sel ? 'inset 0 0 0 1px #ff7a3d' : 'none', on: () => this.setState({ tempo: l }) }; });
+    const seatCards = s.seats.map((n, k) => { const p = findP(n); return { seat: 'PLATZ ' + (k + 2), name: p.name, cmdr: p.cmdr, set: p.set, cols: cols(p.cols), art: art(p.cmdr), pick: () => this.setState({ ov: 'picker', pickFor: k, pickTab: 'pre' }), rand: () => { const r = precons[Math.floor(Math.random() * precons.length)].name; this.setState(st => { const seats = [...st.seats]; seats[k] = r; return { seats }; }); } }; });
+    const summary = [{ k: 'Du', v: myDeck.name, c: '#ff7a3d' }].concat(seatCards.map((c, k) => ({ k: 'Platz ' + (k + 2), v: c.name, c: ['#8fb3c9', '#a99bc4', '#c9a38f'][k] }))).concat([{ k: 'Tempo', v: s.tempo, c: 'transparent' }]);
+
+    // PICKER
+    const pickerList = s.pickTab === 'mine' ? myDecks.map(d => ({ name: d.name, cmdr: d.cmdr, cols: d.cols, set: 'Eigenes Deck · Stufe ' + d.lvl, id: d.id })) : precons;
+    const curSel = s.pickFor === 'me' ? (myDecksAll.find(d => d.id === s.myDeck) || {}).name : s.seats[s.pickFor];
+    const pickerDecks = pickerList.map(d => { const sel = d.name === curSel; return { ...d, cols: cols(d.cols), art: art(d.cmdr), sel, sh: sel ? '0 0 0 2px #ff7a3d' : '0 0 0 1px #2a2824', on: () => { if (s.pickFor === 'me') { if (d.id) this.setState({ myDeck: d.id }); } else this.setState(st => { const seats = [...st.seats]; seats[st.pickFor] = d.name; return { seats }; }); } }; });
+    const pickerTabs = [['mine', `MEINE DECKS ${myDecks.length}`], ['pre', 'VORGEFERTIGT 70']].map(([k, l]) => ({ l, fg: s.pickTab === k ? '#ece7de' : '#7d786f', sh: s.pickTab === k ? 'inset 0 -2px 0 #ff7a3d' : 'none', on: () => this.setState({ pickTab: k }) }));
+
+    // DECKS
+    const deckTiles = myDecks.map(d => ({ ...d, cols: cols(d.cols), art: art(d.cmdr), cards: 100, record: d.g ? `${d.g} Spiele · ${d.w} Siege` : 'noch nicht gespielt', edit: () => this.setState({ ov: 'import', edit: true, impTab: 'text' }), del: () => this.setState({ delId: d.id }) }));
+    const imp = s.edit
+      ? { label: 'DECK BEARBEITEN', title: 'Merciless Rage', edit: true, link: s.impTab === 'link', text: s.impTab === 'text', name: 'Merciless Rage', art: art('Anje Falkenrath'), bad: false, save: 'SPEICHERN', saveOp: 1,
+          list: '1 Anje Falkenrath *CMDR*\n1 Terminate\n1 Faithless Looting\n1 Fiery Temper\n1 Bloodhall Priest\n1 Stromkirk Occultist\n1 Anje\'s Ravager\n1 Blasphemous Act\n1 Rakdos Signet\n1 Sol Ring\n1 Akoum Refuge\n14 Mountain\n13 Swamp\n…',
+          badges: [{ l: '100 KARTEN', c: '#7ee08a', bd: 'rgba(126,224,138,.45)' }, { l: 'COMMANDER-LEGAL', c: '#7ee08a', bd: 'rgba(126,224,138,.45)' }, { l: 'B · R', c: '#c9c3b8', bd: '#4a463f' }],
+          groups: [{ t: 'COMMANDER', n: 1, cards: 'Anje Falkenrath' }, { t: 'KREATUREN', n: 27, cards: "Bloodhall Priest, Stromkirk Occultist, Anje's Ravager, Archfiend of Despair, Avatar of Slaughter …" }, { t: 'SPONTANZAUBER', n: 11, cards: 'Terminate, Fiery Temper, Lightning Bolt …' }, { t: 'HEXEREIEN', n: 9, cards: 'Faithless Looting, Blasphemous Act …' }, { t: 'ARTEFAKTE', n: 8, cards: 'Sol Ring, Rakdos Signet, Arcane Signet …' }, { t: 'LÄNDER', n: 36, cards: 'Akoum Refuge, Command Tower, 14 Mountain, 13 Swamp …' }] }
+      : { label: 'DECK IMPORTIEREN', title: 'Neues Deck', edit: false, link: s.impTab === 'link', text: s.impTab === 'text', name: 'Madness Test', art: art('Anje Falkenrath'), bad: true, save: 'IMPORTIEREN', saveOp: s.impTab === 'link' ? 0.4 : 1,
+          list: '1 Anje Falkenrath *CMDR*\n1 Terminate\n1 Faithless Looting\n1 Fiery Temper\n1 Stromkirk Occultist\n1 Anje\'s Ravager\n1 Bloodhal Priest\n1 Blasphemous Act\n10 Mountain\n10 Swamp\n…',
+          badges: [{ l: '69 KARTEN', c: '#ef3e56', bd: 'rgba(239,62,86,.5)' }, { l: 'NICHT LEGAL', c: '#ef3e56', bd: 'rgba(239,62,86,.5)' }, { l: '1 UNBEKANNT', c: '#ffd23f', bd: 'rgba(255,210,63,.45)' }],
+          groups: [{ t: 'COMMANDER', n: 1, cards: 'Anje Falkenrath' }, { t: 'KREATUREN', n: 14, cards: "Stromkirk Occultist, Anje's Ravager …" }, { t: 'SPONTANZAUBER', n: 8, cards: 'Terminate, Fiery Temper …' }, { t: 'LÄNDER', n: 30, cards: '10 Mountain, 10 Swamp …' }] };
+    const impTabs = [['link', 'LINK'], ['text', 'TEXTLISTE']].map(([k, l]) => ({ l, bg: s.impTab === k ? '#34312c' : 'transparent', fg: s.impTab === k ? '#ece7de' : '#9b958a', on: () => this.setState({ impTab: k }) }));
+
+    // STAT
+    const deckRows = myDecks.map(d => { const open = s.openDeck === d.id; return { ...d, art: art(d.cmdr), q: d.w ? Math.round(d.w / d.g * 100) + ' %' : '–', qc: d.w ? '#ece7de' : '#6f6a62', open, rot: open ? 90 : 0, bg: open ? '#1a1917' : 'transparent', sh: open ? 'inset 2px 0 0 #ff7a3d' : 'none', on: () => this.setState(st => ({ openDeck: st.openDeck === d.id ? null : d.id })) }; });
+    const cardStatsMap = {
+      mr: [['Anje Falkenrath', 6, 6, 2, 'COMMANDER'], ['Faithless Looting', 5, 5, 2], ['Terminate', 4, 4, 2], ['Fiery Temper', 4, 3, 2], ['Bloodhall Priest', 3, 3, 1], ['Blasphemous Act', 2, 1, 0], ['Avatar of Slaughter', 2, 0, 0]],
+      ss: [['Sliver Gravemother', 2, 2, 0, 'COMMANDER'], ['Sliver Hivelord', 1, 1, 0], ['Cloudshredder Sliver', 2, 2, 0], ['Sol Ring', 1, 1, 0]],
+      ec: [['Lathril, Blade of the Elves', 1, 1, 0, 'COMMANDER'], ['Elvish Mystic', 1, 1, 0], ['Llanowar Elves', 1, 0, 0]]
+    };
+    const cardStats = (cardStatsMap[s.openDeck] || []).map(([n, d, p, w, tag]) => ({ n, d, p, q: Math.round(p / d * 100), w: w || '–', wc: w ? '#ece7de' : '#6f6a62', tag: tag || '' }));
+    const form = games.slice().reverse().map(g => ({ p: g[0], h: (5 - g[0]) / 4 * 82, c: g[0] === 1 ? '#ff7a3d' : '#c9c3b8', bg: g[0] === 1 ? '#ff7a3d' : '#34312c' }));
+    const history = games.map(g => ({ p: g[0], pc: placeC(g[0]), deck: g[1], date: g[2], turns: g[3], dur: g[4], tempo: g[5], foes: g[6].map(art), xp: xpFor(g[0]), xc: g[0] === 1 ? '#ffd23f' : '#c9c3b8' }));
+    const statTabs = [['ov', 'ÜBERSICHT'], ['hist', 'VERLAUF']].map(([k, l]) => ({ l, fg: s.statTab === k ? '#ece7de' : '#7d786f', sh: s.statTab === k ? 'inset 0 -2px 0 #ff7a3d' : 'none', on: () => this.setState({ statTab: k }) }));
+
+    const delDeck = myDecksAll.find(d => d.id === s.delId);
+    const scr = s.screen;
+    return {
+      L, scale: scale.toFixed(4), i, H, empty, recent, masteryList, myDeck, tempos, seatCards, summary,
+      pickerDecks, pickerTabs, pickerFor: s.pickFor === 'me' ? 'DEIN DECK' : 'PLATZ ' + (s.pickFor + 2), pickerHint: s.pickTab === 'pre' ? '70 mitgelieferte Commander-Decks' : 'Eigene Decks mit Meisterschaft',
+      deckTiles, deckCount: empty ? '' : `${myDecks.length} Decks`, hasDecks: !empty, imp, impTabs,
+      kpis: [{ l: 'SPIELE', v: 9, s: 'seit Sa', c: '#ece7de' }, { l: 'SIEGE', v: 2, s: '22 % Siegquote', c: '#ff7a3d' }, { l: 'Ø PLATZ', v: '2,3', s: 'von 4', c: '#ece7de' }, { l: 'Ø ZÜGE', v: 26, s: 'pro Partie', c: '#ece7de' }, { l: 'SPIELZEIT', v: '15:07', s: 'Stunden gesamt', c: '#ece7de' }],
+      form, tempoStats: [{ k: 'Blitz · 7 Spiele', v: '2 Siege' }, { k: 'Normal · 2 Spiele', v: '–' }], mullStats: [{ k: 'Ohne Mulligan · 6', v: '2 Siege' }, { k: '1 Mulligan · 3', v: '–' }],
+      foes: [['Teferi, Temporal Archmage', 'Teferi', '5 Partien · 1× vor dir'], ['Kotori, Pilot Prodigy', 'Kotori', '5 Partien · 2× vor dir'], ['Ob Nixilis of the Black Oath', 'Ob Nixilis', '4 Partien · 1× vor dir'], ['Edgar Markov', 'Edgar Markov', '3 Partien · 2× vor dir']].map(([c, n, m]) => ({ art: art(c), n, m })),
+      deckRows, cardStats, history, statTabs,
+      showOverview: !empty && s.statTab === 'ov', showVerlauf: !empty && s.statTab === 'hist',
+      is: { held: scr === 'held', spielen: scr === 'spielen', decks: scr === 'decks', stat: scr === 'stat' },
+      nav: [['held', 'HELD', i.held], ['spielen', 'SPIELEN', i.swords], ['decks', 'DECKS', i.layers], ['stat', 'STATISTIK', i.stat]].map(([k, l, ico]) => ({ l, ico, on: scr === k, fg: scr === k ? '#ece7de' : '#7d786f', go: () => this.nav(k) })),
+      ov: { any: !!s.ov || !!s.delId, picker: s.ov === 'picker', importer: s.ov === 'import', del: !!s.delId },
+      delName: delDeck ? delDeck.name : '',
+      quick: [['Deck-Auswahl', () => this.nav('spielen', { ov: 'picker', pickFor: 'me', pickTab: 'mine' })], ['Import (Textliste)', () => this.nav('decks', { ov: 'import', edit: false, impTab: 'text' })], ['Import (Link)', () => this.nav('decks', { ov: 'import', edit: false, impTab: 'link' })], ['Deck bearbeiten', () => this.nav('decks', { ov: 'import', edit: true, impTab: 'text' })], ['Deck-Karten', () => this.nav('stat', { statTab: 'ov', openDeck: 'mr' })], ['Verlauf', () => this.nav('stat', { statTab: 'hist' })]].map(([l, go]) => ({ l: l.toUpperCase(), go })),
+      toggleEmpty: () => this.setState(st => ({ empty: !st.empty, ov: null, delId: null })), emptyTrack: empty ? '#ff7a3d' : '#34312c', emptyKnob: empty ? 12 : 2,
+      sizeBtns: [['1680', '1680×1000'], ['1280', '1280×760']].map(([k, l]) => ({ l, go: () => this.setState({ size: k }), fg: s.size === k ? '#ece7de' : '#7d786f', sh: s.size === k ? 'inset 0 0 0 1px #ff7a3d' : 'none' })),
+      goSpielen: () => this.nav('spielen'), goDecks: () => this.nav('decks'), goVerlauf: () => this.nav('stat', { statTab: 'hist' }),
+      openImport: () => this.nav('decks', { ov: 'import', edit: false, impTab: 'link' }),
+      pickMine: () => this.setState({ ov: 'picker', pickFor: 'me', pickTab: empty ? 'pre' : 'mine' }),
+      randMine: () => this.setState({ myDeck: ['mr', 'ss', 'ec'][Math.floor(Math.random() * 3)] }),
+      pickRandom: () => { const l = pickerList; const d = l[Math.floor(Math.random() * l.length)]; if (s.pickFor === 'me') { if (d.id) this.setState({ myDeck: d.id }); } else this.setState(st => { const seats = [...st.seats]; seats[st.pickFor] = d.name; return { seats }; }); },
+      closeOv: () => this.setState({ ov: null, delId: null }),
+      saveImport: () => { if (s.impTab === 'link' && !s.edit) return; this.setState({ ov: null }); this.toast(s.edit ? 'Deck gespeichert' : 'Deck importiert'); },
+      openDelete: () => this.setState({ delId: 'mr' }),
+      closeDel: () => this.setState({ delId: null }),
+      confirmDel: () => { const id = s.delId, nm = delDeck ? delDeck.name : ''; this.setState(st => ({ removed: [...st.removed, id], delId: null, ov: null })); this.toast(nm + ' gelöscht'); },
+      toast: !!s.toast, toastText: s.toast || ''
+    };
+  }
+}
+</script>
+</body>
+</html>

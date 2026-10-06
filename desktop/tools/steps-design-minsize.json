@@ -1,0 +1,54 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "width": 1280,
+  "height": 760,
+  "timeout": 300000,
+  "steps": [
+    {
+      "waitFor": "#root nav",
+      "timeout": 60000
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/70-mindestgroesse-home.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/70-mindestgroesse-home.png"
+    },
+    {
+      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'user',id:5},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
+    },
+    {
+      "wait": 4000
+    },
+    {
+      "jsFile": "autoplay.js"
+    },
+    {
+      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.turn>=10){clearInterval(t);r('Zug '+s.turn)}},300);setTimeout(()=>{clearInterval(t);r('Timeout Zug 10')},150000)})"
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/71-mindestgroesse-spielbrett.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/71-mindestgroesse-spielbrett.png"
+    },
+    {
+      "js": "clearInterval(window.__auto);window.__auto=null;window.__ml.game.getState().leave();'aufgegeben'"
+    },
+    {
+      "wait": 2500
+    }
+  ]
+}

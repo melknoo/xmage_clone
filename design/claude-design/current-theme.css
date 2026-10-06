@@ -1,0 +1,130 @@
+@import "tailwindcss";
+@import "mana-font/css/mana.min.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource/cinzel/600.css";
+@import "@fontsource/cinzel/700.css";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Cinzel", ui-serif, Georgia, serif;
+
+  --color-ink-950: #07090f;
+  --color-ink-900: #0b0f18;
+  --color-ink-850: #0f1420;
+  --color-ink-800: #141a28;
+  --color-ink-700: #1c2436;
+  --color-ink-600: #273049;
+  --color-ink-500: #3a4563;
+  --color-ink-400: #5b6788;
+  --color-ink-300: #8d97b3;
+  --color-ink-200: #c3c9da;
+  --color-ink-100: #e7eaf2;
+
+  --color-arcane-400: #38e1c6;
+  --color-arcane-500: #1fc4aa;
+  --color-gold-300: #ffd98a;
+  --color-gold-400: #f5b84a;
+  --color-gold-500: #e09a1f;
+  --color-blood-400: #ff6b6b;
+  --color-blood-500: #e5484d;
+  --color-sky-400: #5cb8ff;
+
+  --animate-pulse-ring: pulse-ring 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 184, 74, 0.9), 0 0 14px 2px rgba(245, 184, 74, 0.45); }
+  50% { box-shadow: 0 0 0 2px rgba(245, 184, 74, 0.5), 0 0 22px 6px rgba(245, 184, 74, 0.25); }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+input, textarea, select {
+  user-select: text;
+}
+
+.bg-table {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 110%, rgba(56, 225, 198, 0.10), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(120, 90, 255, 0.10), transparent 60%),
+    radial-gradient(circle at 50% 50%, #121827 0%, #0a0d15 70%);
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(28, 36, 54, 0.72), rgba(15, 20, 32, 0.72));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(141, 151, 179, 0.14);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(141, 151, 179, 0.3) transparent;
+}
+
+.card-shadow {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.glow-playable {
+  box-shadow: 0 0 0 2px rgba(56, 225, 198, 0.95), 0 0 16px 3px rgba(56, 225, 198, 0.45);
+}
+
+.glow-mana {
+  box-shadow: 0 0 0 2px rgba(56, 225, 198, 0.55), 0 0 8px 1px rgba(56, 225, 198, 0.25);
+}
+
+.glow-target {
+  animation: var(--animate-pulse-ring);
+}
+
+.glow-chosen {
+  box-shadow: 0 0 0 3px rgba(120, 255, 160, 0.95), 0 0 18px 4px rgba(120, 255, 160, 0.4);
+}
+
+.glow-attacking {
+  box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.95), 0 0 16px 3px rgba(255, 107, 107, 0.45);
+}
+
+.glow-blocking {
+  box-shadow: 0 0 0 2px rgba(92, 184, 255, 0.95), 0 0 16px 3px rgba(92, 184, 255, 0.45);
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:pointer-events-none;
+}
+
+@utility btn-primary {
+  @apply btn bg-linear-to-b from-gold-400 to-gold-500 text-ink-950 shadow-lg shadow-gold-500/20 hover:brightness-110 active:scale-[0.98];
+}
+
+@utility btn-arcane {
+  @apply btn bg-linear-to-b from-arcane-400 to-arcane-500 text-ink-950 shadow-lg shadow-arcane-500/20 hover:brightness-110 active:scale-[0.98];
+}
+
+@utility btn-ghost {
+  @apply btn border border-ink-500/50 bg-ink-800/60 text-ink-100 hover:bg-ink-700/80 hover:border-ink-400/60 active:scale-[0.98];
+}
+
+@utility btn-danger {
+  @apply btn bg-blood-500/90 text-white hover:bg-blood-400;
+}
+
+@utility kbd {
+  @apply ml-1 rounded border border-current/30 px-1 text-[10px] font-medium opacity-70;
+}

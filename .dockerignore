@@ -12,3 +12,4 @@ engine/.gradle
 vendor/xmage/db
 vendor/xmage/tools-lib
 *.log
+design

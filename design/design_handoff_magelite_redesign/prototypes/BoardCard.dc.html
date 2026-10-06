@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="position:relative; flex:none; width:{{ ww }}px; height:{{ h }}px; display:flex; align-items:center; justify-content:center">
+  <div style="{{ cardSt }}">
+    <div style="position:absolute; inset:0; padding:5px; font:600 9px/1.2 'IBM Plex Sans', sans-serif; color:#d9d3c7; overflow:hidden">{{ n }}</div>
+    <img src="{{ img }}" alt="" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block">
+  </div>
+  <sc-if value="{{ x }}" hint-placeholder-val="{{ false }}"><div style="{{ cntSt }}">×{{ x }}</div></sc-if>
+  <sc-if value="{{ pt }}" hint-placeholder-val="{{ false }}"><div style="{{ ptSt }}">{{ pt }}</div></sc-if>
+  <sc-if value="{{ sick }}" hint-placeholder-val="{{ false }}"><div style="{{ sickSt }}">{{ moon }}</div></sc-if>
+  <sc-if value="{{ dmg }}" hint-placeholder-val="{{ false }}"><div style="{{ dmgSt }}">−{{ dmg }}</div></sc-if>
+  <sc-if value="{{ ctr }}" hint-placeholder-val="{{ false }}"><div style="{{ ctrSt }}">{{ ctr }}</div></sc-if>
+  <sc-if value="{{ tab }}" hint-placeholder-val="{{ false }}"><div style="{{ tabSt }}">{{ tabIco }}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:120,&quot;height&quot;:160},&quot;n&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Terminate&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;v&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;a&quot;,&quot;b&quot;,&quot;c&quot;],&quot;default&quot;:&quot;a&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;w&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:80,&quot;tsType&quot;:&quot;number&quot;},&quot;st&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;&quot;,&quot;play&quot;,&quot;mana&quot;,&quot;target&quot;,&quot;chosen&quot;,&quot;attack&quot;,&quot;block&quot;],&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;tap&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;x&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:0,&quot;tsType&quot;:&quot;number&quot;},&quot;pt&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;sick&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  sf() {
+    if (!window.__sf) {
+      const cache = {}, q = []; let busy = false;
+      const pump = () => { if (busy || !q.length) return; busy = true; const [n, res] = q.shift();
+        fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(n)).then(r => r.json()).then(j => { const u = j.image_uris || (j.card_faces && j.card_faces[0].image_uris) || {}; res(u); }).catch(() => res({}))
+          .finally(() => setTimeout(() => { busy = false; pump(); }, 110)); };
+      window.__sf = n => cache[n] || (cache[n] = new Promise(res => { q.push([n, res]); pump(); }));
+    }
+    return window.__sf;
+  }
+  componentDidUpdate(pp) { if (pp.n !== this.props.n) this.load(); }
+  load() { const n = this.props.n; if (!n) return; this.sf()(n).then(u => { if (this.props.n === n) this.setState({ img: u.normal || '' }); }); }
+  componentDidMount() {
+    this.load();
+    if (!window.lucide) this.t = setInterval(() => { if (window.lucide) { clearInterval(this.t); this.forceUpdate(); } }, 150);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+  ico(names, sw, cap) {
+    const L = window.lucide; if (!L) return null;
+    let node; for (const n of names) if (L.icons && L.icons[n]) { node = L.icons[n]; break; }
+    if (!node) return null; if (node[0] === 'svg') node = node[2];
+    return React.createElement('svg', { width: '1em', height: '1em', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: sw, strokeLinecap: cap, strokeLinejoin: cap === 'square' ? 'miter' : 'round', style: { display: 'block' } },
+      node.map(([t, a], i) => React.createElement(t, { ...a, key: i })));
+  }
+  renderVals() {
+    const p = this.props, v = p.v || 'a', w = +p.w || 60, h = Math.round(w * 88 / 63), tap = !!p.tap, st = p.st || '';
+    const C = {
+      a: { play: '#38e1c6', mana: 'rgba(56,225,198,.55)', target: '#f5b84a', chosen: '#6ee7a0', attack: '#ff6b6b', block: '#5cb8ff' },
+      b: { play: '#ffffff', mana: 'rgba(255,255,255,.4)', target: '#E8C840', chosen: '#3AAD6F', attack: '#ff4444', block: '#40C8C8' },
+      c: { play: '#ff7a3d', mana: 'rgba(255,122,61,.55)', target: '#ffd23f', chosen: '#7ee08a', attack: '#ef3e56', block: '#5aa9ff' }
+    }[v];
+    const col = C[st];
+    let sh;
+    if (v === 'a') sh = !col ? '0 2px 6px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.6)' : st === 'mana' ? `0 0 0 1.5px ${col}, 0 2px 6px rgba(0,0,0,.5)` : `0 0 0 2px ${col}, 0 0 18px 2px ${col}59, 0 2px 6px rgba(0,0,0,.5)`;
+    if (v === 'b') sh = !col ? '0 0 0 2px #000, 3px 3px 0 2px #000' : st === 'mana' ? `0 0 0 2px #000, 0 0 0 4px ${col}` : `0 0 0 2px #000, 0 0 0 5px ${col}, 5px 5px 0 5px #000`;
+    if (v === 'c') sh = !col ? '0 0 0 1px rgba(0,0,0,.8), 0 1px 3px rgba(0,0,0,.6)' : st === 'mana' ? `0 0 0 1px ${col}` : `0 0 0 2px ${col}, 0 0 0 4px #121110`;
+    const r = v === 'a' ? Math.max(3, Math.round(w * 0.05)) : v === 'b' ? 0 : 3;
+    const sw = v === 'b' ? 2.5 : v === 'c' ? 2 : 2, cap = v === 'b' ? 'square' : 'round';
+    const tabMap = { target: ['Crosshair'], chosen: ['Check'], attack: ['Swords'], block: ['Shield'] };
+    const chip = v === 'a'
+      ? { background: 'rgba(7,9,15,.88)', color: '#e7eaf2', font: "700 11px/1 Inter, sans-serif", padding: '3px 5px', borderRadius: '5px', boxShadow: '0 0 0 1px rgba(141,151,179,.25)' }
+      : v === 'b'
+        ? { background: '#111', color: '#eee', font: "400 15px/1 'Jersey 10', monospace", padding: '2px 4px', boxShadow: '0 0 0 2px #000' }
+        : { background: '#121110', color: '#ece7de', font: "600 12px/1 'Barlow Condensed', sans-serif", padding: '3px 5px', borderRadius: '2px', boxShadow: 'inset 0 0 0 1px #3a362f', letterSpacing: '.02em' };
+    const big = w >= 70;
+    return {
+      n: p.n, x: p.x, pt: p.pt, sick: !!p.sick, ww: tap ? h : w, h,
+      img: (this.state && this.state.img) || undefined,
+      cardSt: { position: 'relative', width: w + 'px', height: h + 'px', borderRadius: r + 'px', boxShadow: sh, transform: tap ? 'rotate(90deg)' : 'none', background: 'linear-gradient(160deg,#2b2723,#141210)', overflow: 'hidden', flex: 'none' },
+      cntSt: { ...chip, position: 'absolute', left: '-4px', bottom: '-4px', zIndex: 2 },
+      ptSt: { ...chip, position: 'absolute', right: '-4px', bottom: '-4px', zIndex: 2, fontSize: big ? chip.font.includes('Jersey') ? '17px' : '12px' : undefined },
+      sickSt: { ...chip, position: 'absolute', right: '-4px', top: '-4px', zIndex: 2, padding: '3px', fontSize: '12px', color: v === 'b' ? '#aaa' : v === 'c' ? '#9b958a' : '#8d97b3' },
+      moon: this.ico(['Moon'], sw, cap),
+      dmg: p.dmg, ctr: p.ctr,
+      dmgSt: { ...chip, position: 'absolute', left: '-4px', top: '-4px', zIndex: 2, background: v === 'c' ? '#ef3e56' : chip.background, color: v === 'c' ? '#121110' : chip.color, boxShadow: 'none' },
+      ctrSt: { ...chip, position: 'absolute', left: '-4px', top: '50%', zIndex: 2, color: v === 'c' ? '#7ee08a' : chip.color },
+      ...(p.mod ? { ptSt: { ...chip, position: 'absolute', right: '-4px', bottom: '-4px', zIndex: 2, background: '#ece7de', color: '#121110', boxShadow: 'none' } } : {}),
+      tab: !!tabMap[st],
+      tabIco: tabMap[st] ? this.ico(tabMap[st], v === 'b' ? 3 : 2.4, cap) : null,
+      tabSt: { position: 'absolute', left: '50%', top: '-9px', transform: 'translateX(-50%)', zIndex: 3, width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: col, color: '#0b0b0b', borderRadius: v === 'a' ? '50%' : v === 'b' ? '0' : '2px', boxShadow: v === 'b' ? '0 0 0 2px #000' : '0 1px 4px rgba(0,0,0,.6)' }
+    };
+  }
+}
+</script>
+</body>
+</html>

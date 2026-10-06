@@ -1,0 +1,151 @@
+/* MageLite · Graphit & Glut — Tailwind CSS 4 theme
+   Ersetzt current-theme.css. Reihenfolge der Imports beibehalten. */
+@import "tailwindcss";
+@import "mana-font/css/mana.min.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+
+@theme {
+  /* Schriften */
+  --font-display: "Barlow Condensed", ui-sans-serif, sans-serif;   /* Zahlen, Labels, Überschriften */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; /* UI- und Engine-Text */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;           /* Tastenhinweise */
+
+  /* Flächen (dunkel → hell) */
+  --color-bg-0: #0d0c0b;  /* Fenster, Eingabefelder, Kartenreihen */
+  --color-bg-1: #121110;  /* Brett, Screens */
+  --color-bg-2: #161513;  /* Seitenleiste */
+  --color-bg-3: #1a1917;  /* Fläche, Modal, Aktionsleiste */
+  --color-bg-4: #23211e;  /* erhöht, Hover, Toast */
+  /* Linien */
+  --color-line-1: #22201d; /* Listenzeilen */
+  --color-line-2: #2a2824; /* Bereichstrenner */
+  --color-line-3: #34312c; /* Konturen, Modal-Kante */
+  --color-line-4: #4a463f; /* Sekundär-Button, Input-Hover */
+  /* Text */
+  --color-fg-1: #ece7de;  /* primär */
+  --color-fg-2: #c9c3b8;  /* sekundär, Regeltext */
+  --color-fg-3: #9b958a;  /* Labels, Meta */
+  --color-fg-4: #6f6a62;  /* Icons inaktiv */
+  --color-fg-5: #5a564f;  /* erledigt (nur ≥ 13 px, nie für Pflichtinfo) */
+  /* Signal: „jetzt du“ */
+  --color-ember: #ff7a3d;
+  --color-ember-hover: #ff8f5a;
+  --color-ember-press: #e8662b;
+  --color-ember-ink: #121110;
+  /* Zustände */
+  --color-target: #ffd23f;  /* Ziel, XP, Belohnung */
+  --color-chosen: #7ee08a;  /* gewählt, Erfolg, legal */
+  --color-attack: #ef3e56;  /* Angreifer, Fehler, Gefahr, tödlich */
+  --color-block: #5aa9ff;   /* Blocker, Info */
+  /* Plätze (nur Avatar-Kante, Verlauf) */
+  --color-seat-1: #ff7a3d;
+  --color-seat-2: #8fb3c9;
+  --color-seat-3: #a99bc4;
+  --color-seat-4: #c9a38f;
+
+  /* Typo-Skala (px / Zeilenhöhe) */
+  --text-life-xl: 84px;   --text-life-xl--line-height: .8;   /* eigenes Leben */
+  --text-life-l: 46px;    --text-life-l--line-height: .8;    /* Gegner-Leben */
+  --text-display: 40px;   --text-display--line-height: 1;
+  --text-h1: 32px;        --text-h1--line-height: 1.05;
+  --text-h2: 22px;        --text-h2--line-height: 1.15;
+  --text-label: 13px;     --text-label--line-height: 1;      /* Barlow 600, Versalien, .12em */
+  --text-body-l: 16px;    --text-body-l--line-height: 1.45;
+  --text-body: 14px;      --text-body--line-height: 1.45;
+  --text-body-s: 12.5px;  --text-body-s--line-height: 1.4;
+  --text-kbd: 10.5px;     --text-kbd--line-height: 1;
+
+  /* Abstände: Tailwind-Basis 4 px (p-1 = 4 px) bleibt. Benutzte Stufen:
+     0.5 (2) · 1 (4) · 1.5 (6) · 2 (8) · 3 (12) · 4 (16) · 5 (20) · 6 (24) · 8 (32) · 10 (40) · 14 (56) */
+  --spacing: 4px;
+
+  /* Radien */
+  --radius-xs: 2px;   /* Chips, Badges, Tastenhinweise */
+  --radius-sm: 3px;   /* Buttons, Inputs, Kartenrahmen klein */
+  --radius-md: 4px;   /* Panels, Modal, Kacheln */
+  --radius-card: 4.5%; /* Kartenbild (Scryfall-Ecken) */
+
+  /* Schatten: nur für schwebende Ebenen */
+  --shadow-float: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px var(--color-line-3);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,.8), 0 1px 3px rgba(0,0,0,.6);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-in-out: cubic-bezier(.6,0,.2,1);
+  --duration-1: 90ms;   /* Hover, Press */
+  --duration-2: 160ms;  /* Kartenzustand, Tabs, Toggles */
+  --duration-3: 240ms;  /* Modal, Toast, Minimieren */
+  --duration-4: 420ms;  /* Karte fliegt zwischen Zonen */
+  --duration-xp: 1200ms;
+
+  --animate-target: target-dash 1.6s linear infinite;
+  --animate-think: think 1.2s var(--ease-in-out) infinite;
+}
+
+@keyframes target-dash { to { stroke-dashoffset: -24; } }
+@keyframes think { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
+
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--color-bg-1); color: var(--color-fg-1);
+  font-family: var(--font-sans); font-size: 14px; -webkit-font-smoothing: antialiased;
+  overflow: hidden; user-select: none; font-variant-numeric: tabular-nums;
+}
+input, textarea, select { user-select: text; }
+a { color: var(--color-ember); } a:hover { color: var(--color-ember-hover); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+}
+
+/* ---------- Typo ---------- */
+@utility label { font-family: var(--font-display); font-weight: 600; font-size: var(--text-label); letter-spacing: .12em; text-transform: uppercase; color: var(--color-fg-3); }
+@utility num { font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Buttons ---------- */
+@utility btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 14px; border-radius: var(--radius-sm);
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
+  transition: background-color var(--duration-1), color var(--duration-1), box-shadow var(--duration-1), transform var(--duration-1);
+  &:active { transform: translateY(1px); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  &:disabled { opacity: .4; pointer-events: none; }
+}
+@utility btn-primary { @apply btn; background: var(--color-ember); color: var(--color-ember-ink); height: 44px; padding: 0 18px; font-size: 18px; &:hover { background: var(--color-ember-hover); } &:active { background: var(--color-ember-press); } }
+@utility btn-secondary { @apply btn; box-shadow: inset 0 0 0 1px var(--color-line-4); color: var(--color-fg-1); &:hover { background: var(--color-bg-4); } }
+@utility btn-ghost { @apply btn; color: var(--color-fg-2); &:hover { color: var(--color-fg-1); background: var(--color-bg-4); } }
+@utility btn-danger { @apply btn; color: var(--color-attack); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-attack) 50%, transparent); &:hover { background: color-mix(in oklab, var(--color-attack) 12%, transparent); } }
+@utility btn-danger-confirm { @apply btn; background: var(--color-attack); color: var(--color-ember-ink); }
+@utility btn-icon { @apply btn; width: 32px; height: 32px; padding: 0; color: var(--color-fg-3); &:hover { color: var(--color-fg-1); background: var(--color-bg-4); } }
+@utility kbd { font-family: var(--font-mono); font-weight: 500; font-size: var(--text-kbd); letter-spacing: 0; text-transform: none; padding: 3px 5px; border-radius: var(--radius-xs); background: color-mix(in oklab, currentColor 14%, transparent); }
+
+/* ---------- Flächen ---------- */
+@utility surface { background: var(--color-bg-3); border-radius: var(--radius-md); }
+@utility outline-panel { border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--color-line-3); }
+@utility section-rule { border-top: 1px solid var(--color-line-2); }
+@utility floating { background: var(--color-bg-3); border-radius: var(--radius-md); box-shadow: var(--shadow-float); }
+@utility scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-4) transparent; }
+
+/* ---------- Chips ---------- */
+@utility chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius-xs); font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+@utility chip-turn { @apply chip; background: var(--color-ember); color: var(--color-ember-ink); }
+@utility chip-outline { @apply chip; box-shadow: inset 0 0 0 1px var(--color-line-4); color: var(--color-fg-2); }
+
+/* ---------- Kartenzustände (CardView) ----------
+   Priorität bei mehreren Zuständen: gewählt > Ziel > Angreifer/Blocker > spielbar > Mana-Quelle.
+   Getappt (rotate 90°) und Overlays (P/T, Zähler, Schaden, krank) kombinieren sich frei. */
+@utility card-base { border-radius: var(--radius-card); box-shadow: var(--shadow-card); transition: box-shadow var(--duration-2) var(--ease-out), transform var(--duration-2) var(--ease-out); }
+@utility card-playable { box-shadow: 0 0 0 2px var(--color-ember), 0 0 0 4px var(--color-bg-1); }
+@utility card-mana { box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-ember) 55%, transparent); }
+@utility card-target { box-shadow: 0 0 0 2px var(--color-target), 0 0 0 4px var(--color-bg-1); } /* + umlaufende Strichkontur (SVG, --animate-target) */
+@utility card-chosen { box-shadow: 0 0 0 2px var(--color-chosen), 0 0 0 4px var(--color-bg-1); }
+@utility card-attacking { box-shadow: 0 0 0 2px var(--color-attack), 0 0 0 4px var(--color-bg-1); }
+@utility card-blocking { box-shadow: 0 0 0 2px var(--color-block), 0 0 0 4px var(--color-bg-1); }
+@utility card-tapped { transform: rotate(90deg); }

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mana-font@latest/css/mana.min.css">
+<link rel="stylesheet" href="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/colors_and_type.css">
+<script src="_ds/mtg-life-counter-design-system-74f2d694-556f-42d0-99bc-c530e117991a/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<style>
+body{margin:0;background:#121110;color:#ece7de;-webkit-font-smoothing:antialiased}
+a{color:#ff7a3d;text-decoration:none}a:hover{color:#ff8f5a}
+@keyframes mlDash{to{stroke-dashoffset:-24}}
+</style>
+</helmet>
+<div style="max-width:1440px; margin:0 auto; padding:56px clamp(20px, 4vw, 56px) 120px; display:flex; flex-direction:column; gap:88px; font-family:'IBM Plex Sans', sans-serif; font-size:14px; color:#ece7de">
+
+  <div style="display:flex; flex-direction:column; gap:14px">
+    <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.16em; color:#ff7a3d">MAGELITE · SCHRITT 3</span>
+    <h1 style="margin:0; font:600 64px/0.95 'Barlow Condensed'; letter-spacing:.02em; text-transform:uppercase">Designsystem Graphit &amp; Glut</h1>
+    <p style="margin:0; max-width:860px; font-size:17px; line-height:1.55; color:#c9c3b8; text-wrap:pretty">Grundregel: Glut-Orange heißt immer „jetzt du“ (am Zug, spielbar, Hauptaktion). Jede andere Farbe hat genau eine Bedeutung. Flächen trennen sich über Haarlinien und Flächenton, nicht über Glow oder Schatten. Tokens liegen als Tailwind-4-<span style="font-family:'IBM Plex Mono'; font-size:14px">@theme</span> in <span style="font-family:'IBM Plex Mono'; font-size:14px; color:#ece7de">magelite-theme.css</span>.</p>
+  </div>
+
+  <!-- 01 FARBEN -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">01</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Farben</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:28px">
+      <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="4">
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">{{ g.t }}</span>
+          <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="5">
+            <div style="display:flex; align-items:center; gap:12px">
+              <div style="width:44px; height:44px; flex:none; border-radius:3px; background:{{ c.v }}; box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)"></div>
+              <div style="display:flex; flex-direction:column; gap:3px; min-width:0"><span style="font:500 12px/1 'IBM Plex Mono'; color:#ece7de">{{ c.n }}</span><span style="font-size:12.5px; color:#9b958a">{{ c.v }} · {{ c.u }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:13px; color:#9b958a; line-height:1.5">Kontrast: fg-1 auf bg-1 15,4:1 · fg-2 11,0:1 · fg-3 6,4:1 · fg-4 3,6:1 (nur Icons und große Zahlen) · Ember-Ink auf Ember 7,0:1. Platzfarben erscheinen nur an Avatar-Kanten und im Spielverlauf, nie an Karten.</div>
+  </div>
+
+  <!-- 02 TYPO -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">02</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Typografie</span></div>
+    <div style="display:flex; flex-direction:column">
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">life-xl</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 84/0.8 · tabular</span><span style="font:600 84px/0.8 'Barlow Condensed'; font-variant-numeric:tabular-nums">29</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">life-l</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 46/0.8</span><span style="font:600 46px/0.8 'Barlow Condensed'">38 · 40 · 36</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">display</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 40/1 · Versalien .02em</span><span style="font:600 40px/1 'Barlow Condensed'; letter-spacing:.02em; text-transform:uppercase">Platz 1 · Level Up</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">h1</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 32/1.05 · Versalien</span><span style="font:600 32px/1.05 'Barlow Condensed'; letter-spacing:.03em; text-transform:uppercase">Deck importieren</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">h2</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 22/1.15 · normal</span><span style="font:600 22px/1.15 'Barlow Condensed'; letter-spacing:.02em">Merciless Rage · Ob Nixilis of the Black Oath</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">label</span><span style="font-size:12.5px; color:#9b958a">Barlow 600 · 13 · Versalien .12em</span><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">SPIELVERLAUF · COMMANDER-SCHADEN · LÄNDER</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">body-l</span><span style="font-size:12.5px; color:#9b958a">Plex 500 · 16/1.45</span><span style="font-size:16px; font-weight:500">Play spells and abilities</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">body</span><span style="font-size:12.5px; color:#9b958a">Plex 400 · 14/1.45</span><span style="font-size:14px; line-height:1.45; color:#c9c3b8">When Akoum Refuge enters the battlefield, you gain 1 life. Deck und Gegner wählen.</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">body-s</span><span style="font-size:12.5px; color:#9b958a">Plex 400 · 12.5/1.4</span><span style="font-size:12.5px; color:#9b958a">26 Züge · 1:31 min · heute</span></div>
+      <div style="display:grid; grid-template-columns:90px minmax(0,200px) minmax(0,1fr); gap:24px; align-items:baseline; padding:16px 0"><span style="font:500 12px/1 'IBM Plex Mono'">kbd</span><span style="font-size:12.5px; color:#9b958a">Plex Mono 500 · 10.5</span><span style="display:flex; gap:8px"><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">Space</span><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">F5</span><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">Esc</span><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">Tab</span></span></div>
+    </div>
+    <div style="font-size:13px; color:#9b958a; line-height:1.5; max-width:900px">Sprachmix: Versalien nur für eigene deutsche Labels und Buttons. Engine-Texte, Kartennamen und Dialogtitel aus der Engine stehen immer in Plex in Originalschreibung, damit lange englische Sätze lesbar bleiben. Alle Zahlen sind tabular.</div>
+  </div>
+
+  <!-- 03 ABSTÄNDE RADIEN -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">03</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Abstände · Radien · Ebenen</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:48px">
+      <div style="display:flex; flex-direction:column; gap:10px">
+        <sc-for list="{{ spaces }}" as="s" hint-placeholder-count="11">
+          <div style="display:flex; align-items:center; gap:14px"><span style="width:44px; font:500 12px/1 'IBM Plex Mono'; color:#9b958a">{{ s.k }}</span><span style="width:{{ s.v }}px; height:12px; background:#ff7a3d; border-radius:1px"></span><span style="font-size:12.5px; color:#c9c3b8">{{ s.v }} px · {{ s.u }}</span></div>
+        </sc-for>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px">
+        <div style="display:flex; align-items:center; gap:14px"><div style="width:56px; height:40px; border-radius:2px; box-shadow:inset 0 0 0 1px #4a463f"></div><span style="font-size:13px"><span style="font-family:'IBM Plex Mono'">xs 2</span> · Chips, Tastenhinweise</span></div>
+        <div style="display:flex; align-items:center; gap:14px"><div style="width:56px; height:40px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f"></div><span style="font-size:13px"><span style="font-family:'IBM Plex Mono'">sm 3</span> · Buttons, Inputs</span></div>
+        <div style="display:flex; align-items:center; gap:14px"><div style="width:56px; height:40px; border-radius:4px; box-shadow:inset 0 0 0 1px #4a463f"></div><span style="font-size:13px"><span style="font-family:'IBM Plex Mono'">md 4</span> · Panels, Modal, Kacheln</span></div>
+        <div style="display:flex; align-items:center; gap:14px"><div style="width:40px; height:56px; border-radius:4.5%/3.2%; box-shadow:inset 0 0 0 1px #4a463f"></div><span style="font-size:13px"><span style="font-family:'IBM Plex Mono'">card 4,5 %</span> · Kartenbild</span></div>
+        <div style="font-size:12.5px; color:#9b958a">Keine Pillen, keine runden Avatare. Avatare haben Radius 3.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <div style="padding:12px 14px; background:#121110; box-shadow:inset 0 0 0 1px #2a2824; border-radius:4px; font-size:13px"><b>Ebene 0</b> · Brett bg-1, Bereiche nur per Haarlinie</div>
+        <div style="padding:12px 14px; background:#1a1917; border-radius:4px; font-size:13px"><b>Ebene 1</b> · Fläche bg-3 (Aktionsleiste, Panels)</div>
+        <div style="padding:12px 14px; background:#23211e; border-radius:4px; font-size:13px"><b>Ebene 2</b> · erhöht bg-4 (Hover, Toast)</div>
+        <div style="padding:12px 14px; background:#1a1917; border-radius:4px; font-size:13px; box-shadow:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #34312c"><b>Ebene 3</b> · schwebend: Modal, Menü (einziger Schatten)</div>
+        <div style="font-size:12.5px; color:#9b958a">Scrim hinter Modals: rgba(13,12,11,.72), kein Blur.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 04 KOMPONENTEN -->
+  <div style="display:flex; flex-direction:column; gap:40px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">04</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Komponenten</span></div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Buttons</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">btn-primary · btn-secondary · btn-ghost · btn-danger · btn-icon</span></div>
+      <div style="display:flex; flex-direction:column; gap:20px">
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px">
+          <span style="display:flex; align-items:center; gap:10px; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">ZU MAIN 2<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16)">Space</span></span>
+          <span style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">BIS ZUGENDE<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">F5</span></span>
+          <span style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABBRECHEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824">Esc</span></span>
+          <span style="display:flex; align-items:center; height:40px; padding:0 14px; border-radius:3px; color:#ef3e56; box-shadow:inset 0 0 0 1px rgba(239,62,86,.5); font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ALLE ANGREIFEN</span>
+          <span style="display:flex; align-items:center; height:40px; padding:0 14px; border-radius:3px; background:#ef3e56; color:#121110; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">WIRKLICH ALLE?</span>
+          <span style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:3px; color:#9b958a; font-size:16px">{{ i.vol }}</span>
+          <span style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:3px; color:#9b958a; background:#23211e; font-size:16px">{{ i.x }}</span>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:24px">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">WEITER</span><span style="font-size:12px; color:#9b958a">Ruhe</span></div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#ff8f5a; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em">WEITER</span><span style="font-size:12px; color:#9b958a">Hover</span></div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#e8662b; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; transform:translateY(1px)">WEITER</span><span style="font-size:12px; color:#9b958a">Gedrückt +1 px</span></div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; outline:2px solid #ece7de; outline-offset:2px">WEITER</span><span style="font-size:12px; color:#9b958a">Fokus (Tastatur)</span></div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; height:44px; padding:0 18px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em; opacity:.4">WEITER</span><span style="font-size:12px; color:#9b958a">Deaktiviert 40 %</span></div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:8px"><span style="display:flex; align-items:center; gap:8px; height:44px; padding:0 18px; border-radius:3px; background:#23211e; color:#9b958a; font:600 18px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex; font-size:15px">{{ i.cpu }}</span>BOT RECHNET</span><span style="font-size:12px; color:#9b958a">Warten (keine Aktion)</span></div>
+        </div>
+        <div style="font-size:12.5px; color:#9b958a">Pro Bildschirm höchstens ein Primär-Button. Tastenhinweise stehen immer im Button, nicht daneben. Gefahr-Aktionen mit Bestätigung wechseln beim ersten Klick in die gefüllte Variante.</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Tabs · Segmented</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">Tabs · Segmented (inline, boxed)</span></div>
+      <div style="display:flex; flex-wrap:wrap; gap:48px; align-items:flex-start">
+        <div style="display:flex; flex-direction:column; gap:8px"><div style="display:flex; gap:24px; border-bottom:1px solid #2a2824; font:600 15px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="padding-bottom:10px; box-shadow:inset 0 -2px 0 #ff7a3d">ÜBERSICHT</span><span style="padding-bottom:10px; color:#7d786f">VERLAUF</span></div><span style="font-size:12px; color:#9b958a">Seiten-Tabs</span></div>
+        <div style="display:flex; flex-direction:column; gap:8px"><div style="display:flex; gap:14px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.08em; color:#7d786f"><span style="color:#ece7de; padding-bottom:3px; box-shadow:inset 0 -2px 0 #ff7a3d">BLITZ</span><span>NORMAL</span><span>BEDACHT</span><span>MAX</span></div><span style="font-size:12px; color:#9b958a">Segmented inline (Kopfleiste)</span></div>
+        <div style="display:flex; flex-direction:column; gap:8px"><div style="display:flex; padding:3px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:600 14px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="padding:8px 14px; border-radius:2px; background:#34312c">EINLADUNGSCODE</span><span style="padding:8px 14px; color:#9b958a">E-MAIL &amp; PASSWORT</span></div><span style="font-size:12px; color:#9b958a">Segmented boxed (Dialoge, Login, Import)</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Panels · Karten</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">surface · outline-panel · section-rule · DeckTile</span></div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:24px">
+        <div style="padding:20px; background:#1a1917; border-radius:4px; display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">SURFACE</span><span style="font-size:13px; color:#c9c3b8">Gefüllte Fläche für Aktionsleiste, Modal-Inhalt, Kacheln.</span></div>
+        <div style="padding:20px; border-radius:4px; box-shadow:inset 0 0 0 1px #34312c; display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">OUTLINE-PANEL</span><span style="font-size:13px; color:#c9c3b8">Sekundäre Karten wie „Neues Spiel“ oder leere Plätze.</span></div>
+        <div style="border-radius:4px; overflow:hidden; background:#1a1917; display:flex; flex-direction:column">
+          <div style="position:relative; height:120px; background:#23211e"><sc-if value="{{ u.anjeArt }}" hint-placeholder-val="{{ false }}"><img src="{{ u.anjeArt }}" alt="" style="width:100%; height:100%; object-fit:cover; display:block"></sc-if><span style="position:absolute; left:10px; top:10px; display:flex; align-items:center; gap:4px; padding:4px 6px; border-radius:2px; background:rgba(18,17,16,.85); color:#ffd23f; font:600 13px/1 'Barlow Condensed'; letter-spacing:.04em"><span style="display:flex; font-size:12px">{{ i.star }}</span>STUFE 3</span></div>
+          <div style="padding:12px 14px; display:flex; flex-direction:column; gap:8px">
+            <div style="display:flex; justify-content:space-between; align-items:center"><span style="font:600 20px/1 'Barlow Condensed'; letter-spacing:.02em">Merciless Rage</span><span style="display:flex; gap:2px"><i class="ms ms-b ms-cost"></i><i class="ms ms-r ms-cost"></i></span></div>
+            <span style="font-size:12.5px; color:#9b958a">Anje Falkenrath · 100 Karten</span>
+            <div style="height:3px; background:#2a2824"><div style="width:46%; height:100%; background:#ffd23f"></div></div>
+            <div style="display:flex; gap:6px; margin-top:4px"><span style="flex:1; display:flex; align-items:center; justify-content:center; gap:6px; height:34px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 14px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.play }}</span>SPIELEN</span><span style="display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8">{{ i.pencil }}</span><span style="display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:3px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8">{{ i.trash }}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Modal</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">Modal · minimiert (Tab)</span></div>
+      <div style="position:relative; height:440px; border-radius:4px; overflow:hidden; background:#121110; box-shadow:inset 0 0 0 1px #2a2824">
+        <div style="position:absolute; inset:0; background:repeating-linear-gradient(90deg, transparent 0 82px, #1a1917 82px 140px); opacity:.6"></div>
+        <div style="position:absolute; inset:0; background:rgba(13,12,11,.72)"></div>
+        <div style="position:absolute; left:32px; top:32px; width:min(520px, calc(100% - 64px)); background:#1a1917; border-radius:4px; box-shadow:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #34312c; display:flex; flex-direction:column">
+          <div style="display:flex; align-items:flex-start; gap:12px; padding:18px 20px 14px; border-bottom:1px solid #2a2824">
+            <div style="flex:1; display:flex; flex-direction:column; gap:6px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">FÄHIGKEIT WÄHLEN</span><span style="font-size:16px; font-weight:500">Choose ability to activate · Necropotence</span></div>
+            <span style="display:flex; align-items:center; gap:6px; height:28px; padding:0 8px; border-radius:3px; color:#9b958a; font:600 12px/1 'Barlow Condensed'; letter-spacing:.08em"><span style="display:flex">{{ i.min }}</span>MINIMIEREN<span style="font:500 10px/1 'IBM Plex Mono'; padding:2px 4px; border-radius:2px; background:#2a2824">Tab</span></span>
+          </div>
+          <div style="padding:12px; display:flex; flex-direction:column; gap:4px">
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:3px; background:rgba(255,122,61,.08); box-shadow:inset 0 0 0 1px #ff7a3d"><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">1</span><span style="font-size:14px">Pay 1 life: Exile the top card of your library face down.</span></div>
+            <div style="display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:3px"><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">2</span><span style="font-size:14px; color:#c9c3b8">Discard a card (Necropotence trigger)</span></div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; padding:12px 20px 18px">
+            <span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">WIEDERHOLEN</span>
+            <div style="display:flex; padding:3px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font:600 14px/1 'Barlow Condensed'"><span style="padding:6px 10px; border-radius:2px; background:#34312c">×1</span><span style="padding:6px 10px; color:#9b958a">×3</span><span style="padding:6px 10px; color:#9b958a">×5</span><span style="padding:6px 10px; color:#9b958a">×10</span></div>
+            <span style="flex:1"></span>
+            <span style="display:flex; align-items:center; gap:8px; height:40px; padding:0 12px; border-radius:3px; color:#c9c3b8; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">ABBRECHEN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824">Esc</span></span>
+            <span style="display:flex; align-items:center; gap:8px; height:40px; padding:0 14px; border-radius:3px; background:#ff7a3d; color:#121110; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em">AKTIVIEREN<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:rgba(18,17,16,.16)">Space</span></span>
+          </div>
+        </div>
+        <div style="position:absolute; right:48px; bottom:48px; display:flex; flex-direction:column; align-items:center; gap:12px">
+          <span style="display:flex; align-items:center; gap:10px; height:40px; padding:0 8px 0 14px; border-radius:3px; background:#23211e; box-shadow:0 12px 32px rgba(0,0,0,.5), 0 0 0 1px #ff7a3d; font:600 15px/1 'Barlow Condensed'; letter-spacing:.06em"><span style="width:7px; height:7px; background:#ff7a3d"></span>DIALOG ÖFFNEN · Fähigkeit wählen<span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#c9c3b8">Tab</span></span>
+          <span style="font-size:12px; color:#9b958a">Minimiert: Pille unten mittig über der Aktionsleiste, Scrim entfällt</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Toast · Chips</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">Toast · chip-turn · chip-outline · Badge</span></div>
+      <div style="display:flex; flex-direction:column; gap:20px">
+        <div style="display:flex; flex-wrap:wrap; gap:12px">
+          <div style="display:flex; align-items:center; gap:10px; padding:10px 10px 10px 14px; border-radius:3px; background:#23211e; box-shadow:0 12px 32px rgba(0,0,0,.45); font-size:13.5px"><span style="display:flex; color:#5aa9ff; font-size:16px">{{ i.info }}</span>Kotori ist wieder verbunden<span style="display:flex; color:#6f6a62; padding:4px">{{ i.x }}</span></div>
+          <div style="display:flex; align-items:center; gap:10px; padding:10px 10px 10px 14px; border-radius:3px; background:#23211e; box-shadow:0 12px 32px rgba(0,0,0,.45); font-size:13.5px"><span style="display:flex; color:#7ee08a; font-size:16px">{{ i.check }}</span>Deck gespeichert<span style="display:flex; color:#6f6a62; padding:4px">{{ i.x }}</span></div>
+          <div style="display:flex; align-items:center; gap:10px; padding:10px 10px 10px 14px; border-radius:3px; background:#2a1619; box-shadow:0 12px 32px rgba(0,0,0,.45), inset 0 0 0 1px rgba(239,62,86,.4); font-size:13.5px"><span style="display:flex; color:#ef3e56; font-size:16px">{{ i.alert }}</span>Not enough mana to cast Archfiend of Despair<span style="display:flex; color:#6f6a62; padding:4px">{{ i.x }}</span></div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.08em">
+          <span style="padding:5px 8px; border-radius:2px; background:#ff7a3d; color:#121110">AM ZUG</span>
+          <span style="display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8"><span style="display:flex">{{ i.cpu }}</span>DENKT</span>
+          <span style="display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(239,62,86,.5); color:#ef3e56"><span style="display:flex">{{ i.wifi }}</span>GETRENNT 12 S</span>
+          <span style="display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8"><span style="display:flex">{{ i.bot }}</span>BOT</span>
+          <span style="display:flex; align-items:center; gap:5px; padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px #4a463f; color:#c9c3b8"><span style="display:flex">{{ i.user }}</span>MENSCH · BEREIT</span>
+          <span style="padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(126,224,138,.45); color:#7ee08a">100 KARTEN</span>
+          <span style="padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(239,62,86,.5); color:#ef3e56">NICHT LEGAL</span>
+          <span style="padding:5px 8px; border-radius:2px; box-shadow:inset 0 0 0 1px rgba(255,210,63,.45); color:#ffd23f">1 FEHLT</span>
+          <span style="display:flex; align-items:center; gap:6px; padding:3px 4px 3px 8px; border-radius:2px; background:#23211e; color:#c9c3b8">DREDGE 5 · ABGELEHNT<span style="display:flex; padding:2px; color:#9b958a">{{ i.x }}</span></span>
+          <span style="padding:3px 5px; border-radius:2px; background:#121110; box-shadow:inset 0 0 0 1px #3a362f; color:#ece7de; font-size:12px">×4</span>
+        </div>
+        <div style="font-size:12.5px; color:#9b958a">Toasts oben mittig, maximal drei gleichzeitig, Info und Erfolg verschwinden nach 4 s, Fehler bleiben bis zum Klick. Engine-Fehlertexte bleiben englisch.</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Tabelle</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">Statistik, Verlauf, Einladungen</span></div>
+      <div style="display:flex; flex-direction:column">
+        <div style="display:grid; grid-template-columns:minmax(150px,2fr) repeat(4,minmax(48px,1fr)) minmax(120px,1.5fr); gap:16px; padding:0 12px 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>DECK</span><span style="text-align:right">SPIELE</span><span style="text-align:right">SIEGE</span><span style="text-align:right">QUOTE</span><span style="text-align:right">Ø PLATZ</span><span>MEISTERSCHAFT</span></div>
+        <sc-for list="{{ table }}" as="r" hint-placeholder-count="3">
+          <div style="display:grid; grid-template-columns:minmax(150px,2fr) repeat(4,minmax(48px,1fr)) minmax(120px,1.5fr); gap:16px; align-items:center; padding:11px 12px; border-bottom:1px solid #22201d; background:{{ r.bg }}">
+            <span style="display:flex; align-items:center; gap:12px; min-width:0"><img src="{{ r.art }}" alt="" style="width:44px; height:30px; border-radius:2px; object-fit:cover; background:#23211e"><span style="font-size:14px; font-weight:600">{{ r.deck }}</span></span>
+            <span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.g }}</span>
+            <span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.w }}</span>
+            <span style="text-align:right; font:600 17px/1 'Barlow Condensed'; color:{{ r.qc }}">{{ r.q }}</span>
+            <span style="text-align:right; font:600 17px/1 'Barlow Condensed'">{{ r.p }}</span>
+            <span style="display:flex; align-items:center; gap:10px"><span style="display:flex; align-items:center; gap:3px; font:600 15px/1 'Barlow Condensed'; color:#ffd23f; width:34px"><span style="display:flex; font-size:12px">{{ i.star }}</span>{{ r.lvl }}</span><span style="flex:1; height:3px; background:#2a2824"><span style="display:block; width:{{ r.pct }}%; height:100%; background:#ffd23f"></span></span></span>
+          </div>
+        </sc-for>
+        <div style="font-size:12.5px; color:#9b958a; padding-top:12px">Zahlen rechtsbündig in Barlow. Zeilen-Hover bg-4, gewählte Zeile wie Hover plus Ember-Kante links an der Zeile. Nullwerte als „–“, nie „+0 XP“.</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Fortschritt</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">XpBar · XpRing · MasteryBar · CpuBar</span></div>
+      <div style="display:flex; gap:56px; align-items:center; flex-wrap:wrap">
+        <div style="position:relative; width:112px; height:112px">
+          <svg width="112" height="112" viewBox="0 0 112 112"><circle cx="56" cy="56" r="50" fill="none" stroke="#2a2824" stroke-width="4"></circle><circle cx="56" cy="56" r="50" fill="none" stroke="#ffd23f" stroke-width="4" stroke-dasharray="314.2" stroke-dashoffset="281.5" transform="rotate(-90 56 56)"></circle></svg>
+          <div style="position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px"><span style="font:600 11px/1 'Barlow Condensed'; letter-spacing:.14em; color:#9b958a">LEVEL</span><span style="font:600 44px/0.85 'Barlow Condensed'">3</span></div>
+        </div>
+        <div style="width:360px; display:flex; flex-direction:column; gap:8px"><div style="display:flex; justify-content:space-between; font-size:13px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">ERFAHRUNG</span><span style="font:600 16px/1 'Barlow Condensed'; color:#ffd23f">+190 XP</span></div><div style="position:relative; height:4px; background:#2a2824"><div style="position:absolute; left:0; top:0; bottom:0; width:10.4%; background:#ffd23f"></div><div style="position:absolute; left:10.4%; top:0; bottom:0; width:28.7%; background:rgba(255,210,63,.4)"></div></div><span style="font-size:12.5px; color:#9b958a">Bestand voll, neu verdiente XP halbtransparent, dann füllt sich der Balken</span></div>
+        <div style="width:220px; display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">MEISTERSCHAFT</span><div style="height:3px; background:#2a2824"><div style="width:46%; height:100%; background:#ffd23f"></div></div></div>
+        <div style="width:180px; display:flex; flex-direction:column; gap:8px"><span style="display:flex; align-items:center; gap:6px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span style="display:flex">{{ i.cpu }}</span>BOT RECHNET</span><div style="height:2px; background:#2a2824"><div style="width:62%; height:100%; background:#c9c3b8"></div></div></div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Eingabe</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">TextField · PasswordInput · Search · Toggle · Checkbox</span></div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:24px">
+        <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">DECK-LINK</span><div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px; color:#6f6a62"><span style="display:flex">{{ i.link }}</span>archidekt.com/decks/… oder moxfield.com/…</div><span style="font-size:12px; color:#9b958a">Ruhe</span></div>
+        <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">E-MAIL</span><div style="height:40px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #ff7a3d; font-size:14px">anna@example.de<span style="width:1px; height:18px; background:#ece7de; margin-left:1px"></span></div><span style="font-size:12px; color:#9b958a">Fokus: Kontur Ember</span></div>
+        <div style="display:flex; flex-direction:column; gap:7px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a">EINLADUNGSCODE</span><div style="height:40px; display:flex; align-items:center; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #ef3e56; font:500 14px/1 'IBM Plex Mono'; letter-spacing:.1em">MAGE-7Q2K-X</div><span style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:#ef3e56"><span style="display:flex">{{ i.alert }}</span>Code unbekannt oder abgelaufen</span></div>
+        <div style="display:flex; flex-direction:column; gap:7px"><div style="height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-radius:3px; background:#0d0c0b; box-shadow:inset 0 0 0 1px #34312c; font-size:14px; color:#6f6a62"><span style="display:flex">{{ i.search }}</span>Deck suchen<span style="flex:1"></span><span style="font:500 10.5px/1 'IBM Plex Mono'; padding:3px 5px; border-radius:2px; background:#2a2824; color:#9b958a">/</span></div></div>
+        <div style="display:flex; flex-direction:column; gap:12px">
+          <div style="display:flex; align-items:center; gap:12px; font-size:14px"><span style="position:relative; width:34px; height:20px; border-radius:2px; background:#ff7a3d"><span style="position:absolute; right:3px; top:3px; width:14px; height:14px; border-radius:1px; background:#121110"></span></span>Auto-Mana</div>
+          <div style="display:flex; align-items:center; gap:12px; font-size:14px; color:#c9c3b8"><span style="position:relative; width:34px; height:20px; border-radius:2px; background:#34312c"><span style="position:absolute; left:3px; top:3px; width:14px; height:14px; border-radius:1px; background:#9b958a"></span></span>Effekte</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; font-size:14px; align-self:start"><span style="width:18px; height:18px; border-radius:2px; background:#ff7a3d; color:#121110; display:flex; align-items:center; justify-content:center; font-size:13px">{{ i.check }}</span>Für dieses Spiel merken</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Leben · Zonen</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">LifeTotal · ZoneCounter · CommanderDamage</span></div>
+      <div style="display:flex; flex-wrap:wrap; gap:56px; align-items:flex-end">
+        <div style="display:flex; flex-direction:column; gap:10px"><div style="position:relative"><span style="font:600 84px/0.8 'Barlow Condensed'">29</span><span style="position:absolute; right:-44px; top:-6px; font:600 22px/1 'Barlow Condensed'; color:#ef3e56">−6</span></div><span style="font-size:12px; color:#9b958a">eigenes Leben · Delta schwebt 1,2 s</span></div>
+        <div style="display:flex; flex-direction:column; gap:10px"><span style="font:600 46px/0.8 'Barlow Condensed'">38</span><span style="font-size:12px; color:#9b958a">Gegner</span></div>
+        <div style="display:flex; flex-direction:column; gap:10px"><span style="font:600 46px/0.8 'Barlow Condensed'; color:#ef3e56">7</span><span style="font-size:12px; color:#9b958a">≤ 10 Leben: Karmin</span></div>
+        <div style="display:flex; flex-direction:column; gap:10px"><span style="font:600 46px/0.8 'Barlow Condensed'; color:#5a564f">0</span><span style="font-size:12px; color:#9b958a">ausgeschieden</span></div>
+        <div style="display:flex; flex-direction:column; gap:10px">
+          <div style="display:flex; gap:16px; font:600 16px/1 'Barlow Condensed'; color:#c9c3b8">
+            <span style="display:flex; align-items:center; gap:6px"><span style="display:flex; color:#6f6a62; font-size:14px">{{ i.lib }}</span>82</span>
+            <span style="display:flex; align-items:center; gap:6px"><span style="display:flex; color:#6f6a62; font-size:14px">{{ i.hand }}</span>6</span>
+            <span style="display:flex; align-items:center; gap:6px; color:#ff7a3d"><span style="display:flex; font-size:14px">{{ i.gy }}</span>5</span>
+            <span style="display:flex; align-items:center; gap:6px"><span style="display:flex; color:#6f6a62; font-size:14px">{{ i.ex }}</span>0</span>
+          </div>
+          <span style="font-size:12px; color:#9b958a">Zone geändert: 600 ms Ember, dann zurück. Tooltip nennt die Zone.</span>
+        </div>
+        <div style="width:220px; display:flex; flex-direction:column; gap:8px">
+          <div style="display:flex; align-items:center; gap:8px; font-size:13px"><span style="display:flex; color:#ef3e56">{{ i.swords }}</span>Kotori<span style="flex:1"></span><span style="font:600 18px/1 'Barlow Condensed'">8<span style="color:#6f6a62"> / 21</span></span></div><div style="height:3px; background:#2a2824"><div style="width:38%; height:100%; background:#ef3e56"></div></div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:13px; margin-top:6px"><span style="display:flex; color:#ef3e56">{{ i.swords }}</span>Teferi<span style="flex:1"></span><span style="padding:3px 5px; border-radius:2px; background:#ef3e56; color:#121110; font:600 15px/1 'Barlow Condensed'">21 TÖDLICH</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px">
+      <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; padding-bottom:10px; border-bottom:1px solid #22201d"><span style="font:600 18px/1 'Barlow Condensed'; letter-spacing:.06em; text-transform:uppercase">Phasenleiste</span><span style="font:500 11px/1.5 'IBM Plex Mono'; color:#9b958a">PhaseBar</span></div>
+      <div style="display:flex; flex-direction:column; gap:20px">
+        <sc-for list="{{ phaseRows }}" as="row" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <div style="max-width:100%; overflow-x:auto"><div style="display:flex; align-items:stretch; height:44px; width:max-content; box-shadow:inset 0 -1px 0 #2a2824">
+              <sc-for list="{{ row.items }}" as="ph" hint-placeholder-count="11"><div style="position:relative; display:flex; align-items:center; padding:0 10px; font:600 13px/1 'Barlow Condensed'; letter-spacing:.06em; color:{{ ph.fg }}; background:{{ ph.bg }}; border-left:{{ ph.sep }}">{{ ph.l }}<span style="position:absolute; left:0; right:0; bottom:0; height:3px; background:{{ ph.bar }}"></span></div></sc-for>
+            </div></div>
+            <span style="font-size:12px; color:#9b958a">{{ row.t }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:12.5px; color:#9b958a">Erledigte Schritte in fg-5, Kampfschritte auf eigener Tönung. Unter 1440 px Breite fasst die Leiste Anfang und Kampf zu je einem Segment zusammen und klappt das aktive Segment auf.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 05 ICONS -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">05</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Icon-Set</span><span style="font-size:14px; color:#9b958a">Lucide · 24er Raster · Strich 1,5 · rund · currentColor · 14/16/20/24 px</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(190px,1fr)); gap:1px; background:#22201d; box-shadow:0 0 0 1px #22201d">
+      <sc-for list="{{ icons }}" as="ic" hint-placeholder-count="48">
+        <div style="display:flex; align-items:center; gap:12px; padding:12px 14px; background:#121110">
+          <span style="display:flex; font-size:20px; color:#ece7de">{{ ic.el }}</span>
+          <div style="display:flex; flex-direction:column; gap:3px; min-width:0"><span style="font-size:13px">{{ ic.t }}</span><span style="font:500 10.5px/1 'IBM Plex Mono'; color:#6f6a62">{{ ic.n }}</span></div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size:12.5px; color:#9b958a">Icons sind immer einfarbig. Farbe bekommen sie nur über den Zustand ihres Trägers. Neben Zahlen stehen Icons in fg-4. Manasymbole bleiben mana-font.</div>
+  </div>
+
+  <!-- 06 KARTENZUSTÄNDE -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">06</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Kartenzustände · Hervorhebung</span></div>
+    <div style="display:flex; gap:34px; flex-wrap:wrap; padding:18px 6px 4px">
+      <sc-for list="{{ cardStates }}" as="s" hint-placeholder-count="11">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:14px; width:{{ s.box }}px">
+          <dc-import name="BoardCard" v="c" w="72" n="{{ s.n }}" st="{{ s.st }}" tap="{{ s.tap }}" pt="{{ s.pt }}" sick="{{ s.sick }}" dmg="{{ s.dmg }}" ctr="{{ s.ctr }}" mod="{{ s.mod }}" hint-size="72px,101px"></dc-import>
+          <span style="font:600 13px/1.2 'Barlow Condensed'; letter-spacing:.08em; text-align:center; color:#c9c3b8">{{ s.l }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex; flex-direction:column">
+      <div style="display:grid; grid-template-columns:minmax(110px,150px) minmax(160px,1.6fr) minmax(90px,120px) minmax(110px,1fr) 40px; gap:20px; padding:0 0 10px; border-bottom:1px solid #34312c; font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#9b958a"><span>ZUSTAND</span><span>DARSTELLUNG</span><span>FARBE</span><span>BEWEGUNG</span><span>RANG</span></div>
+      <sc-for list="{{ stateRules }}" as="r" hint-placeholder-count="10">
+        <div style="display:grid; grid-template-columns:minmax(110px,150px) minmax(160px,1.6fr) minmax(90px,120px) minmax(110px,1fr) 40px; gap:20px; padding:11px 0; border-bottom:1px solid #22201d; font-size:13.5px; align-items:center">
+          <span style="font-weight:600">{{ r.z }}</span><span style="color:#c9c3b8">{{ r.d }}</span><span style="display:flex; align-items:center; gap:8px"><span style="width:14px; height:14px; border-radius:2px; background:{{ r.c }}"></span><span style="font:500 11px/1 'IBM Plex Mono'; color:#9b958a">{{ r.cn }}</span></span><span style="color:#9b958a">{{ r.m }}</span><span style="font:600 16px/1 'Barlow Condensed'">{{ r.p }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:24px; font-size:13.5px; line-height:1.5; color:#c9c3b8">
+      <div><b style="color:#ece7de">Rangfolge.</b> Treffen mehrere Rahmen-Zustände zusammen, gewinnt der niedrigste Rang. Getappt und alle Overlays kombinieren sich frei.</div>
+      <div><b style="color:#ece7de">Gegner-Pods.</b> Dort gibt es nur Ziel, Angreifer und Blocker. Spielbar und Mana-Quelle sind ausschließlich eigene Zustände.</div>
+      <div><b style="color:#ece7de">Hover.</b> Karte hebt sich 4 px, Zoom rechts zeigt sie sofort ohne Verzögerung. Gibt es kein Bild, zeigt der Textrahmen Name, Kosten und Typ auf bg-4 mit Farbkante.</div>
+    </div>
+  </div>
+
+  <!-- 07 MOTION -->
+  <div style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; align-items:baseline; gap:16px; border-bottom:1px solid #34312c; padding-bottom:14px"><span style="font:600 15px/1 'Barlow Condensed'; color:#ff7a3d">07</span><span style="font:600 30px/1 'Barlow Condensed'; letter-spacing:.04em; text-transform:uppercase">Motion</span></div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px,1fr)); gap:48px">
+      <div style="display:flex; flex-direction:column">
+        <sc-for list="{{ durations }}" as="d" hint-placeholder-count="5">
+          <div style="display:grid; grid-template-columns:110px 70px minmax(0,1fr); gap:16px; align-items:center; padding:11px 0; border-bottom:1px solid #22201d"><span style="font:500 12px/1 'IBM Plex Mono'">{{ d.k }}</span><span style="font:600 18px/1 'Barlow Condensed'; color:#ff7a3d">{{ d.v }}</span><span style="font-size:13.5px; color:#c9c3b8">{{ d.u }}</span></div>
+        </sc-for>
+        <div style="display:flex; flex-direction:column; gap:6px; padding-top:16px; font-size:13.5px; color:#c9c3b8"><span><span style="font-family:'IBM Plex Mono'; font-size:12px; color:#ece7de">ease-out</span> cubic-bezier(.2,.8,.2,1) · Standard für alles, was erscheint</span><span><span style="font-family:'IBM Plex Mono'; font-size:12px; color:#ece7de">ease-in-out</span> cubic-bezier(.6,0,.2,1) · Bewegung zwischen zwei Orten</span><span><span style="font-family:'IBM Plex Mono'; font-size:12px; color:#ece7de">motion</span> spring stiffness 520, damping 44, ohne Überschwingen · FX-Ebene</span></div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:28px; font-size:13.5px; line-height:1.55">
+        <div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#7ee08a">WIRD ANIMIERT</span><span style="color:#c9c3b8">Karten zwischen Zonen (Hand → Feld, Feld → Friedhof)</span><span style="color:#c9c3b8">Tappen und Enttappen (Rotation, 160 ms)</span><span style="color:#c9c3b8">Zustandswechsel der Kartenrahmen</span><span style="color:#c9c3b8">Lebens-Delta schwebt und blendet aus</span><span style="color:#c9c3b8">Ziel-Kontur läuft um (einzige Endlosschleife)</span><span style="color:#c9c3b8">Modal, Toast, Minimieren (Opazität + 8 px)</span><span style="color:#c9c3b8">XP zählt hoch, Level-Up einmalig</span></div>
+        <div style="display:flex; flex-direction:column; gap:8px"><span style="font:600 13px/1 'Barlow Condensed'; letter-spacing:.12em; color:#ef3e56">WIRD NICHT ANIMIERT</span><span style="color:#c9c3b8">Umbruch und Neuordnung des Spielfelds (sofort)</span><span style="color:#c9c3b8">Phasenwechsel (harter Schnitt, kein Gleiten)</span><span style="color:#c9c3b8">Neue Verlaufszeilen (erscheinen einfach)</span><span style="color:#c9c3b8">Wechsel zwischen Screens (höchstens 120 ms Überblendung)</span><span style="color:#c9c3b8">Kein Wackeln, kein Konfetti, kein Glühen, kein Pulsieren bei spielbar</span><span style="color:#c9c3b8">Bei Bot-Tempo Blitz Flugzeiten halbiert; bei reduzierter Bewegung nur Überblendungen</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { u: {} };
+  componentDidMount() {
+    if (!window.__sf) {
+      const cache = {}, q = []; let busy = false;
+      const pump = () => { if (busy || !q.length) return; busy = true; const [n, res] = q.shift();
+        fetch('https://api.scryfall.com/cards/named?exact=' + encodeURIComponent(n)).then(r => r.json()).then(j => res(j.image_uris || (j.card_faces && j.card_faces[0].image_uris) || {})).catch(() => res({}))
+          .finally(() => setTimeout(() => { busy = false; pump(); }, 110)); };
+      window.__sf = n => cache[n] || (cache[n] = new Promise(res => { q.push([n, res]); pump(); }));
+    }
+    ['Anje Falkenrath', 'Sliver Gravemother', 'Lathril, Blade of the Elves'].forEach(n => window.__sf(n).then(u => this.setState(s => ({ u: { ...s.u, [n]: u } }))));
+    if (!window.lucide) this.t = setInterval(() => { if (window.lucide) { clearInterval(this.t); this.forceUpdate(); } }, 150);
+  }
+  componentWillUnmount() { clearInterval(this.t); }
+  ico(names) {
+    const L = window.lucide; if (!L || !L.icons) return null;
+    let node; for (const n of names) if (L.icons[n]) { node = L.icons[n]; break; }
+    if (!node) return null; if (node[0] === 'svg') node = node[2];
+    return React.createElement('svg', { width: '1em', height: '1em', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block' } },
+      node.map(([t, a], k) => React.createElement(t, { ...a, key: k })));
+  }
+  renderVals() {
+    const art = n => (this.state.u[n] || {}).art_crop;
+    const I = {};
+    const map = { vol: ['Volume2'], x: ['X'], cpu: ['Cpu'], star: ['Star'], play: ['Play'], pencil: ['Pencil'], trash: ['Trash2'], min: ['Minimize2'], info: ['Info'], check: ['Check'], alert: ['TriangleAlert', 'AlertTriangle'], wifi: ['WifiOff'], bot: ['Bot'], user: ['User'], link: ['Link'], search: ['Search'], lib: ['BookCopy', 'Library'], hand: ['Hand'], gy: ['Skull'], ex: ['Orbit', 'CircleDashed'], swords: ['Swords'] };
+    for (const k in map) I[k] = this.ico(map[k]);
+    const iconList = [
+      ['Held', 'Shield'], ['Spielen', 'Swords'], ['Decks', 'Layers'], ['Statistik', 'ChartColumn|BarChart3'], ['Einladungen', 'Ticket'], ['Konto', 'CircleUser|UserCircle'],
+      ['Zum Tisch', 'LogIn'], ['Lobby', 'LayoutGrid'], ['Bibliothek', 'BookCopy|Library'], ['Hand', 'Hand'], ['Friedhof', 'Skull'], ['Exil', 'Orbit|CircleDashed'],
+      ['Commander', 'Crown'], ['Commander-Schaden', 'Swords'], ['Beschwörungskrank', 'Moon'], ['Stapel', 'Layers2|Layers'], ['Auto-Mana', 'Zap'], ['Auto-Passen', 'FastForward'],
+      ['Ton an', 'Volume2'], ['Ton aus', 'VolumeX'], ['Menü', 'Menu'], ['Bot', 'Bot'], ['denkt', 'Cpu'], ['Mensch', 'User'],
+      ['getrennt', 'WifiOff'], ['Chat', 'MessageSquare'], ['Verlauf', 'History'], ['Ziel', 'Crosshair'], ['Blocker', 'Shield'], ['gewählt', 'Check'],
+      ['Fehler', 'TriangleAlert|AlertTriangle'], ['Info', 'Info'], ['Suche', 'Search'], ['Zufällig', 'Shuffle'], ['Importieren', 'Download'], ['Link', 'Link'],
+      ['Bearbeiten', 'Pencil'], ['Löschen', 'Trash2'], ['Kopieren', 'Copy'], ['Code rotieren', 'RefreshCw'], ['Sieg', 'Trophy'], ['Serie', 'Flame'],
+      ['Meisterschaft', 'Star'], ['Level-Up', 'ChevronsUp'], ['Tempo', 'Gauge'], ['Einladungscode', 'KeyRound'], ['Minimieren', 'Minimize2'], ['Aufgeben', 'Flag'],
+      ['Zuschauen', 'Eye'], ['Abmelden', 'LogOut'], ['Schließen', 'X'], ['Starten', 'Play'], ['Passwort zeigen', 'Eye'], ['Aufgedeckt', 'ScanEye|Eye']
+    ].map(([t, n]) => ({ t, n: n.split('|')[0], el: this.ico(n.split('|')) }));
+    const C = { bg1: '#121110' };
+    const phRow = (cur, compact) => ['Enttappen', 'Versorgung', 'Ziehen', 'Main 1', 'Kampfbeginn', 'Angreifer', 'Blocker', 'Schaden', 'Kampfende', 'Main 2', 'Ende'].map((l, i) => {
+      const combat = i >= 4 && i <= 8;
+      return { l: l.toUpperCase(), fg: i < cur ? '#5a564f' : i === cur ? '#ff7a3d' : combat ? '#b3ada3' : '#d8d2c7', bg: i === cur ? 'rgba(255,122,61,.08)' : combat ? '#1a1917' : 'transparent', bar: i === cur ? '#ff7a3d' : 'transparent', sep: (i === 4 || i === 9) ? '1px solid #34312c' : '0' };
+    });
+    return {
+      i: I, u: { anjeArt: art('Anje Falkenrath') },
+      colorGroups: [
+        { t: 'FLÄCHEN', items: [{ n: 'bg-0', v: '#0d0c0b', u: 'Fenster, Inputs' }, { n: 'bg-1', v: '#121110', u: 'Brett, Screens' }, { n: 'bg-2', v: '#161513', u: 'Seitenleiste' }, { n: 'bg-3', v: '#1a1917', u: 'Fläche, Modal' }, { n: 'bg-4', v: '#23211e', u: 'Hover, Toast' }] },
+        { t: 'LINIEN · TEXT', items: [{ n: 'line-2', v: '#2a2824', u: 'Trenner' }, { n: 'line-3', v: '#34312c', u: 'Konturen' }, { n: 'fg-1', v: '#ece7de', u: 'primär' }, { n: 'fg-2', v: '#c9c3b8', u: 'Regeltext' }, { n: 'fg-3', v: '#9b958a', u: 'Labels, Meta' }] },
+        { t: 'SIGNAL · ZUSTÄNDE', items: [{ n: 'ember', v: '#ff7a3d', u: 'jetzt du' }, { n: 'target', v: '#ffd23f', u: 'Ziel, XP' }, { n: 'chosen', v: '#7ee08a', u: 'gewählt, Erfolg' }, { n: 'attack', v: '#ef3e56', u: 'Angriff, Fehler' }, { n: 'block', v: '#5aa9ff', u: 'Blocker, Info' }] },
+        { t: 'PLÄTZE', items: [{ n: 'seat-1', v: '#ff7a3d', u: 'Du' }, { n: 'seat-2', v: '#8fb3c9', u: 'Platz 2' }, { n: 'seat-3', v: '#a99bc4', u: 'Platz 3' }, { n: 'seat-4', v: '#c9a38f', u: 'Platz 4' }, { n: 'fg-4', v: '#6f6a62', u: 'Icons inaktiv' }] }
+      ],
+      spaces: [[0.5, 2, 'Icon zu Zahl eng'], [1, 4, 'Chip-Innenabstand'], [1.5, 6, 'Kartenstapel, Listen'], [2, 8, 'Button-Gap'], [3, 12, 'Karten im Feld'], [4, 16, 'Panel-Innenabstand'], [5, 20, 'Modal-Innenabstand'], [6, 24, 'Bereichsabstand'], [8, 32, 'Meta-Spalten'], [10, 40, 'Sektionen'], [14, 56, 'Screen-Rand']].map(([k, v, u]) => ({ k: k, v, u })),
+      table: [
+        { deck: 'Merciless Rage', art: art('Anje Falkenrath'), g: 6, w: 2, q: '33 %', qc: '#ece7de', p: '2,0', lvl: 3, pct: 46, bg: '#23211e' },
+        { deck: 'Sliver Swarm', art: art('Sliver Gravemother'), g: 2, w: 0, q: '–', qc: '#6f6a62', p: '2,5', lvl: 1, pct: 72, bg: 'transparent' },
+        { deck: 'Elven Council', art: art('Lathril, Blade of the Elves'), g: 1, w: 0, q: '–', qc: '#6f6a62', p: '4,0', lvl: 1, pct: 12, bg: 'transparent' }
+      ],
+      phaseRows: [{ t: 'Eigener Zug · Main 1', items: phRow(3) }, { t: 'Kampf · Blocker wählen', items: phRow(6) }],
+      icons: iconList,
+      cardStates: [
+        { l: 'RUHE', n: 'Bloodhall Priest', st: '' }, { l: 'SPIELBAR', n: 'Bloodhall Priest', st: 'play' }, { l: 'MANA-QUELLE', n: 'Akoum Refuge', st: 'mana' },
+        { l: 'ZIEL', n: 'Bloodhall Priest', st: 'target' }, { l: 'GEWÄHLT', n: 'Bloodhall Priest', st: 'chosen' }, { l: 'ANGREIFER', n: 'Bloodhall Priest', st: 'attack', tap: true, box: 101 },
+        { l: 'BLOCKER', n: 'Bloodhall Priest', st: 'block' }, { l: 'GETAPPT', n: 'Akoum Refuge', tap: true, box: 101 }, { l: 'KRANK', n: "Anje's Ravager", pt: '3/3', sick: true },
+        { l: 'SCHADEN · P/T GEÄNDERT', n: 'Bloodhall Priest', pt: '5/5', mod: true, dmg: 2, box: 110 }, { l: 'ZÄHLER', n: 'Stromkirk Occultist', pt: '4/3', ctr: '+1/+1', mod: true }
+      ].map(s => ({ st: '', tap: false, pt: '', sick: false, dmg: 0, ctr: '', mod: false, box: 86, ...s })),
+      stateRules: [
+        { z: 'Spielbar', d: '2 px Kontur, 2 px Abstand in Brettfarbe. Hand: Karte 6 px angehoben.', c: '#ff7a3d', cn: 'ember', m: 'Ein 160 ms', p: '4' },
+        { z: 'Mana-Quelle', d: '1 px Kontur 55 %. Nur wenn Auto-Mana aus oder Kosten offen.', c: 'rgba(255,122,61,.55)', cn: 'ember/55', m: 'Ein 160 ms', p: '5' },
+        { z: 'Mögliches Ziel', d: '2 px Kontur plus Fadenkreuz-Abzeichen; ganzer Pod bei Spielerzielen.', c: '#ffd23f', cn: 'target', m: 'Strichkontur läuft 1,6 s', p: '2' },
+        { z: 'Gewählt', d: '2 px Kontur plus Häkchen-Abzeichen; Zähler „N markiert“ in der Aktionsleiste.', c: '#7ee08a', cn: 'chosen', m: 'Ein 90 ms', p: '1' },
+        { z: 'Angreifer', d: '2 px Kontur plus Schwert-Abzeichen; Pfeil endet am Rand des Ziel-Pods.', c: '#ef3e56', cn: 'attack', m: 'Tappen 160 ms', p: '3' },
+        { z: 'Blocker', d: '2 px Kontur plus Schild-Abzeichen; Linie zum geblockten Angreifer.', c: '#5aa9ff', cn: 'block', m: 'Ein 160 ms', p: '3' },
+        { z: 'Getappt', d: 'Rotation 90°, sonst unverändert.', c: '#34312c', cn: '–', m: '160 ms ease-in-out', p: '–' },
+        { z: 'Beschworen-krank', d: 'Mond-Abzeichen oben rechts, Karte bleibt voll deckend.', c: '#9b958a', cn: 'fg-3', m: 'keine', p: '–' },
+        { z: 'Schaden', d: 'Karmin-Chip „−N“ oben links, verschwindet am Zugende.', c: '#ef3e56', cn: 'attack', m: 'Delta schwebt 1,2 s', p: '–' },
+        { z: 'P/T geändert · Zähler', d: 'P/T-Chip invertiert (hell); Zähler als grüner Chip links.', c: '#ece7de', cn: 'fg-1', m: 'keine', p: '–' }
+      ],
+      durations: [
+        { k: 'duration-1', v: '90 ms', u: 'Hover, Press, Checkbox' },
+        { k: 'duration-2', v: '160 ms', u: 'Kartenzustand, Tappen, Tabs, Toggle' },
+        { k: 'duration-3', v: '240 ms', u: 'Modal, Toast, Minimieren, Pod-Hervorhebung' },
+        { k: 'duration-4', v: '420 ms', u: 'Karte fliegt zwischen Zonen (Blitz: 210 ms)' },
+        { k: 'duration-xp', v: '1200 ms', u: 'XP-Hochzählen, Lebens-Delta' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

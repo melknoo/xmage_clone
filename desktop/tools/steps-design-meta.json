@@ -1,0 +1,290 @@
+{
+  "url": "http://localhost:5173/?port=7317",
+  "timeout": 600000,
+  "steps": [
+    {
+      "waitFor": "#root nav",
+      "timeout": 60000
+    },
+    {
+      "js": "window.__ml.nav.getState().setLastSetup({deck:{type:'user',id:4},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'NORMAL'});'lastSetup'"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/10-home-held.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/10-home-held.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('play')"
+    },
+    {
+      "waitFor": "button[class*=\"h-[120px]\"]",
+      "timeout": 30000
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/11-spielen-setup.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/11-spielen-setup.png"
+    },
+    {
+      "js": "(()=>{const b=document.querySelector('button[class*=\"h-[120px]\"]');if(!b)return 'kein Sitz';b.click();return 'DeckPicker'})()"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/12-deckpicker-meine-decks.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/12-deckpicker-meine-decks.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim().startsWith('Vorgefertigt'));if(!b)return 'kein Tab';b.click();return 'Vorgefertigt'})()"
+    },
+    {
+      "wait": 3500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/13-deckpicker-vorgefertigt.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/13-deckpicker-vorgefertigt.png"
+    },
+    {
+      "js": "window.__ml.nav.getState().go('decks')"
+    },
+    {
+      "wait": 3500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/14-decks-uebersicht.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/14-decks-uebersicht.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Deck importieren'));if(!b)return 'kein Knopf';b.click();return 'Import'})()"
+    },
+    {
+      "wait": 1000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/15-deck-import-link.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/15-deck-import-link.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Textliste');if(!b)return 'kein Tab';b.click();return 'Textliste'})()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "js": "(()=>{const ta=document.querySelector('textarea');if(!ta)return 'keine Textarea';const set=Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set;set.call(ta,\"Commander\\n1 Atraxa, Praetors' Voice\\n\\nDeck\\n1 Sol Ring\\n1 Arcane Signet\\n1 Command Tower\\n1 Swords to Plowshares\\n1 Counterspell\\n1 Cultivate\\n1 Doubling Season\\n1 Deepglow Skate\\n1 Totally Made Up Card\\n30 Forest\\n30 Island\");ta.dispatchEvent(new Event('input',{bubbles:true}));return 'Text gesetzt'})()"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Prüfen');if(!b)return 'kein Pruefen';b.click();return 'Pruefen'})()"
+    },
+    {
+      "wait": 3500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/16-deck-import-textliste-vorschau.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/16-deck-import-textliste-vorschau.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Abbrechen');if(!b)return 'kein Abbrechen';b.click();return 'zu'})()"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Bearbeiten');if(!b)return 'kein Bearbeiten';b.click();return 'Bearbeiten'})()"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Prüfen');if(!b)return 'kein Pruefen';b.click();return 'Pruefen'})()"
+    },
+    {
+      "wait": 4000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/17-deck-bearbeiten.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/17-deck-bearbeiten.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Abbrechen');if(!b)return 'kein Abbrechen';b.click();return 'zu'})()"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "(()=>{const b=document.querySelector('button[title=\"Löschen\"]');if(!b)return 'kein Loeschen';b.click();return 'Loeschen-Dialog'})()"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/18-deck-loeschen-bestaetigen.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/18-deck-loeschen-bestaetigen.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Abbrechen');if(!b)return 'kein Abbrechen';b.click();return 'zu'})()"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "js": "window.__ml.nav.getState().go('stats')"
+    },
+    {
+      "wait": 3500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/19-statistik-uebersicht.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/19-statistik-uebersicht.png"
+    },
+    {
+      "js": "(()=>{const e=[...document.querySelectorAll('*')].find(e=>e.scrollHeight>e.clientHeight+50&&/auto|scroll/.test(getComputedStyle(e).overflowY));if(!e)return 'nichts scrollbar';e.scrollTop=e.scrollHeight;return 'gescrollt '+e.scrollHeight})()"
+    },
+    {
+      "wait": 800
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/20-statistik-uebersicht-unten.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/20-statistik-uebersicht-unten.png"
+    },
+    {
+      "js": "(()=>{const r=document.querySelector('tr.cursor-pointer');if(!r)return 'keine Deckzeile';r.click();return 'Deckzeile'})()"
+    },
+    {
+      "wait": 3000
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Schließen');if(!b)return 'kein Kartenbereich';b.parentElement.parentElement.parentElement.scrollIntoView({block:'start'});return 'Kartenbereich'})()"
+    },
+    {
+      "wait": 2000
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/21-statistik-deck-karten.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/21-statistik-deck-karten.png"
+    },
+    {
+      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Verlauf');if(!b)return 'kein Tab';b.click();return 'Verlauf'})()"
+    },
+    {
+      "wait": 2500
+    },
+    {
+      "js": "new Promise(r=>{const t0=Date.now();const done=i=>i.complete&&i.naturalWidth>0&&!i.classList.contains('opacity-0');const t=setInterval(()=>{const imgs=[...document.images].filter(i=>i.getBoundingClientRect().width>0);if(imgs.every(done)||Date.now()-t0>25000){clearInterval(t);setTimeout(()=>r('Bilder '+imgs.filter(done).length+'/'+imgs.length),400)}},250)})"
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/22-statistik-verlauf.png"
+    },
+    {
+      "wait": 500
+    },
+    {
+      "shot": "../../design/claude-design/screenshots/22-statistik-verlauf.png"
+    }
+  ]
+}

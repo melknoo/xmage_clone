@@ -27,3 +27,7 @@ Thumbs.db
 
 # TypeScript-Build-Cache
 *.tsbuildinfo
+
+# Design: Vorher-Screenshots (lokal, gross) und Redesign-Aufnahmen
+design/claude-design/screenshots/*.png
+design/redesign-shots/
