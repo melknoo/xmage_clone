@@ -22,4 +22,6 @@ public class PermanentDto extends CardDto {
     public boolean blocking;
     public boolean canAttack;
     public boolean canBlock;
+    /** P/T weicht vom Grundwert ab (Zaehler, Boni, "wird zu X/X"); bei verdeckten Permanents immer false */
+    public boolean ptModified;
 }

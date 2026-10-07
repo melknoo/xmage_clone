@@ -1,10 +1,14 @@
 // End-to-End-Test fuer Lobby und Tische (E4) gegen eine laufende Dev-Engine im Server-Modus:
-//   cd engine; .\gradlew.bat runServer        (Owner-Code DEV-OWNER-CODE, Port 7317)
-//   node scripts\e2e-tables.mjs
+//   isolierte Engine im Server-Modus starten (nie Port 7317), dann
+//   MAGELITE_URL=http://127.0.0.1:7401 MAGELITE_OWNER_CODE=DEV-OWNER-CODE node scripts/e2e-tables.mjs
 // Ablauf: Owner eroeffnet Tisch -> Bob tritt bei -> Decks waehlen -> Owner setzt Bot auf Platz 3, Platz 4 bleibt
 // frei -> Start (3 Spieler) -> beide verbinden sich per WebSocket, spielen 60 s, geben auf -> Tisch zurueck in
-// der Lobby -> Owner schliesst den Tisch. Dazu Negativfaelle (409).
-const base = process.env.MAGELITE_URL ?? 'http://127.0.0.1:7317'
+// der Lobby -> Owner schliesst den Tisch. Dazu Negativfaelle (409) und "Mitspieler entfernen".
+const base = process.env.MAGELITE_URL
+if (!base) {
+  console.error('MAGELITE_URL fehlt (z. B. http://127.0.0.1:7401) - kein Default, nie gegen 7317 testen')
+  process.exit(2)
+}
 const ownerCode = process.env.MAGELITE_OWNER_CODE ?? 'DEV-OWNER-CODE'
 
 let failed = 0
@@ -85,14 +89,49 @@ r = await call('PUT', `/api/tables/${tid}/seat`, { cookie: bob, body: { deck: sa
 ok(r.status === 200 && r.json?.seats?.[1]?.ready === true, `Bob-Deck gesetzt: ${r.json?.seats?.[1]?.deckName}`)
 r = await call('GET', `/api/tables/${tid}`, { cookie: bob })
 ok(r.json?.seats?.[0]?.deck === undefined && r.json?.seats?.[0]?.deckName, 'Bob sieht Owner-Deck nur als Name')
+{
+  const s0 = r.json?.seats?.[0]
+  ok(s0?.deckTitle === samples[0].name && s0?.commander && s0?.commanderSet && s0?.commanderNum,
+    `Platz-Deckinfo: ${s0?.deckTitle} / ${s0?.commander} (${s0?.commanderSet} ${s0?.commanderNum}) ${s0?.colors ?? ''}`)
+  ok(r.json?.seats?.[3]?.deckTitle === undefined && r.json?.turn === undefined, 'offener Platz ohne Deckinfo, kein turn in der Lobby')
+}
 r = await call('PUT', `/api/tables/${tid}/seats/2`, { cookie: owner, body: { kind: 'BOT', deck: sample(2) } })
 ok(r.status === 200 && r.json?.seats?.[2]?.kind === 'BOT' && r.json?.seats?.[2]?.deckName, `Bot auf Platz 3: ${r.json?.seats?.[2]?.deckName}`)
-r = await call('PUT', `/api/tables/${tid}/seats/1`, { cookie: owner, body: { kind: 'OPEN' } })
-ok(r.status === 409, `Gastgeber will Bobs Platz leeren -> ${r.status}`)
+ok(r.json?.seats?.[2]?.deckTitle === samples[2].name, `Bot-Deckinfo: ${r.json?.seats?.[2]?.deckTitle}`)
+
+// ---- Mitspieler entfernen: nur Gastgeber, nur in der Lobby, nie der eigene Platz; Bob bleibt sitzen
+r = await call('PUT', `/api/tables/${tid}/seats/0`, { cookie: bob, body: { kind: 'OPEN' } })
+ok(r.status === 409, `Bob (kein Gastgeber) will Owner entfernen -> ${r.status}`)
+r = await call('PUT', `/api/tables/${tid}/seats/0`, { cookie: owner, body: { kind: 'OPEN' } })
+ok(r.status === 409, `Gastgeber raeumt eigenen Platz 0 -> ${r.status}`)
+r = await call('PUT', `/api/tables/${tid}/seats/1`, { cookie: owner, body: { kind: 'BOT' } })
+ok(r.status === 409, `Bot auf Bobs Platz -> ${r.status}`)
 r = await call('POST', `/api/tables/${tid}/join`, { cookie: carla })
 ok(r.status === 200 && r.json?.mySeat === 3, `Carla tritt bei -> Platz ${r.json?.mySeat}`)
+r = await call('PUT', `/api/tables/${tid}/seats/3`, { cookie: owner, body: { kind: 'OPEN' } })
+ok(r.status === 200 && r.json?.seats?.[3]?.kind === 'OPEN' && r.json?.humans === 2, `Gastgeber entfernt Carla -> ${r.status} ${r.json?.error ?? ''}`)
+r = await call('GET', `/api/tables/${tid}`, { cookie: carla })
+ok(r.status === 200 && r.json?.mySeat === null && r.json?.chat?.length === 0, `Carla: mySeat ${r.json?.mySeat}, Tisch-Chat ${r.json?.chat?.length} Zeilen`)
+r = await call('GET', '/api/tables/mine', { cookie: carla })
+ok(r.status === 404, `Carla: /tables/mine -> ${r.status}`)
+r = await call('POST', `/api/tables/${tid}/join`, { cookie: carla })
+ok(r.status === 409, `Carla will wieder beitreten -> ${r.status} (${r.json?.error})`)
+r = await call('GET', `/api/tables/${tid}`, { cookie: bob })
+ok(r.json?.mySeat === 1 && r.json?.seats?.[1]?.ready === true, 'Bob sitzt weiter auf Platz 1')
+// erneute Einladung durch den Gastgeber hebt die Sperre auf
+await call('POST', '/api/friends', { cookie: owner, body: { userId: carlaId } })
+r = await call('POST', `/api/friends/${(await call('GET', '/api/me', { cookie: owner })).json?.user?.id}/accept`, { cookie: carla })
+ok(r.status === 200, `Owner und Carla befreundet -> ${r.status}`)
+r = await call('POST', `/api/tables/${tid}/invite`, { cookie: owner, body: { userId: carlaId } })
+ok(r.status === 200 && r.json?.expiresAt > r.json?.ts, `Gastgeber laedt Carla wieder ein -> ${r.status}`)
+r = await call('POST', `/api/tables/${tid}/join`, { cookie: carla })
+ok(r.status === 200 && r.json?.mySeat === 3, `Carla nach Einladung wieder am Tisch -> ${r.status}`)
 r = await call('POST', `/api/tables/${tid}/leave`, { cookie: carla })
 ok(r.status === 200 && r.json?.closed === false, 'Carla geht wieder (Platz frei)')
+// Default-Name im Genitiv
+r = await call('POST', '/api/tables', { cookie: carla, body: {} })
+ok(r.status === 200 && r.json?.name === 'Carlas Tisch', `Default-Name: ${r.json?.name}`)
+if (r.json?.id) await call('POST', `/api/tables/${r.json.id}/leave`, { cookie: carla })
 r = await call('PUT', `/api/tables/${tid}`, { cookie: owner, body: { name: 'Freitagsrunde II', tempo: 'NORMAL' } })
 ok(r.status === 200 && r.json?.name === 'Freitagsrunde II' && r.json?.tempo === 'NORMAL', 'Name/Tempo geaendert')
 await call('PUT', `/api/tables/${tid}`, { cookie: owner, body: { tempo: 'BLITZ' } })
@@ -107,6 +146,11 @@ r = await call('POST', `/api/tables/${tid}/join`, { cookie: carla })
 ok(r.status === 409, `Beitritt waehrend des Spiels -> ${r.status}`)
 r = await call('GET', '/api/tables', { cookie: carla })
 ok(r.json?.find((t) => t.id === tid)?.state === 'RUNNING', 'Lobby zeigt den Tisch als spielend')
+ok(r.json?.find((t) => t.id === tid)?.chat?.length === 0, 'Lobby-Liste: Tisch-Chat nur fuer Sitzende')
+r = await call('PUT', `/api/tables/${tid}/seats/3`, { cookie: owner, body: { kind: 'BOT' } })
+ok(r.status === 409, `Platz aendern waehrend des Spiels -> ${r.status}`)
+r = await call('PUT', `/api/tables/${tid}/seats/1`, { cookie: owner, body: { kind: 'OPEN' } })
+ok(r.status === 409, `Bob entfernen waehrend des Spiels -> ${r.status}`)
 
 function pilot(cookie) {
   const st = { hello: null, over: null, prompts: 0, last: null }
@@ -140,6 +184,15 @@ const B = pilot(bob)
 await sleep(3000)
 ok(A.hello?.seats?.length === 3 && A.hello.seats.filter((s) => s.human).length === 2, `Spiel hat ${A.hello?.seats?.length} Sitze, davon ${A.hello?.seats?.filter((s) => s.human).length} Menschen`)
 ok(A.hello?.host === true && B.hello?.host === false, 'Gastgeber-Flag im Spiel')
+// turn frueh pruefen: ein schnelles Bot-Spiel kann vor Ablauf der 45 s enden
+let lobbyTurn = null
+for (let i = 0; i < 30 && !(lobbyTurn >= 1); i++) {
+  r = await call('GET', `/api/tables/${tid}`, { cookie: carla })
+  if (r.json?.state === 'RUNNING') lobbyTurn = r.json?.turn ?? null
+  else break
+  if (!(lobbyTurn >= 1)) await sleep(500)
+}
+ok(lobbyTurn >= 1, `Lobby: turn ${lobbyTurn} waehrend des Spiels`)
 const t0 = Date.now()
 while (Date.now() - t0 < 45000 && !A.over) await sleep(1000)
 ok(A.prompts > 0 && B.prompts > 0, `Prompts: Owner=${A.prompts} Bob=${B.prompts} (Zug ${A.last?.turn})`)

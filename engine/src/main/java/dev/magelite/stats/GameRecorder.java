@@ -29,7 +29,8 @@ public final class GameRecorder {
 
     public record Reward(int xpGained, List<XpPart> breakdown, int level, int levelBefore, long xpTotal, int xpIntoLevel,
                          int xpForNext, String title, boolean levelUp, Long deckId, String deckName, Integer masteryGained,
-                         Integer masteryLevel, Integer masteryLevelBefore, Integer masteryXp, Integer masteryNext) {
+                         Integer masteryLevel, Integer masteryLevelBefore, Integer masteryXp, Integer masteryNext,
+                         int xpIntoLevelBefore, int xpForNextBefore, Progression.Title nextTitle) {
     }
 
     private final Db db;
@@ -206,7 +207,8 @@ public final class GameRecorder {
                 }
                 return new Reward(xp, parts, lv.level(), lvBefore.level(), after, lv.xpIntoLevel(), lv.xpForNext(),
                         Progression.titleOf(lv.level()), lv.level() > lvBefore.level(), deckId, seat.deck().name(),
-                        mGained, mLevel, mBefore, mXp, mNext);
+                        mGained, mLevel, mBefore, mXp, mNext,
+                        lvBefore.xpIntoLevel(), lvBefore.xpForNext(), Progression.nextTitle(lv.level()));
             });
         } catch (RuntimeException e) {
             LOG.error("Spiel konnte nicht gespeichert werden", e);

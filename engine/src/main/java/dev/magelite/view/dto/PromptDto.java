@@ -39,6 +39,10 @@ public class PromptDto {
 
     /** ASK */
     public boolean mulligan;
+    /** nur Mulligan-Frage: bisher genommene Mulligans (0 wird weggelassen) */
+    public int mulligans;
+    /** nur Mulligan-Frage: der naechste Mulligan ist gratis */
+    public boolean freeMulligan;
     public String autoAnswer;
 
     /** PICK_TARGET */
@@ -49,7 +53,11 @@ public class PromptDto {
 
     /** PICK_ABILITY / CHOOSE_ABILITY / CHOOSE_MODE */
     public List<Item> choices;
-    /** CHOOSE_ABILITY: das Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren") */
+    /**
+     * CHOOSE_ABILITY: das Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren").
+     * PICK_TARGET / PLAY_MANA / PLAY_X_MANA: das Stapelobjekt (id wie in {@code state.stack[].id}), fuer das gewaehlt
+     * bzw. bezahlt wird - nur wenn ableitbar (verlinkt in der Nachricht oder eigenes oberstes Stapelobjekt), sonst null.
+     */
     public UUID sourceId;
 
     /** CHOOSE_CHOICE */
@@ -96,8 +104,13 @@ public class PromptDto {
     public record ChoiceItem(String key, String value, Integer sort, List<String> hints) {
     }
 
-    /** Gleiche Ersatzeffekte; {@code optional} = Regel enthaelt "you may" (Effekt fragt selbst nach). */
-    public record ReplGroup(String rule, String label, boolean optional, List<ReplSource> sources) {
+    /**
+     * Gleiche Ersatzeffekte; {@code optional} = Regel enthaelt "you may" (Effekt fragt selbst nach).
+     * {@code cause} = ersetztes Ereignis, aus dem Regeltext abgeleitet (deutsch, z.B. "Karte ziehen"), sonst null.
+     * {@code uniform} = alle Quellen heissen gleich - nur dann ist "Gruppe annehmen" ({@code mode:"acceptGroup"}) erlaubt.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ReplGroup(String rule, String label, boolean optional, List<ReplSource> sources, String cause, boolean uniform) {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

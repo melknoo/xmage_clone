@@ -1,12 +1,16 @@
 // End-to-End-Test fuer mehrere Menschen in einem Spiel (E3) gegen eine laufende Dev-Engine im Server-Modus:
-//   cd engine; .\gradlew.bat runServer        (Owner-Code DEV-OWNER-CODE, Port 7317)
-//   node scripts\e2e-online.mjs
+//   isolierte Engine im Server-Modus mit --dev starten (nie Port 7317), dann
+//   MAGELITE_URL=http://127.0.0.1:7401 MAGELITE_OWNER_CODE=DEV-OWNER-CODE node scripts/e2e-online.mjs
 // Ablauf: Owner legt Einladung "Bob" an -> beide loggen sich ein (Cookies) -> Owner startet ein Spiel mit Bob als
 // zweitem Menschen (dev-only Feld `humans`) -> zwei WebSocket-Autopiloten spielen -> Bob gibt nach 90 s auf, das
 // Spiel laeuft weiter -> Owner gibt nach weiteren 60 s auf oder das Spiel endet -> beide haben gameOver + reward,
 // jeder eine eigene games-Zeile.
-// Env: MAGELITE_URL (Default http://127.0.0.1:7317), MAGELITE_OWNER_CODE (Default DEV-OWNER-CODE)
-const base = process.env.MAGELITE_URL ?? 'http://127.0.0.1:7317'
+// Env: MAGELITE_URL (Pflicht), MAGELITE_OWNER_CODE (Default DEV-OWNER-CODE)
+const base = process.env.MAGELITE_URL
+if (!base) {
+  console.error('MAGELITE_URL fehlt (z. B. http://127.0.0.1:7401) - kein Default, nie gegen 7317 testen')
+  process.exit(2)
+}
 const ownerCode = process.env.MAGELITE_OWNER_CODE ?? 'DEV-OWNER-CODE'
 
 let failed = 0
@@ -37,6 +41,9 @@ let r = await call('POST', '/api/auth/login', { body: { code: ownerCode } })
 ok(r.status === 200, `Owner-Login -> ${r.status}`)
 const owner = cookieOf(r.setCookie)
 const ownerId = r.json?.user?.id
+// Anzeigename des Owners aus der Login-Antwort (haengt von MAGELITE_OWNER_NAME bzw. der DB ab)
+const ownerName = r.json?.user?.name
+ok(!!ownerName, `Owner-Name aus dem Login: ${ownerName}`)
 r = await call('POST', '/api/admin/invites', { cookie: owner, body: { name: 'Bob' } })
 ok(r.status === 200, `Einladung Bob -> ${r.status}`)
 const bobId = r.json?.id
@@ -128,7 +135,7 @@ const t0 = Date.now()
 while (Date.now() - t0 < 90000 && !A.over && !B.over && (A.last?.turn ?? 0) < 6) await sleep(1000)
 ok(A.prompts > 0 && B.prompts > 0, `beide bekamen Prompts: Owner=${A.prompts} Bob=${B.prompts}`)
 ok(A.states > 0 && B.states > 0 && A.foreignPrompts === 0 && B.foreignPrompts === 0, `States je aus eigener Sicht (fremd: ${A.foreignPrompts}/${B.foreignPrompts})`)
-ok([...A.waitingFor].includes('Bob') || [...B.waitingFor].includes('Owner'), `Warte-Hinweis auf den anderen Menschen (Owner sah: ${[...A.waitingFor].join(',')}; Bob sah: ${[...B.waitingFor].join(',')})`)
+ok([...A.waitingFor].includes('Bob') || [...B.waitingFor].includes(ownerName), `Warte-Hinweis auf den anderen Menschen (Owner sah: ${[...A.waitingFor].join(',')}; Bob sah: ${[...B.waitingFor].join(',')})`)
 console.log(`     Zug ${A.last?.turn ?? '?'} nach 90 s`)
 
 // Bobs Verbindung bricht ab (Tab zu) -> Owner sieht "getrennt"; zu frueh "aufgeben lassen" wird abgelehnt,
@@ -136,7 +143,7 @@ console.log(`     Zug ${A.last?.turn ?? '?'} nach 90 s`)
 // Chat: Owner -> Bob, Kuerzung auf 300 Zeichen, Rate-Limit 5/5 s, leere Nachricht verworfen
 A.ws.send(JSON.stringify({ t: 'chat', text: 'hi Bob' }))
 await sleep(600)
-ok(B.chat.length === 1 && B.chat[0].text === 'hi Bob' && B.chat[0].name === 'Owner', `Chat kommt bei Bob an (${B.chat.length}: ${B.chat[0]?.name}: ${B.chat[0]?.text})`)
+ok(B.chat.length === 1 && B.chat[0].text === 'hi Bob' && B.chat[0].name === ownerName, `Chat kommt bei Bob an (${B.chat.length}: ${B.chat[0]?.name}: ${B.chat[0]?.text})`)
 ok(A.chat.length === 1, `Chat-Echo beim Absender (${A.chat.length})`)
 B.ws.send(JSON.stringify({ t: 'chat', text: 'x'.repeat(350) }))
 await sleep(600)
@@ -189,6 +196,12 @@ ok(r.json?.games === 0, `kein laufendes Spiel mehr (games=${r.json?.games})`)
 
 // Belohnung + eigene games-Zeilen
 ok(A.over?.reward && B.over?.reward, `reward fuer beide: Owner=${!!A.over?.reward} Bob=${!!B.over?.reward}`)
+{
+  const rw = B.over?.reward
+  ok(rw && typeof rw.xpIntoLevelBefore === 'number' && rw.xpForNextBefore > 0 && 'nextTitle' in rw
+    && (rw.nextTitle === null || (rw.nextTitle.level > rw.level && rw.nextTitle.title)),
+    `reward: xpIntoLevelBefore=${rw?.xpIntoLevelBefore} xpForNextBefore=${rw?.xpForNextBefore} nextTitle=${JSON.stringify(rw?.nextTitle)}`)
+}
 const hA = await call('GET', '/api/history?limit=3', { cookie: owner })
 const hB = await call('GET', '/api/history?limit=3', { cookie: bob })
 const rowA = hA.json?.find((g) => g.id === gameId)

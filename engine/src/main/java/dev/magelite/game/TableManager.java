@@ -11,12 +11,15 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Tische der Lobby (nur Server-Modus): ein Gastgeber eroeffnet einen Tisch mit 4 Plaetzen, Freunde treten bei,
@@ -91,6 +94,8 @@ public final class TableManager {
         public long updatedAt = createdAt;
         public final Deque<ChatMsg> chat = new ArrayDeque<>();
         final Map<Long, Deque<Long>> chatTimes = new HashMap<>();
+        /** vom Gastgeber entfernte Nutzer: kein erneuter Beitritt, bis er sie wieder einlaedt */
+        final Set<Long> kicked = new HashSet<>();
 
         Table(String id, String name, User host) {
             this.id = id;
@@ -126,16 +131,124 @@ public final class TableManager {
         }
     }
 
+    /** Unveraenderliche Sicht auf einen Platz. */
+    public record SeatSnap(SeatKind kind, long userId, String name, JsonNode deck) {
+    }
+
+    /**
+     * Unveraenderliche Momentaufnahme eines Tisches (unter der Sperre kopiert, ausserhalb frei lesbar).
+     * {@code chat} nur fuer Sitzende, sonst leer; {@code turn} und {@code spectators} (Anzahl Zuschauer) nur bei
+     * RUNNING (sonst 0).
+     */
+    public record TableSnap(String id, String name, long hostUserId, String hostName, TempoSettings.Preset tempo, String state,
+                            UUID gameId, UUID lastGameId, long createdAt, long updatedAt, List<SeatSnap> seats,
+                            List<ChatMsg> chat, int turn, int spectators) {
+        public int humans() {
+            return (int) seats.stream().filter(s -> s.kind() == SeatKind.HUMAN).count();
+        }
+
+        public int seatIndexOf(long userId) {
+            for (int i = 0; i < seats.size(); i++) {
+                if (seats.get(i).kind() == SeatKind.HUMAN && seats.get(i).userId() == userId) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        public boolean invitable() {
+            return "LOBBY".equals(state) && seats.stream().anyMatch(s -> s.kind() == SeatKind.OPEN);
+        }
+    }
+
     private final GameRegistry games;
     private final DeckResolver decks;
     private final Map<String, Table> tables = new LinkedHashMap<>();
+    /**
+     * Nach dem Entfernen (Nutzer, Tisch) - wird NACH dem Freigeben der Sperre aufgerufen (z.B. Einladungen verwerfen).
+     * TableManager ruft nie unter seiner Sperre in andere Dienste.
+     */
+    private volatile BiConsumer<Long, String> onKicked = (u, t) -> {
+    };
 
     public TableManager(GameRegistry games, DeckResolver decks) {
         this.games = games;
         this.decks = decks;
     }
 
+    public void setOnKicked(BiConsumer<Long, String> cb) {
+        this.onKicked = cb;
+    }
+
     // ------------------------------------------------------------------ Abfragen
+
+    /** Momentaufnahme fuer einen Betrachter (Chat nur, wenn er sitzt). */
+    public synchronized Optional<TableSnap> snapshot(String id, long viewerId) {
+        Table t = tables.get(normalize(id));
+        return t == null ? Optional.empty() : Optional.of(snap(t, viewerId));
+    }
+
+    public synchronized List<TableSnap> snapshots(long viewerId) {
+        prune();
+        List<TableSnap> out = new ArrayList<>(tables.size());
+        for (Table t : tables.values()) {
+            out.add(snap(t, viewerId));
+        }
+        return out;
+    }
+
+    /** Tisch, an dem der Nutzer sitzt, als Momentaufnahme. */
+    public synchronized Optional<TableSnap> mineSnapshot(long userId) {
+        return tables.values().stream().filter(t -> t.seatOf(userId).isPresent()).findFirst().map(t -> snap(t, userId));
+    }
+
+    /** Anzahl Tische (Lobby-Zaehler). */
+    public synchronized int count() {
+        prune();
+        return tables.size();
+    }
+
+    /** Name des Tisches, dessen laufendes Spiel {@code gameId} ist (fuer Zuschauer). */
+    public synchronized Optional<String> runningTableName(UUID gameId) {
+        if (gameId == null) {
+            return Optional.empty();
+        }
+        return tables.values().stream().filter(t -> "RUNNING".equals(t.state) && gameId.equals(t.gameId)).findFirst().map(t -> t.name);
+    }
+
+    /** Erneute Einladung durch den Gastgeber hebt das Entfernen auf. */
+    public synchronized void unkick(String id, long byUserId, long userId) {
+        Table t = tables.get(normalize(id));
+        if (t != null && t.hostUserId == byUserId) {
+            t.kicked.remove(userId);
+        }
+    }
+
+    /** Wurde der Nutzer vom Gastgeber dieses Tisches entfernt (und noch nicht wieder eingeladen)? */
+    public synchronized boolean isKicked(String id, long userId) {
+        Table t = tables.get(normalize(id));
+        return t != null && t.kicked.contains(userId);
+    }
+
+    private TableSnap snap(Table t, long viewerId) {
+        List<SeatSnap> seats = new ArrayList<>(t.seats.length);
+        for (Seat s : t.seats) {
+            seats.add(new SeatSnap(s.kind, s.userId, s.name, s.deck == null ? null : s.deck.deepCopy()));
+        }
+        List<ChatMsg> chat = t.seatOf(viewerId).isPresent() ? List.copyOf(t.chat) : List.of();
+        int turn = 0;
+        int spectators = 0;
+        if ("RUNNING".equals(t.state) && t.gameId != null) {
+            // GameRegistry.get ist sperrfrei (ConcurrentHashMap), currentTurn()/spectatorCount() ohne Sperren
+            GameHost g = games.get(t.gameId).orElse(null);
+            if (g != null) {
+                turn = g.currentTurn();
+                spectators = g.spectatorCount();
+            }
+        }
+        return new TableSnap(t.id, t.name, t.hostUserId, t.hostName, t.tempo, t.state, t.gameId, t.lastGameId, t.createdAt,
+                t.updatedAt, List.copyOf(seats), chat, turn, spectators);
+    }
 
     public synchronized List<Table> list() {
         prune();
@@ -184,7 +297,7 @@ public final class TableManager {
         do {
             id = randomId();
         } while (tables.containsKey(id));
-        Table t = new Table(id, name == null || name.isBlank() ? "Tisch von " + host.name() : name.strip(), host);
+        Table t = new Table(id, name == null || name.isBlank() ? defaultName(host.name()) : name.strip(), host);
         if (tempo != null) {
             t.tempo = tempo;
         }
@@ -197,6 +310,9 @@ public final class TableManager {
         Table t = require(id);
         if (t.seatOf(user.id()).isPresent()) {
             return t;
+        }
+        if (t.kicked.contains(user.id())) {
+            throw new TableException("Der Gastgeber hat dich von diesem Tisch entfernt");
         }
         Optional<Table> other = mine(user.id());
         if (other.isPresent()) {
@@ -246,17 +362,46 @@ public final class TableManager {
         return t;
     }
 
-    /** Gastgeber: Platz n frei lassen oder mit einem Bot (Deck-Angabe, null = zufaellig) besetzen. */
-    public synchronized Table setSeat(User host, String id, int n, SeatKind kind, JsonNode deck) {
+    /**
+     * Gastgeber: Platz n frei lassen oder mit einem Bot (Deck-Angabe, null = zufaellig) besetzen. Einen anderen Menschen
+     * entfernen ({@code OPEN} auf seinem Platz) geht nur in der Lobby; er kann danach erst nach erneuter Einladung
+     * wieder beitreten. Waehrend eines Spiels sind alle Platz-Aenderungen gesperrt.
+     */
+    public Table setSeat(User host, String id, int n, SeatKind kind, JsonNode deck) {
+        long[] kickedUser = {-1};
+        Table t = setSeatLocked(host, id, n, kind, deck, kickedUser);
+        if (kickedUser[0] > 0) {
+            try {
+                onKicked.accept(kickedUser[0], t.id); // ausserhalb der Sperre
+            } catch (RuntimeException e) {
+                LOG.warn("onKicked: " + e);
+            }
+        }
+        return t;
+    }
+
+    private synchronized Table setSeatLocked(User host, String id, int n, SeatKind kind, JsonNode deck, long[] kickedUser) {
         Table t = requireHost(host, id);
         if (n < 0 || n >= t.seats.length) {
             throw new IllegalArgumentException("Platz 0-3");
         }
-        if (t.seats[n].kind == SeatKind.HUMAN) {
-            throw new TableException("Dieser Platz ist besetzt");
-        }
         if (kind == SeatKind.HUMAN) {
             throw new IllegalArgumentException("Menschen setzen sich selbst");
+        }
+        if (!"LOBBY".equals(t.state)) {
+            throw new TableException("Während des Spiels lassen sich die Plätze nicht ändern");
+        }
+        Seat cur = t.seats[n];
+        if (cur.kind == SeatKind.HUMAN) {
+            if (cur.userId == t.hostUserId) {
+                throw new TableException("Deinen eigenen Platz kannst du nicht räumen");
+            }
+            if (kind != SeatKind.OPEN) {
+                throw new TableException("Dieser Platz ist besetzt");
+            }
+            t.kicked.add(cur.userId);
+            kickedUser[0] = cur.userId;
+            LOG.info("Tisch " + t.id + ": " + cur.name + " entfernt");
         }
         t.seats[n] = kind == SeatKind.BOT ? Seat.bot(deck == null || deck.isNull() ? null : deck) : Seat.open();
         t.touch();
@@ -302,7 +447,8 @@ public final class TableManager {
             throw new TableException("Mindestens zwei Spieler (Mensch oder Bot)");
         }
         String tableId = t.id;
-        GameHost game = games.start(new GameSetup(specs, t.tempo), h -> onGameFinished(tableId, h));
+        // Tisch-Spiele sind zuschaubar: oeffentliche Sicht ab dem ersten State (vor host.start())
+        GameHost game = games.start(new GameSetup(specs, t.tempo), h -> onGameFinished(tableId, h), h -> h.setSpectatable(true));
         t.state = "RUNNING";
         t.gameId = game.getId();
         t.touch();
@@ -374,6 +520,17 @@ public final class TableManager {
     private void prune() {
         long now = System.currentTimeMillis();
         tables.values().removeIf(t -> "LOBBY".equals(t.state) && now - t.updatedAt > STALE_MS);
+    }
+
+    /** "Annas Tisch", "Ilias' Tisch" (Genitiv: Apostroph nach s, ss, x, z, ce). */
+    static String defaultName(String hostName) {
+        String n = hostName == null ? "" : hostName.strip();
+        if (n.isEmpty()) {
+            return "Neuer Tisch";
+        }
+        String l = n.toLowerCase(Locale.ROOT);
+        boolean apostrophe = l.endsWith("s") || l.endsWith("ß") || l.endsWith("x") || l.endsWith("z") || l.endsWith("ce");
+        return n + (apostrophe ? "' Tisch" : "s Tisch");
     }
 
     private static String normalize(String id) {

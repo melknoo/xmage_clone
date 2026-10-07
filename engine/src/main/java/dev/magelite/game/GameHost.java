@@ -165,6 +165,8 @@ public final class GameHost {
         private volatile boolean autoPass = true;
         private volatile boolean autoPayDefault = true;
         private volatile boolean conceded;
+        /** selbst verlassen ({@link #leave}); zaehlt bei der Platzierung hinter den Ueberlebenden */
+        private volatile boolean left;
         /** Stapelobjekte, auf die dieser Mensch schon gepasst hat ({@link StackSig}); gleiche danach automatisch passen. */
         private final Set<String> passedSigs = ConcurrentHashMap.newKeySet();
         /** Signatur des obersten Stapelobjekts zum offenen Prioritaets-Prompt {@link #promptSigId} */
@@ -246,8 +248,34 @@ public final class GameHost {
         }
     }
 
+    /** Ergebnis von {@link #attachSpectator}: {@code replaced} = alte Verbindung desselben Nutzers (mit 4000 schliessen). */
+    public enum SpectateStatus { OK, SEATED, FULL }
+
+    public record SpectateResult(SpectateStatus status, Sink replaced) {
+    }
+
+    /** Zuschauer: zaehlt nie als Spieler (nicht in {@link #humans}, nicht im {@link GameSetup}, keine Belohnung). */
+    private record Spectator(long userId, String name, Sink sink) {
+    }
+
+    public static final int MAX_SPECTATORS = 8;
+
     private final UUID id = UUID.randomUUID();
     private final MageLiteMatch match;
+    /** Zuschauer; gelesen vom Game-, Wachhund- und WS-Thread */
+    private final Set<Spectator> spectators = ConcurrentHashMap.newKeySet();
+    /** Reihenfolge "hello vor State": Zuschauer anmelden und oeffentlichen State verteilen nur unter dieser Sperre */
+    private final Object specLock = new Object();
+    /** oeffentlicher State fuer Zuschauer (Game-Thread baut ihn nach den Sitzen); null = noch keiner */
+    private volatile StateDto publicState;
+    /** Zuschau-Sicht bauen (nur Tisch-Spiele, vor {@link #start()} gesetzt) */
+    private volatile boolean spectatable;
+    private volatile String tableName;
+    /** Blickwinkel der Zuschauer: erster Mensch, der beim ersten oeffentlichen State nicht aufgegeben hat; danach fest */
+    private volatile UUID viewpoint;
+    private long lastPublicErrorAt;
+    /** Spielende fuer Zuschauer (ohne Belohnung), gesetzt sobald es an die angemeldeten Zuschauer ging */
+    private volatile Messages.GameOver spectatorOver;
     private final Game game;
     /** menschliche Sitze nach Spieler-id, in Tischreihenfolge; nach dem Konstruktor nur gelesen */
     private final Map<UUID, HumanSeat> humans = new LinkedHashMap<>();
@@ -290,6 +318,8 @@ public final class GameHost {
     /** Besitzer von {@link #openPrompt} */
     private volatile HumanSeat promptSeat;
     private volatile UUID thinking;
+    /** Zugnummer des zuletzt gesendeten States (fuer die Lobby, ohne Spiel-Thread lesbar) */
+    private volatile int turn;
     private volatile Messages.GameOver gameOver;
     private volatile Consumer<GameHost> onFinished;
     private volatile RewardHook rewardHook;
@@ -474,9 +504,111 @@ public final class GameHost {
         if (over != null) {
             newSink.send(over);
         }
-        if (humans.size() > 1) {
+        if (humans.size() > 1 || !spectators.isEmpty()) {
             broadcastSeats();
         }
+    }
+
+    // ------------------------------------------------------------------ Zuschauer
+
+    /** Zuschau-Sicht bauen (Tisch-Spiele). Vor {@link #start()} aufrufen. */
+    public void setSpectatable(boolean on) {
+        this.spectatable = on;
+    }
+
+    public boolean isSpectatable() {
+        return spectatable;
+    }
+
+    public int spectatorCount() {
+        return spectators.size();
+    }
+
+    /**
+     * Meldet einen Zuschauer an: hello, Spiel- und Chat-Verlauf, gecachter oeffentlicher State, ggf. gameOver (ohne
+     * Belohnung), Sitz-Status. Beruehrt nie das Spiel und baut keine Sicht (Regel 2). Ein Nutzer schaut hoechstens
+     * einmal zu: eine neue Verbindung ersetzt die alte ({@code replaced}).
+     */
+    public SpectateResult attachSpectator(long userId, String name, Sink sink, String tableName) {
+        Sink replaced = null;
+        synchronized (specLock) {
+            if (seatOf(userId).isPresent()) {
+                return new SpectateResult(SpectateStatus.SEATED, null);
+            }
+            Spectator old = spectators.stream().filter(x -> x.userId() == userId).findFirst().orElse(null);
+            if (old == null && spectators.size() >= MAX_SPECTATORS) {
+                return new SpectateResult(SpectateStatus.FULL, null);
+            }
+            if (old != null) {
+                spectators.remove(old);
+                replaced = old.sink();
+            }
+            if (tableName != null) {
+                this.tableName = tableName;
+            }
+            sink.send(Messages.Hello.spectator(id, seats, tempo.preset().name(), viewpointId(), this.tableName));
+            synchronized (logTail) {
+                if (!logTail.isEmpty()) {
+                    sink.send(new Messages.Log(new ArrayList<>(logTail)));
+                }
+            }
+            synchronized (chatTail) {
+                if (!chatTail.isEmpty()) {
+                    sink.send(new Messages.Chat(new ArrayList<>(chatTail)));
+                }
+            }
+            StateDto pub = publicState;
+            if (pub != null) {
+                sink.send(pub);
+            }
+            Messages.GameOver over = spectatorOver;
+            if (over != null) {
+                sink.send(over);
+            }
+            spectators.add(new Spectator(userId, name == null || name.isBlank() ? "Zuschauer" : name, sink));
+        }
+        LOG.info("Zuschauer " + name + " schaut Spiel " + id + " zu (" + spectators.size() + ")");
+        broadcastSeats();
+        return new SpectateResult(SpectateStatus.OK, replaced);
+    }
+
+    /** Zuschauer abmelden (Socket geschlossen); nur der Eintrag mit genau diesem Sink. */
+    public void detachSpectator(Sink sink) {
+        boolean removed = spectators.removeIf(x -> x.sink() == sink);
+        if (removed) {
+            broadcastSeats();
+        }
+    }
+
+    /** Blickwinkel-Spieler der Zuschauer (fest, sobald einmal gewaehlt). */
+    private UUID viewpointId() {
+        UUID v = viewpoint;
+        if (v != null) {
+            return v;
+        }
+        for (HumanSeat s : humans.values()) {
+            if (!s.conceded) {
+                return s.playerId;
+            }
+        }
+        return firstHuman.playerId;
+    }
+
+    /** An alle Zuschauer (Fehler einzelner Sinks stoeren niemanden). */
+    private void sendSpectators(Object msg) {
+        for (Spectator x : spectators) {
+            try {
+                x.sink().send(msg);
+            } catch (Throwable e) {
+                LOG.warn("Senden an Zuschauer fehlgeschlagen: " + e);
+            }
+        }
+    }
+
+    /** An alle Menschen und alle Zuschauer (nur oeffentliche Nachrichten: Log, Chat, Status, Sitz-Status). */
+    private void emitPublic(Object msg) {
+        emit(msg);
+        sendSpectators(msg);
     }
 
     /**
@@ -502,7 +634,7 @@ public final class GameHost {
                 chatTail.pollFirst();
             }
         }
-        emit(new Messages.Chat(List.of(entry)));
+        emitPublic(new Messages.Chat(List.of(entry)));
         return true;
     }
 
@@ -510,19 +642,20 @@ public final class GameHost {
         if (seat.sink == oldSink) {
             seat.sink = NOOP;
             seat.disconnectedSince = System.currentTimeMillis();
-            if (humans.size() > 1) {
+            if (humans.size() > 1 || !spectators.isEmpty()) {
                 broadcastSeats();
             }
         }
     }
 
-    /** Verbindungszustand aller Menschen an alle Menschen (nur bei mehreren Menschen sinnvoll). */
+    /** Verbindungszustand aller Menschen und Namen der Zuschauer an alle Menschen und Zuschauer. */
     private void broadcastSeats() {
         List<Messages.SeatConn> list = new ArrayList<>();
         for (HumanSeat s : humans.values()) {
             list.add(new Messages.SeatConn(s.playerId, s.connected(), s.disconnectedForMs(), s.conceded));
         }
-        emit(new Messages.SeatsStatus(list, KICK_AFTER_MS));
+        List<String> names = spectators.stream().map(Spectator::name).sorted(String.CASE_INSENSITIVE_ORDER).toList();
+        emitPublic(new Messages.SeatsStatus(list, KICK_AFTER_MS, names));
     }
 
     /**
@@ -609,6 +742,11 @@ public final class GameHost {
                 seat.gameOver = mine;
                 send(seat, mine);
             }
+            // Zuschauer: Spielende ohne Belohnung (gameOver ist gesetzt -> spaete Zuschauer bekommen es beim Anmelden)
+            synchronized (specLock) {
+                sendSpectators(base);
+                spectatorOver = base;
+            }
         } catch (Throwable e) {
             LOG.error("Spielende-Auswertung fehlgeschlagen", e);
         } finally {
@@ -661,6 +799,7 @@ public final class GameHost {
             return;
         }
         seat.conceded = true;
+        seat.left = true;
         closePromptOf(seat);
         send(seat, new Messages.SeatStatus(true));
         boolean humansLeft = humans.values().stream().anyMatch(s -> !s.conceded);
@@ -911,6 +1050,18 @@ public final class GameHost {
                         }
                         answer = key;
                     }
+                }
+            }
+        } else if (groups != null && "acceptGroup".equals(mode) && key != null) {
+            // ganze Gruppe annehmen: nur bei gleichnamigen Quellen (sonst waere die Wahl der Karte eine Spielentscheidung)
+            for (PromptDto.ReplGroup g : groups) {
+                if (key.equals(g.rule()) && g.uniform() && !g.sources().isEmpty()) {
+                    PromptDto.ReplSource s = g.sources().get(0);
+                    m = new ReplMacro(true);
+                    if (g.optional() && s.objectId() != null) {
+                        m.sourceIds.add(s.objectId());
+                    }
+                    answer = s.key();
                 }
             }
         } else if (groups != null && "decline".equals(mode)) {
@@ -1167,7 +1318,7 @@ public final class GameHost {
                 if (event.getQueryType() == PlayerQueryEvent.QueryType.SELECT && realThink && !player.getId().equals(thinking)) {
                     thinking = player.getId();
                     flushStateIfDirty();
-                    emit(new Messages.Status(thinking, false, player.getName()));
+                    emitPublic(new Messages.Status(thinking, false, player.getName()));
                 }
                 return;
             }
@@ -1243,17 +1394,17 @@ public final class GameHost {
         }
     }
 
-    /** Den anderen Menschen sagen, auf wen gewartet wird (null = niemand mehr). */
+    /** Den anderen Menschen und den Zuschauern sagen, auf wen gewartet wird (null = niemand mehr). */
     private void notifyOthers(HumanSeat seat, String waitingFor) {
-        if (humans.size() < 2) {
-            return;
-        }
         Messages.Status st = new Messages.Status(null, false, waitingFor);
-        for (HumanSeat o : humans.values()) {
-            if (o != seat) {
-                send(o, st);
+        if (humans.size() >= 2) {
+            for (HumanSeat o : humans.values()) {
+                if (o != seat) {
+                    send(o, st);
+                }
             }
         }
+        sendSpectators(st);
     }
 
     /** Mehrfach-Angriff/-Block: Warteschlange der markierten Kreaturen und gemeinsames Ziel. */
@@ -1729,6 +1880,7 @@ public final class GameHost {
     private StateDto sendState(HumanSeat forSeat, GameViewMapper.Playable playable) {
         flushFx(); // Ereignisse vor dem State, der sie widerspiegelt (Outbox haelt die Reihenfolge)
         trackEliminations();
+        turn = game.getTurnNum();
         long seq = stateSeq.incrementAndGet();
         StateDto mine = null;
         for (HumanSeat s : humans.values()) {
@@ -1745,7 +1897,33 @@ public final class GameHost {
         }
         lastStateAt = System.currentTimeMillis();
         stateDirty = false;
+        if (spectatable) {
+            sendPublicState(seq);
+        }
         return mine;
+    }
+
+    /**
+     * Zuschau-Sicht bauen (auch ohne Zuschauer, damit spaete Zuschauer sofort einen aktuellen State bekommen) und
+     * verteilen. Eigenes try/catch: ein Fehler hier darf nie Sitz-States, Prompts oder die Buchfuehrung blockieren.
+     */
+    private void sendPublicState(long seq) {
+        try {
+            if (viewpoint == null) {
+                viewpoint = viewpointId();
+            }
+            StateDto pub = GameViewMapper.mapPublic(game, viewpoint, seq, thinking, deckNames);
+            synchronized (specLock) {
+                publicState = pub;
+                sendSpectators(pub);
+            }
+        } catch (Throwable e) {
+            long now = System.currentTimeMillis();
+            if (now - lastPublicErrorAt > 30_000) {
+                lastPublicErrorAt = now;
+                LOG.error("Zuschau-Sicht fehlgeschlagen (Spieler laufen weiter)", e);
+            }
+        }
     }
 
     private void trackEliminations() {
@@ -1768,7 +1946,7 @@ public final class GameHost {
                 logTail.removeFirst();
             }
         }
-        emit(new Messages.Log(List.of(entry)));
+        emitPublic(new Messages.Log(List.of(entry)));
     }
 
     private String activePlayerName() {
@@ -1850,6 +2028,13 @@ public final class GameHost {
             }
             if (!mine.isEmpty()) {
                 send(s, new Messages.Events(mine));
+            }
+        }
+        if (!spectators.isEmpty()) {
+            // Zuschauer: nur oeffentliche Ereignisse (verdeckte gehen nur an den Besitzer)
+            List<Messages.FxEvent> pub = out.stream().filter(x -> !Boolean.TRUE.equals(x.hidden())).toList();
+            if (!pub.isEmpty()) {
+                sendSpectators(new Messages.Events(pub));
             }
         }
     }
@@ -1986,6 +2171,11 @@ public final class GameHost {
                 send(s, new Messages.Activity(mode, who, cpu, idle, recovered));
             }
         }
+        if (!spectators.isEmpty()) {
+            // Zuschauer sehen wie Mitspieler "wartet auf <Name>", nie "du bist dran"
+            sendSpectators(owner != null ? new Messages.Activity("human", owner.name(), cpu, idle, recovered)
+                    : new Messages.Activity(mode, who, cpu, idle, recovered));
+        }
     }
 
     /** CPU-Last aller Engine-Threads seit dem letzten Aufruf in % eines Kerns; -1 wenn nicht messbar. */
@@ -2022,19 +2212,20 @@ public final class GameHost {
                 place.put(p.getId(), 1);
             }
         }
-        int survivors = 0;
-        for (Player p : all) {
-            if (!place.containsKey(p.getId()) && !eliminatedTurn.containsKey(p.getId())) {
-                survivors++;
-            }
-        }
+        // Wer selbst gegangen ist (und dabei nicht mehr ausgeschieden wurde), landet hinter den Ueberlebenden
         int nextPlace = winnerId == null ? 1 : 2;
-        for (Player p : all) {
-            if (!place.containsKey(p.getId()) && !eliminatedTurn.containsKey(p.getId())) {
-                place.put(p.getId(), nextPlace);
+        for (boolean leavers : new boolean[] {false, true}) {
+            int group = 0;
+            for (Player p : all) {
+                HumanSeat h = humans.get(p.getId());
+                boolean left = h != null && h.left;
+                if (left == leavers && !place.containsKey(p.getId()) && !eliminatedTurn.containsKey(p.getId())) {
+                    place.put(p.getId(), nextPlace);
+                    group++;
+                }
             }
+            nextPlace += group;
         }
-        nextPlace += survivors;
         for (int i = eliminationOrder.size() - 1; i >= 0; i--) {
             UUID pid = eliminationOrder.get(i);
             if (!place.containsKey(pid)) {
@@ -2050,6 +2241,11 @@ public final class GameHost {
         placements.sort((a, b) -> Integer.compare(a.place(), b.place()));
         return new Messages.GameOver(winnerId, game.getWinner(), placements, game.getTurnNum(),
                 System.currentTimeMillis() - startedAt, null, error);
+    }
+
+    /** Zug des zuletzt gesendeten States (0 = noch keiner); thread-sicher, ohne Spiel-Thread. */
+    public int currentTurn() {
+        return turn;
     }
 
     public GameSetup getSetup() {

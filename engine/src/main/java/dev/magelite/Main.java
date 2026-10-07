@@ -111,6 +111,9 @@ public final class Main {
             SocialService social = new SocialService(new FriendStore(db), tableManager, games);
             TableRoutes tableRoutes = new TableRoutes(tableManager, deckResolver);
             tableRoutes.setOnJoined(social::joined);
+            tableManager.setOnKicked(social::kicked);
+            // Zuschauen: nur laufende Tisch-Spiele (WS /ws/game/{id}?spectate=1)
+            httpServer.setSpectatePolicy(tableManager::runningTableName, uid -> tableManager.mine(uid).isPresent());
             httpServer.addModule(tableRoutes);
             // Lobby-Chat, Freunde, Einladungen
             httpServer.addModule(new SocialRoutes(social));

@@ -37,6 +37,11 @@ public class TrackingLondonMulligan extends LondonMulligan {
         return mulliganCounts.getOrDefault(playerId, 0);
     }
 
+    /** Waere der naechste Mulligan dieses Spielers gratis (erster Mulligan im Commander-Mehrspieler)? */
+    public boolean nextMulliganFree(UUID playerId) {
+        return freeMulligans > 0 && usedFreeMulligans.getOrDefault(playerId, 0) < freeMulligans;
+    }
+
     @Override
     public TrackingLondonMulligan copy() {
         TrackingLondonMulligan copy = new TrackingLondonMulligan(freeMulligans, mulliganCounts);

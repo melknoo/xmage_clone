@@ -28,10 +28,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * HTTP/WebSocket-Server. REST fuer Decks/Spielstart, WebSocket fuer das Spiel.
@@ -57,8 +63,25 @@ public final class HttpServer {
         void register(Javalin app);
     }
 
-    private record Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat) {
+    /**
+     * Eine WebSocket-Verbindung: Sitz-Verbindung ({@code seat} gesetzt) oder Zuschauer ({@code spectator}, kein Sitz).
+     * {@code lastPing}: letzter Ping des Clients (Zuschauer ohne Ping ueber {@link #SPECTATOR_PING_TIMEOUT_MS} fliegen raus).
+     */
+    private record Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat, boolean spectator, AtomicLong lastPing) {
+        Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat) {
+            this(outbox, userId, host, seat, false, new AtomicLong(System.currentTimeMillis()));
+        }
     }
+
+    /** Close-Codes beim Zuschauen ({@code ?spectate=1}); alle endgueltig (kein Reconnect). */
+    public static final int CLOSE_REPLACED = 4000;
+    public static final int CLOSE_NOT_ALLOWED = 4403;
+    public static final int CLOSE_NOT_RUNNING = 4404;
+    public static final int CLOSE_TOO_SLOW = 4408;
+    public static final int CLOSE_SEATED = 4409;
+    public static final int CLOSE_FULL = 4429;
+    /** Zuschauer ohne Ping so lange -> schliessen (die UI pingt alle 20 s; Jetty-Idle-Timeout sind 2 h) */
+    private static final long SPECTATOR_PING_TIMEOUT_MS = 60_000;
 
     private final Config config;
     private final Auth auth;
@@ -73,6 +96,11 @@ public final class HttpServer {
     };
     private volatile GameStartListener onGameStarted = (host, deckId) -> {
     };
+    /** Server-Modus: Name des Tisches, dessen laufendes Spiel die id ist (leer = nicht zuschaubar); lokal null */
+    private volatile Function<UUID, Optional<String>> spectatePolicy;
+    /** sitzt der Nutzer an irgendeinem Tisch? Dann kein Zuschauen (sonst verpasst er den Start seines Tisches) */
+    private volatile java.util.function.LongPredicate seatedAtTable = uid -> false;
+    private ScheduledExecutorService spectatorWatch;
     private Javalin app;
 
     public interface GameStartListener {
@@ -97,6 +125,12 @@ public final class HttpServer {
 
     public void setOnGameStarted(GameStartListener cb) {
         this.onGameStarted = cb;
+    }
+
+    /** Server-Modus: welche Spiele zuschaubar sind (laufende Tisch-Spiele -> Tischname). */
+    public void setSpectatePolicy(Function<UUID, Optional<String>> policy, java.util.function.LongPredicate seatedAtTable) {
+        this.spectatePolicy = policy;
+        this.seatedAtTable = seatedAtTable;
     }
 
     /** Zeitpunkt der letzten API-Anfrage (ohne Health-Checks); fuer den Leerlauf-Exit im Server-Modus. */
@@ -183,10 +217,20 @@ public final class HttpServer {
                     }
                     user = User.LOCAL;
                 }
-                UUID id = UUID.fromString(ctx.pathParam("id"));
+                UUID id;
+                try {
+                    id = UUID.fromString(ctx.pathParam("id"));
+                } catch (IllegalArgumentException e) {
+                    ctx.closeSession(4404, "game");
+                    return;
+                }
                 var host = games.get(id);
                 if (host.isEmpty()) {
                     ctx.closeSession(4404, "game");
+                    return;
+                }
+                if (ctx.queryParam("spectate") != null) {
+                    connectSpectator(ctx, user, host.get(), id);
                     return;
                 }
                 GameHost.HumanSeat seat = host.get().seatOf(user.id()).orElse(null);
@@ -209,12 +253,106 @@ public final class HttpServer {
         }
 
         app.start(config.host(), config.port());
+        spectatorWatch = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "spectator-watch");
+            t.setDaemon(true);
+            return t;
+        });
+        spectatorWatch.scheduleWithFixedDelay(this::closeSilentSpectators, 10, 10, TimeUnit.SECONDS);
         return app.port();
     }
 
     public void stop() {
+        if (spectatorWatch != null) {
+            spectatorWatch.shutdownNow();
+        }
         if (app != null) {
             app.stop();
+        }
+    }
+
+    /**
+     * Zuschauer-Verbindung ({@code ?spectate=1}). Reihenfolge der Ablehnungen: lokaler Modus 4403, sitzt selbst im Spiel
+     * 4409 (nie den Sitz anhaengen - das wuerde dessen Verbindung stehlen), kein laufendes Tisch-Spiel 4404,
+     * mehr als {@link GameHost#MAX_SPECTATORS} 4429. Eine neue Verbindung desselben Nutzers schliesst die alte mit 4000.
+     */
+    private void connectSpectator(WsContext ctx, User user, GameHost host, UUID gameId) {
+        Function<UUID, Optional<String>> policy = spectatePolicy;
+        if (!config.server() || policy == null) {
+            ctx.closeSession(CLOSE_NOT_ALLOWED, "spectate");
+            return;
+        }
+        if (host.seatOf(user.id()).isPresent() || seatedAtTable.test(user.id())) {
+            ctx.closeSession(CLOSE_SEATED, "seated");
+            return;
+        }
+        Optional<String> tableName = policy.apply(gameId);
+        if (tableName.isEmpty() || !host.isSpectatable() || !host.isRunning()) {
+            ctx.closeSession(CLOSE_NOT_RUNNING, "not running");
+            return;
+        }
+        lastActivity = System.currentTimeMillis();
+        Outbox outbox = new Outbox(ctx, true, () -> closeAsync(ctx, CLOSE_TOO_SLOW, "too slow"));
+        Session session = new Session(outbox, user.id(), host, null, true, new AtomicLong(System.currentTimeMillis()));
+        // vor dem Anmelden eintragen: Nachrichten des Clients (Ping) finden die Session sofort
+        sockets.put(ctx, session);
+        GameHost.SpectateResult res = host.attachSpectator(user.id(), user.name(), outbox, tableName.get());
+        switch (res.status()) {
+            case SEATED -> {
+                sockets.remove(ctx);
+                outbox.close();
+                ctx.closeSession(CLOSE_SEATED, "seated");
+            }
+            case FULL -> {
+                sockets.remove(ctx);
+                outbox.close();
+                ctx.closeSession(CLOSE_FULL, "full");
+            }
+            case OK -> {
+                if (res.replaced() != null) {
+                    for (Map.Entry<WsContext, Session> e : sockets.entrySet()) {
+                        if (e.getValue().outbox() == res.replaced()) {
+                            closeAsync(e.getKey(), CLOSE_REPLACED, "replaced");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Schliesst einen Socket ausserhalb des aufrufenden Threads (nie den Game-Thread an Jetty blockieren lassen). */
+    private void closeAsync(WsContext ctx, int code, String reason) {
+        Session s = sockets.remove(ctx);
+        if (s != null) {
+            s.outbox().close();
+            if (s.spectator()) {
+                s.host().detachSpectator(s.outbox());
+            }
+        }
+        Thread t = new Thread(() -> {
+            try {
+                ctx.closeSession(code, reason);
+            } catch (Exception ignored) {
+                // schon zu
+            }
+        }, "ws-close");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** Zuschauer ohne Ping seit {@link #SPECTATOR_PING_TIMEOUT_MS}: tote Verbindungen geben ihren Platz frei. */
+    private void closeSilentSpectators() {
+        try {
+            long now = System.currentTimeMillis();
+            for (Map.Entry<WsContext, Session> e : sockets.entrySet()) {
+                Session s = e.getValue();
+                if (s.spectator() && now - s.lastPing().get() > SPECTATOR_PING_TIMEOUT_MS) {
+                    LOG.info("Zuschauer ohne Ping - Verbindung wird geschlossen");
+                    closeAsync(e.getKey(), CLOSE_TOO_SLOW, "no ping");
+                }
+            }
+        } catch (Throwable e) {
+            LOG.warn("Zuschauer-Wache: " + e);
         }
     }
 
@@ -338,6 +476,14 @@ public final class HttpServer {
             if (s == null) {
                 return;
             }
+            if (s.spectator()) {
+                // Zuschauer duerfen nur pingen; alles andere wird still verworfen (die UI schickt z.B. "settings")
+                if ("ping".equals(m.path("t").asText())) {
+                    s.lastPing().set(System.currentTimeMillis());
+                    s.outbox().send(PONG);
+                }
+                return;
+            }
             GameHost host = s.host();
             GameHost.HumanSeat seat = s.seat();
             switch (m.path("t").asText()) {
@@ -422,12 +568,18 @@ public final class HttpServer {
         return GameHost.Response.ofBool(false);
     }
 
+    private static final Map<String, String> PONG = Map.of("t", "pong");
+
     private void closeSocket(WsContext ctx) {
         Session s = sockets.remove(ctx);
         if (s != null) {
             s.outbox().close();
             try {
-                s.host().detach(s.seat(), s.outbox());
+                if (s.spectator()) {
+                    s.host().detachSpectator(s.outbox());
+                } else {
+                    s.host().detach(s.seat(), s.outbox());
+                }
             } catch (Exception ignored) {
                 // egal
             }

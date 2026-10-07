@@ -1,13 +1,17 @@
 package dev.magelite.deck;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import dev.magelite.stats.Db;
+import dev.magelite.stats.Progression;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -15,9 +19,21 @@ import java.util.Optional;
  */
 public final class DeckStore {
 
+    /**
+     * {@code masteryLevel}/{@code masteryNext} aus {@link Progression}; {@code games}/{@code wins} (Spiele ohne Fehlerende)
+     * nur in {@link #list}, sonst null und weggelassen.
+     */
     public record StoredDeck(long id, String name, List<String> commanders, String colors, String commanderSet,
                              String commanderNum, String source, String sourceUrl, int cardCount, boolean valid,
-                             String validation, int masteryXp, long createdAt, long updatedAt) {
+                             String validation, int masteryXp, long createdAt, long updatedAt,
+                             int masteryLevel, int masteryNext,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer games,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer wins) {
+
+        StoredDeck withStats(int games, int wins) {
+            return new StoredDeck(id, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, cardCount, valid,
+                    validation, masteryXp, createdAt, updatedAt, masteryLevel, masteryNext, games, wins);
+        }
     }
 
     private final Db db;
@@ -37,6 +53,22 @@ public final class DeckStore {
                     }
                 }
             }
+            // Spiele/Siege je Deck: eine Abfrage, in Java zusammengefuehrt (read() bleibt fuer get() gleich)
+            Map<Long, int[]> stats = new HashMap<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT deck_id, COUNT(*), SUM(CASE WHEN result='win' THEN 1 ELSE 0 END) FROM games "
+                            + "WHERE user_id = ? AND end_reason != 'error' AND deck_id IS NOT NULL GROUP BY deck_id")) {
+                ps.setLong(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        stats.put(rs.getLong(1), new int[]{rs.getInt(2), rs.getInt(3)});
+                    }
+                }
+            }
+            out.replaceAll(d -> {
+                int[] gw = stats.getOrDefault(d.id(), new int[]{0, 0});
+                return d.withStats(gw[0], gw[1]);
+            });
             return out;
         });
     }
@@ -140,6 +172,7 @@ public final class DeckStore {
                 cmds == null || cmds.isEmpty() ? List.of() : Arrays.asList(cmds.split("\n")),
                 rs.getString("colors"), rs.getString("commander_set"), rs.getString("commander_num"),
                 rs.getString("source"), rs.getString("source_url"), rs.getInt("card_count"), rs.getInt("valid") != 0,
-                rs.getString("validation"), rs.getInt("mastery_xp"), rs.getLong("created_at"), rs.getLong("updated_at"));
+                rs.getString("validation"), rs.getInt("mastery_xp"), rs.getLong("created_at"), rs.getLong("updated_at"),
+                Progression.masteryLevel(rs.getInt("mastery_xp")), Progression.masteryNext(rs.getInt("mastery_xp")), null, null);
     }
 }

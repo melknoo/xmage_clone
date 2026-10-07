@@ -12,6 +12,8 @@ import mage.constants.PhaseStep;
 import mage.game.Game;
 import mage.game.events.PlayerQueryEvent;
 import mage.game.permanent.Permanent;
+import mage.game.stack.Spell;
+import mage.game.stack.StackObject;
 import mage.util.MultiAmountMessage;
 import mage.view.AbilityPickerView;
 import mage.view.CardsView;
@@ -56,6 +58,10 @@ public final class PromptMapper {
         switch (event.getQueryType()) {
             case ASK -> {
                 p.mulligan = "Mulligan".equals(p.leftBtn);
+                if (p.mulligan && game.getMulligan() instanceof TrackingLondonMulligan tm) {
+                    p.mulligans = tm.getMulliganCount(p.playerId);
+                    p.freeMulligan = tm.nextMulliganFree(p.playerId);
+                }
                 if (options != null && options.get(Constants.Option.AUTO_ANSWER_MESSAGE) != null) {
                     p.autoAnswer = options.get(Constants.Option.AUTO_ANSWER_MESSAGE).toString();
                 }
@@ -77,7 +83,10 @@ public final class PromptMapper {
                     }
                 }
             }
-            case PICK_TARGET -> mapTarget(game, event, humanId, p, options);
+            case PICK_TARGET -> {
+                mapTarget(game, event, humanId, p, options);
+                p.sourceId = stackSource(game, p);
+            }
             case PICK_ABILITY -> {
                 List<PromptDto.Item> items = new ArrayList<>();
                 if (event.getAbilities() != null) {
@@ -158,6 +167,7 @@ public final class PromptMapper {
                     // XMage setzt hier keinen Knopf; Sonderbezahlung nur per Antwort "special"
                     SpecialPay.describe(game, p.playerId, p);
                 }
+                p.sourceId = stackSource(game, p);
             }
             default -> {
                 return null;
@@ -207,6 +217,30 @@ public final class PromptMapper {
             }
             p.defenderPick = allDefenders;
         }
+    }
+
+    /**
+     * Stapelobjekt, fuer das gerade Ziele gewaehlt bzw. Kosten bezahlt werden (Game-Thread): ein in der Nachricht
+     * verlinktes Stapelobjekt, sonst das oberste, wenn es dem fragenden Spieler gehoert (Zauber und Faehigkeiten
+     * liegen beim Wirken/Aktivieren schon auf dem Stapel). Nur Anzeige - im Zweifel null.
+     */
+    static UUID stackSource(Game game, PromptDto p) {
+        try {
+            for (UUID id : ReplacementAssist.objIds(p)) {
+                for (StackObject so : game.getStack()) {
+                    if (so.getId().equals(id) || (so instanceof Spell && id.equals(so.getSourceId()))) {
+                        return so.getId();
+                    }
+                }
+            }
+            StackObject top = game.getStack().getFirstOrNull();
+            if (top != null && p.playerId != null && p.playerId.equals(top.getControllerId())) {
+                return top.getId();
+            }
+        } catch (RuntimeException ignored) {
+            // nur Anzeige
+        }
+        return null;
     }
 
     private static List<CardDto> cardsOf(Game game, List<? extends Card> cards, UUID humanId) {

@@ -2,7 +2,6 @@ package dev.magelite.stats;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.magelite.api.Auth;
-import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import io.javalin.Javalin;
@@ -54,6 +53,8 @@ public final class StatsRoutes implements HttpServer.Module {
                            AVG(placement) AS avgPlace,
                            AVG(turns) AS avgTurns,
                            AVG(duration_ms) AS avgDurationMs,
+                           SUM(duration_ms) AS totalDurationMs,
+                           MIN(ended_at) AS firstEndedAt,
                            AVG(mulligans) AS avgMulligans,
                            SUM(CASE WHEN mulligans > 0 THEN 1 ELSE 0 END) AS gamesWithMulligan,
                            SUM(xp_awarded) AS xp
@@ -67,7 +68,8 @@ public final class StatsRoutes implements HttpServer.Module {
             m.put("opponents", rows(c, """
                     SELECT s.commander AS commander, COUNT(*) AS games,
                            SUM(CASE WHEN g.result='win' THEN 1 ELSE 0 END) AS humanWins,
-                           AVG(s.placement) AS avgPlace
+                           AVG(s.placement) AS avgPlace,
+                           SUM(CASE WHEN s.placement < g.placement THEN 1 ELSE 0 END) AS aheadOfYou
                     FROM game_seats s JOIN games g ON g.id = s.game_id
                     WHERE s.is_human = 0 AND g.end_reason != 'error' AND g.user_id = ?
                     GROUP BY s.commander ORDER BY games DESC LIMIT 15""", userId));
@@ -76,7 +78,7 @@ public final class StatsRoutes implements HttpServer.Module {
             }));
         });
 
-        app.get("/api/stats/decks", ctx -> ctx.json(db.with(c -> rows(c, """
+        app.get("/api/stats/decks", ctx -> ctx.json(withMastery(db.with(c -> rows(c, """
                 SELECT COALESCE(g.deck_id, -1) AS deckId, g.deck_name AS deckName, g.commander AS commander,
                        COUNT(*) AS games, SUM(CASE WHEN g.result='win' THEN 1 ELSE 0 END) AS wins,
                        AVG(g.placement) AS avgPlace, AVG(g.turns) AS avgTurns, AVG(g.mulligans) AS avgMulligans,
@@ -84,7 +86,7 @@ public final class StatsRoutes implements HttpServer.Module {
                        d.commander_set AS commanderSet, d.commander_num AS commanderNum
                 FROM games g LEFT JOIN decks d ON d.id = g.deck_id
                 WHERE g.end_reason != 'error' AND g.user_id = ?
-                GROUP BY COALESCE(g.deck_id, g.deck_name) ORDER BY lastPlayed DESC""", Auth.user(ctx).id()))));
+                GROUP BY COALESCE(g.deck_id, g.deck_name) ORDER BY lastPlayed DESC""", Auth.user(ctx).id())))));
 
         app.get("/api/stats/decks/{id}/cards", ctx -> {
             long id = Long.parseLong(ctx.pathParam("id"));
@@ -106,7 +108,8 @@ public final class StatsRoutes implements HttpServer.Module {
                                SUM(s.opening) AS opening, SUM(s.drawn) AS drawn, SUM(CASE WHEN s.cast > 0 THEN 1 ELSE 0 END) AS gamesCast,
                                SUM(s.cast) AS cast, AVG(s.first_cast_turn) AS avgFirstCastTurn,
                                SUM(CASE WHEN s.cast > 0 AND g.result='win' THEN 1 ELSE 0 END) AS winsWhenCast,
-                               COUNT(*) AS gamesSeen
+                               COUNT(*) AS gamesSeen,
+                               SUM(CASE WHEN s.opening > 0 OR s.drawn > 0 THEN 1 ELSE 0 END) AS gamesInHand
                         FROM game_card_stats s JOIN games g ON g.id = s.game_id AND g.user_id = s.user_id
                         WHERE s.deck_id = ? AND g.end_reason != 'error' AND g.user_id = ?
                         GROUP BY s.card_name ORDER BY gamesCast DESC, drawn DESC""", id, userId));
@@ -132,6 +135,17 @@ public final class StatsRoutes implements HttpServer.Module {
                 return games;
             }));
         });
+    }
+
+    /** Deck-Zeilen mit Meisterschaftsstufe/-schwelle (nur eigene Decks mit masteryXp). */
+    private static List<Map<String, Object>> withMastery(List<Map<String, Object>> rows) {
+        for (Map<String, Object> r : rows) {
+            if (r.get("masteryXp") instanceof Number n) {
+                r.put("masteryLevel", Progression.masteryLevel(n.intValue()));
+                r.put("masteryNext", Progression.masteryNext(n.intValue()));
+            }
+        }
+        return rows;
     }
 
     private static List<Map<String, Object>> rows(Connection c, String sql, Object... params) throws SQLException {

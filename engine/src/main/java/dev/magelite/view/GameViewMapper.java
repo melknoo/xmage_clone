@@ -55,6 +55,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -75,8 +76,76 @@ public final class GameViewMapper {
     /** @param precomputed schon berechnete spielbare Objekte (spart die zweite Berechnung), sonst null */
     public static StateDto map(Game game, UUID myId, long seq, boolean withPlayable, Playable precomputed,
                                UUID thinkingPlayerId, Map<UUID, String> deckNames) {
+        return build(game, myId, myId, seq, withPlayable, precomputed, thinkingPlayerId, deckNames);
+    }
+
+    /** Name eines verdeckt gewirkten Zaubers fuer Fremde (Ziel-Anzeige). */
+    public static final String FACE_DOWN_SPELL = "verdeckter Zauber";
+
+    /**
+     * Zuschauer-Sicht: gebaut wie fuer einen XMage-Zuschauer (Betrachter null - keine Hand, kein lookedAt, verdeckte
+     * Karten ohne Namen), Sitzordnung ab {@code viewpointId}. Danach: {@code me} nur am Blickwinkel-Spieler (Index 0),
+     * {@code hand} leer, kein {@code myPlayerId}/{@code playable}/{@code actions}/{@code lookedAt}/{@code replDeclines},
+     * {@code spectator=true}; verdeckte Karten ohne Set/Nummer/Bild/Rueckseite. Nur auf dem Game-Thread.
+     * <p>
+     * Nie mit einer Sitz-id als Betrachter bauen und nie aus dem State eines Sitzes ableiten.
+     */
+    public static StateDto mapPublic(Game game, UUID viewpointId, long seq, UUID thinkingPlayerId, Map<UUID, String> deckNames) {
+        StateDto s = build(game, null, viewpointId, seq, false, null, thinkingPlayerId, deckNames);
+        s.myPlayerId = null;
+        s.hand = List.of();
+        s.lookedAt = null;
+        s.playable = null;
+        s.actions = null;
+        s.replDeclines = null;
+        s.spectator = Boolean.TRUE;
+        for (PlayerDto p : s.players) {
+            p.me = p.id.equals(viewpointId);
+            p.topCardPrivate = false;
+            if (p.topCard != null) {
+                hideFaceDown(p.topCard);
+            }
+            p.graveyard.forEach(GameViewMapper::hideFaceDown);
+            p.exile.forEach(GameViewMapper::hideFaceDown);
+            p.battlefield.forEach(GameViewMapper::hideFaceDown);
+            for (CommandDto c : p.command) {
+                if (c.card != null) {
+                    hideFaceDown(c.card);
+                }
+            }
+        }
+        s.stack.forEach(GameViewMapper::hideFaceDown);
+        if (s.revealed != null) {
+            s.revealed.forEach(r -> r.cards().forEach(GameViewMapper::hideFaceDown));
+        }
+        return s;
+    }
+
+    /** Verdeckte Karte ohne Bild-Infos (die Rueckseite zeigt die UI selbst). */
+    private static void hideFaceDown(CardDto d) {
+        if (!d.faceDown) {
+            return;
+        }
+        d.name = "";
+        d.set = null;
+        d.num = null;
+        d.image = null;
+        d.imageNum = 0;
+        d.back = null;
+        d.transformable = false;
+        d.rarity = null;
+    }
+
+    /**
+     * @param viewerId    echter Betrachter (Hand, lookedAt, private oberste Karte, eigene verdeckte Karten);
+     *                    null = Zuschauer (XMage-Watcher-Modus)
+     * @param orderFromId Spieler an Index 0 der Sitzordnung
+     */
+    private static StateDto build(Game game, UUID viewerId, UUID orderFromId, long seq, boolean withPlayable, Playable precomputed,
+                                  UUID thinkingPlayerId, Map<UUID, String> deckNames) {
+        UUID myId = viewerId;
         GameView gv = new GameView(game.getState(), game, myId, null);
-        Player me = game.getPlayer(myId);
+        Player me = myId == null ? null : game.getPlayer(myId);
 
         StateDto s = new StateDto();
         s.seq = seq;
@@ -105,9 +174,9 @@ public final class GameViewMapper {
             views.put(pv.getPlayerId(), pv);
         }
         CommanderPlaysCountWatcher playsWatcher = game.getState().getWatcher(CommanderPlaysCountWatcher.class);
-        Playable pl = precomputed != null ? precomputed : withPlayable && me != null ? playable(game, me) : null;
+        Playable pl = me == null ? null : precomputed != null ? precomputed : withPlayable ? playable(game, me) : null;
 
-        List<UUID> order = seatOrder(game, myId);
+        List<UUID> order = seatOrder(game, orderFromId);
         List<PlayerDto> players = new ArrayList<>();
         for (UUID pid : order) {
             PlayerView pv = views.get(pid);
@@ -116,7 +185,7 @@ public final class GameViewMapper {
                 continue;
             }
             PlayerDto pd = mapPlayer(game, pv, p, myId, attacking, blocking, playsWatcher, thinkingPlayerId, deckNames);
-            if (pd.me && pd.topCard == null) {
+            if (myId != null && pid.equals(myId) && pd.topCard == null) {
                 pd.topCard = privateTopCard(game, p, pl);
                 pd.topCardPrivate = pd.topCard != null;
             }
@@ -131,6 +200,7 @@ public final class GameViewMapper {
             CardDto d = card(v);
             if (v instanceof StackAbilityView sav) {
                 d.kind = "ability";
+                d.abilityType = abilityType(sav.getAbilityType());
                 CardView src = sav.getSourceCard();
                 if (d.name == null || d.name.isEmpty()) {
                     // StackAbilityView hat keinen Anzeigenamen -> Name der Quelle
@@ -170,7 +240,8 @@ public final class GameViewMapper {
             }
             s.revealed = rev;
         }
-        Map<String, Cards> looked = game.getState().getLookedAt(myId);
+        // getLookedAt(null) wuerde einen null-Schluessel in den Spielzustand eintragen
+        Map<String, Cards> looked = myId == null ? null : game.getState().getLookedAt(myId);
         if (looked != null && !looked.isEmpty()) {
             List<NamedCardsDto> la = new ArrayList<>();
             for (Map.Entry<String, Cards> e : looked.entrySet()) {
@@ -292,7 +363,7 @@ public final class GameViewMapper {
         Permanent perm = game.getPermanent(id);
         if (perm != null) {
             t.kind = "permanent";
-            boolean hidden = perm.isFaceDown(game) && !myId.equals(perm.getControllerId());
+            boolean hidden = perm.isFaceDown(game) && !Objects.equals(myId, perm.getControllerId());
             t.name = hidden || perm.getName().isEmpty() ? "verdecktes Permanent" : perm.getName();
             t.owner = playerName(game, perm.getControllerId());
             return t;
@@ -300,7 +371,9 @@ public final class GameViewMapper {
         StackObject so = game.getStack().getStackObject(id);
         if (so != null) {
             t.kind = "spell";
-            t.name = so.getName();
+            // Spell.getName() liefert auch bei verdeckt gewirkten Zaubern den echten Namen
+            boolean hidden = so instanceof Spell sp && sp.isFaceDown(game) && !Objects.equals(myId, so.getControllerId());
+            t.name = hidden ? FACE_DOWN_SPELL : so.getName();
             t.owner = playerName(game, so.getControllerId());
             return t;
         }
@@ -315,7 +388,7 @@ public final class GameViewMapper {
         t.owner = playerName(game, ownerId);
         boolean secretZone = zone == Zone.HAND || zone == Zone.LIBRARY;
         boolean faceDown = obj instanceof Card c && c.isFaceDown(game);
-        boolean mine = myId.equals(ownerId);
+        boolean mine = myId != null && myId.equals(ownerId);
         t.name = (faceDown || secretZone) && !mine ? "verdeckte Karte" : obj.getName();
         return t;
     }
@@ -506,7 +579,15 @@ public final class GameViewMapper {
                         c.casts = playsWatcher.getPlaysCount(cmdId);
                         c.tax = 2 * c.casts;
                         Zone z = game.getState().getZone(cmdId);
-                        c.rules = List.of("Zone: " + (z == null ? "?" : z.name()));
+                        // Hand/Bibliothek bzw. verdeckt (Manifest, verdecktes Exil): Zone und id nur fuer den Besitzer
+                        boolean faceDown = (z == Zone.BATTLEFIELD || z == Zone.EXILED) && card.isFaceDown(game);
+                        boolean secret = (z == Zone.HAND || z == Zone.LIBRARY || faceDown) && !p.getId().equals(myId);
+                        if (secret) {
+                            c.id = null;
+                            c.rules = List.of("Zone: verborgen");
+                        } else {
+                            c.rules = List.of("Zone: " + (z == null ? "?" : z.name()));
+                        }
                         command.add(c);
                     }
                 }
@@ -546,6 +627,7 @@ public final class GameViewMapper {
         d.blocking = blocking.contains(v.getId());
         d.canAttack = v.isCanAttack();
         d.canBlock = v.isCanBlock();
+        d.ptModified = !v.isFaceDown() && v.showPT() && (ptModified(v.getOriginalPower()) || ptModified(v.getOriginalToughness()));
         Permanent perm = game.getPermanent(v.getId());
         if (perm != null) {
             d.controllerId = perm.getControllerId();
@@ -559,6 +641,41 @@ public final class GameViewMapper {
             d.row = "other";
         }
         return d;
+    }
+
+    /** triggered | activated | static | special | spell | land (XMage {@code AbilityType} vereinfacht) */
+    private static String abilityType(mage.constants.AbilityType t) {
+        if (t == null) {
+            return null;
+        }
+        if (t.isTriggeredAbility()) {
+            return "triggered";
+        }
+        if (t.isActivatedAbility()) {
+            return "activated";
+        }
+        return switch (t) {
+            case STATIC, EVASION -> "static";
+            case SPECIAL_ACTION, SPECIAL_MANA_PAYMENT -> "special";
+            case SPELL -> "spell";
+            case PLAY_LAND -> "land";
+            default -> t.name().toLowerCase(java.util.Locale.ROOT);
+        };
+    }
+
+    /**
+     * {@code CardView.getOriginalPower()} ist die lebende {@code MageInt} des Objekts (nur bei offenen Karten gesetzt):
+     * Boni/Zaehler aendern den Endwert, "wird zu X/X" den aktuellen Grundwert. Grundwert 0 mit geaendertem Grundwert
+     * = vermutlich "*"-Kreatur (CDA) - nicht als geaendert zaehlen.
+     */
+    private static boolean ptModified(mage.MageInt m) {
+        if (m == null || m == mage.MageInt.EmptyMageInt) {
+            return false;
+        }
+        if (m.getValue() != m.getModifiedBaseValue()) {
+            return true;
+        }
+        return m.getModifiedBaseValue() != m.getBaseValue() && m.getBaseValue() != 0;
     }
 
     public static List<CardDto> cards(Collection<? extends CardView> views) {

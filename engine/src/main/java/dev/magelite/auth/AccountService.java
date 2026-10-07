@@ -114,6 +114,25 @@ public final class AccountService {
         return token;
     }
 
+    public record SessionInfo(long since, String via) {
+    }
+
+    /** Session des Nutzers zum Token-Hash (fuer "angemeldet seit"); leer bei altem Code-Cookie oder fremdem Hash. */
+    public Optional<SessionInfo> sessionInfo(long userId, String tokenHash) {
+        if (tokenHash == null) {
+            return Optional.empty();
+        }
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT created_at, via FROM sessions WHERE token_hash = ? AND user_id = ?")) {
+                ps.setString(1, tokenHash);
+                ps.setLong(2, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(new SessionInfo(rs.getLong(1), rs.getString(2))) : Optional.<SessionInfo>empty();
+                }
+            }
+        });
+    }
+
     public void deleteSession(String tokenHash) {
         if (tokenHash == null) {
             return;

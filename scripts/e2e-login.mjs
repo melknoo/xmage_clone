@@ -1,8 +1,12 @@
 // End-to-End-Test fuer den Server-Modus (Konten, Cookie-Login, Nutzertrennung) gegen eine laufende Dev-Engine:
-//   cd engine; .\gradlew.bat runServer        (Owner-Code DEV-OWNER-CODE, Port 7317)
-//   node scripts\e2e-login.mjs
-// Env: MAGELITE_URL (Default http://127.0.0.1:7317), MAGELITE_OWNER_CODE (Default DEV-OWNER-CODE)
-const base = process.env.MAGELITE_URL ?? 'http://127.0.0.1:7317'
+//   isolierte Engine im Server-Modus starten (nie Port 7317), dann
+//   MAGELITE_URL=http://127.0.0.1:7401 MAGELITE_OWNER_CODE=DEV-OWNER-CODE node scripts/e2e-login.mjs
+// Env: MAGELITE_URL (Pflicht), MAGELITE_OWNER_CODE (Default DEV-OWNER-CODE)
+const base = process.env.MAGELITE_URL
+if (!base) {
+  console.error('MAGELITE_URL fehlt (z. B. http://127.0.0.1:7401) - kein Default, nie gegen 7317 testen')
+  process.exit(2)
+}
 const ownerCode = process.env.MAGELITE_OWNER_CODE ?? 'DEV-OWNER-CODE'
 
 let failed = 0
@@ -43,8 +47,11 @@ r = await call('POST', '/api/auth/login', { body: { code: ownerCode } })
 ok(r.status === 200 && r.json?.user?.admin === true, `Owner-Login -> ${r.status} admin=${r.json?.user?.admin}`)
 ok(/HttpOnly/i.test(r.setCookie ?? '') && /SameSite=Lax/i.test(r.setCookie ?? ''), `Cookie HttpOnly+Lax: ${r.setCookie}`)
 const owner = cookieOf(r.setCookie)
+const ownerSince = r.json?.session?.since
+ok(r.json?.session?.via === 'code' && Math.abs(Date.now() - ownerSince) < 60000, `Login-Antwort: session=${JSON.stringify(r.json?.session)}`)
 r = await call('GET', '/api/me', { cookie: owner })
 ok(r.status === 200 && r.json?.mode === 'server', `/api/me mit Cookie -> ${r.status}`)
+ok(r.json?.session?.since === ownerSince && r.json?.session?.via === 'code', `/api/me: session.since=${r.json?.session?.since}`)
 
 // 6. Einladung anlegen
 r = await call('POST', '/api/admin/invites', { cookie: owner, body: { name: 'Anna' } })
@@ -76,6 +83,7 @@ r = await call('POST', '/api/auth/login', { body: { email: 'anna@EXAMPLE.de', pa
 ok(r.status === 401, `E-Mail-Login mit falschem Passwort -> ${r.status}`)
 r = await call('POST', '/api/auth/login', { body: { email: 'anna@EXAMPLE.de', password: 'geheim123' } })
 ok(r.status === 200 && r.json?.user?.name === 'Anna', `E-Mail-Login (andere Schreibweise) -> ${r.status}`)
+ok(r.json?.session?.via === 'password' && r.json?.session?.since > 0, `E-Mail-Login: session.via=${r.json?.session?.via}`)
 const annaSess2 = cookieOf(r.setCookie)
 r = await call('POST', '/api/auth/logout', { cookie: annaSess2 })
 ok(r.status === 200, `Logout -> ${r.status}`)
@@ -100,7 +108,12 @@ ok(r.status === 401, `altes Passwort -> ${r.status}`)
 r = await call('POST', '/api/decks', { cookie: owner, body: { name: 'Owner-Testdeck', text: '1 Krenko, Mob Boss\n30 Mountain', commanders: ['Krenko, Mob Boss'] } })
 ok(r.status === 200 && r.json?.id, `Owner speichert Deck -> ${r.status} id=${r.json?.id}`)
 const ownerDeckId = r.json?.id
-r = await call('GET', '/api/decks', { cookie: annaCookie })
+ok(r.json?.masteryLevel === 1 && r.json?.masteryNext === 200 && r.json?.games === undefined, `Speichern liefert das Deck (get): Stufe ${r.json?.masteryLevel}, games ${r.json?.games}`)
+r = await call('GET', '/api/decks', { cookie: owner })
+{
+  const d = Array.isArray(r.json) ? r.json.find((x) => x.id === ownerDeckId) : null
+  ok(d && d.games === 0 && d.wins === 0 && d.masteryLevel === 1 && d.masteryNext === 200, `Deckliste: games=${d?.games} wins=${d?.wins} Stufe=${d?.masteryLevel}/${d?.masteryNext}`)
+}r = await call('GET', '/api/decks', { cookie: annaCookie })
 ok(r.status === 200 && Array.isArray(r.json) && r.json.length === 0, `Anna sieht ${Array.isArray(r.json) ? r.json.length : '?'} Decks (erwartet 0)`)
 r = await call('GET', `/api/decks/${ownerDeckId}`, { cookie: annaCookie })
 ok(r.status === 400 || r.status === 404, `Anna liest Owner-Deck -> ${r.status}`)
@@ -120,9 +133,16 @@ r = await call('POST', '/api/games', { cookie: owner, body: { deck: { type: 'ran
 ok(r.status === 200 && r.json?.gameId, `Owner startet Spiel -> ${r.status}`)
 const gameId = r.json?.gameId
 r = await call('POST', '/api/games', { cookie: annaCookie, body: { deck: { type: 'random' }, bots: [], tempo: 'BLITZ' } })
-ok(r.status === 409 && r.json?.busy === true, `Anna startet Spiel waehrend Owner spielt -> ${r.status} (${r.json?.error})`)
-r = await call('GET', '/api/games/current', { cookie: annaCookie })
-ok(r.status === 404, `Anna /api/games/current -> ${r.status}`)
+if (r.status === 200) {
+  // Engine mit --max-games > 1 (z. B. isolierte Test-Engine): kein Busy-Fall; Annas Spiel endet mit dem Entfernen (14.)
+  console.log(`SKIP Busy-Pruefung: Engine erlaubt mehrere Spiele (--max-games > 1), Anna spielt ${r.json?.gameId}`)
+  r = await call('GET', '/api/games/current', { cookie: annaCookie })
+  ok(r.status === 200, `Anna /api/games/current (eigenes Spiel) -> ${r.status}`)
+} else {
+  ok(r.status === 409 && r.json?.busy === true, `Anna startet Spiel waehrend Owner spielt -> ${r.status} (${r.json?.error})`)
+  r = await call('GET', '/api/games/current', { cookie: annaCookie })
+  ok(r.status === 404, `Anna /api/games/current -> ${r.status}`)
+}
 r = await call('GET', '/api/games/current', { cookie: owner })
 ok(r.status === 200 && r.json?.gameId === gameId, `Owner /api/games/current -> ${r.status}`)
 

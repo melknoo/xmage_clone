@@ -14,11 +14,20 @@ public final class Messages {
     private Messages() {
     }
 
+    /**
+     * {@code host}: dieser Sitz ist der Gastgeber (erster Mensch) und darf das Tempo stellen.
+     * Zuschauer ({@code spectator=true}): kein {@code myPlayerId}, {@code host=false}, {@code viewpointId} = Blickwinkel-Spieler
+     * (= {@code players[0]} im State), {@code tableName} = Name des Tisches.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    /** {@code host}: dieser Sitz ist der Gastgeber (erster Mensch) und darf das Tempo stellen */
-    public record Hello(String t, int protocol, UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo, boolean host) {
+    public record Hello(String t, int protocol, UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo, boolean host,
+                        Boolean spectator, UUID viewpointId, String tableName) {
         public Hello(UUID gameId, UUID myPlayerId, List<Seat> seats, String tempo, boolean host) {
-            this("hello", 2, gameId, myPlayerId, seats, tempo, host);
+            this("hello", 3, gameId, myPlayerId, seats, tempo, host, null, null, null);
+        }
+
+        public static Hello spectator(UUID gameId, List<Seat> seats, String tempo, UUID viewpointId, String tableName) {
+            return new Hello("hello", 3, gameId, null, seats, tempo, false, true, viewpointId, tableName);
         }
     }
 
@@ -37,10 +46,13 @@ public final class Messages {
     public record SeatConn(UUID playerId, boolean connected, long disconnectedMs, boolean conceded) {
     }
 
-    /** {@code kickAfterMs}: ab dieser Trennungsdauer darf "aufgeben lassen" angeboten werden */
-    public record SeatsStatus(String t, List<SeatConn> seats, long kickAfterMs) {
-        public SeatsStatus(List<SeatConn> seats, long kickAfterMs) {
-            this("seats", seats, kickAfterMs);
+    /**
+     * {@code kickAfterMs}: ab dieser Trennungsdauer darf "aufgeben lassen" angeboten werden;
+     * {@code spectators}: Namen der Zuschauer (leer = niemand schaut zu)
+     */
+    public record SeatsStatus(String t, List<SeatConn> seats, long kickAfterMs, List<String> spectators) {
+        public SeatsStatus(List<SeatConn> seats, long kickAfterMs, List<String> spectators) {
+            this("seats", seats, kickAfterMs, spectators);
         }
     }
 

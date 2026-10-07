@@ -149,8 +149,10 @@ public class FxWatcher extends Watcher {
             return null; // Ziehen, Ausspielen, Stapel->Spielfeld usw.: zeigt der State selbst
         }
         boolean secret = from == Zone.LIBRARY || from == Zone.HAND;
+        // verdecktes Exil aus Hand/Bibliothek (Necropotence, Foretell ...): XMage dreht die Karte erst NACH dem
+        // Zonenwechsel um (ForetellAbility: moveCardsToExile, dann setFaceDown) - isFaceDown greift hier noch nicht
         boolean hidden = (secret && (to == Zone.LIBRARY || to == Zone.HAND)) || c.isFaceDown(game)
-                || (to == Zone.EXILED && from == Zone.LIBRARY && z.getSource() != null && isFaceDownExile(z));
+                || (to == Zone.EXILED && secret && z.getSource() != null && isFaceDownExile(z));
         CardDto card = null;
         if (!hidden) {
             try {
@@ -172,11 +174,15 @@ public class FxWatcher extends Watcher {
                 null, c instanceof PermanentToken ? true : null, null, hidden ? true : null, ts);
     }
 
-    /** Verdeckt-Exil (Necropotence & Co.) erkennt man im Ereignis nicht sicher - Regeltext der Quelle als Heuristik. */
+    /**
+     * Verdeckt-Exil (Necropotence, Foretell & Co.) erkennt man im Ereignis nicht sicher - Regeltext der Quelle als
+     * Heuristik ("face down" oder "foretell"; lieber zu viel verdecken als eine Handkarte zeigen).
+     */
     private static boolean isFaceDownExile(ZoneChangeEvent z) {
         try {
             String rule = z.getSource().getRule();
-            return rule != null && rule.toLowerCase().contains("face down");
+            String l = rule == null ? "" : rule.toLowerCase(java.util.Locale.ROOT);
+            return l.contains("face down") || l.contains("face-down") || l.contains("foretell");
         } catch (RuntimeException e) {
             return false;
         }
@@ -191,7 +197,14 @@ public class FxWatcher extends Watcher {
             return null;
         }
         MageObject o = game.getObject(id);
+        // Verdeckte Objekte (Morph/Manifest/Disguise, verdecktes Exil): nie den Namen der Karte darunter verraten
+        if (o instanceof Permanent perm && perm.isFaceDown(game)) {
+            return null;
+        }
         if (o instanceof Card c) {
+            if (c.isFaceDown(game) || c.getMainCard().isFaceDown(game)) {
+                return null;
+            }
             return c.getMainCard().getName();
         }
         return o == null ? null : o.getName();

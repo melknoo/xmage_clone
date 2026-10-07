@@ -33,4 +33,6 @@ public class StateDto {
     public List<UUID> actions;
     /** Ersatzeffekte, die dieser Spieler fuer dieses Spiel automatisch ablehnt (Kurznamen) */
     public List<String> replDeclines;
+    /** Zuschauer-Sicht: hand leer, kein myPlayerId/playable/actions/lookedAt/replDeclines; players[0] = Blickwinkel (einziger me) */
+    public Boolean spectator;
 }

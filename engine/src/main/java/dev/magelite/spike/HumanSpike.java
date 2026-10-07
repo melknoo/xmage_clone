@@ -38,6 +38,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
  * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke
+ * --spectate
+ * <p>
+ * {@code --spectate}: Spiel wie ein Tisch-Spiel zuschaubar machen und einen In-Process-Zuschauer anmelden, der jede
+ * Nachricht auf Lecks prueft ({@link SpectatorCheck}); ein Sitz schreibt im Spiel eine Chat-Zeile.
  * <p>
  * {@code --humans=N}: N automatische Test-Menschen mit eigenem Sitz und eigenem Autopiloten in einem Spiel (Routing-Test).
  * <p>
@@ -76,6 +80,7 @@ public final class HumanSpike {
         boolean verbose = opt.containsKey("verbose");
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
         String scenario = opt.get("scenario");
+        boolean spectate = opt.containsKey("spectate");
         if (scenario != null && !Scenarios.exists(scenario)) {
             throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
         }
@@ -102,7 +107,7 @@ public final class HumanSpike {
                     break;
                 }
             }
-            boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario);
+            boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario, spectate);
             if (!ok) {
                 failures++;
             }
@@ -116,7 +121,7 @@ public final class HumanSpike {
     }
 
     private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, int humans, Random rnd,
-                                   boolean verbose, String dumpJson, String scenario) throws Exception {
+                                   boolean verbose, String dumpJson, String scenario, boolean spectate) throws Exception {
         List<GameSetup.SeatSpec> specs = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
             if (i < humans) {
@@ -149,9 +154,16 @@ public final class HumanSpike {
         java.io.PrintWriter dump = dumpJson == null ? null : new java.io.PrintWriter(Files.newBufferedWriter(Path.of(dumpJson)));
         java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
         Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
+        SpectatorCheck spec = spectate ? new SpectatorCheck(host.getGame()) : null;
+        if (spec != null) {
+            host.setSpectatable(true);
+        }
         for (GameHost.HumanSeat seat : host.seats()) {
             drivers.put(seat, new Driver(host, seat, rnd, verbose, scenario));
             host.attach(seat, msg -> {
+                if (spec != null && msg instanceof StateDto st) {
+                    spec.seatState(st); // synchron, vor dem oeffentlichen State derselben seq
+                }
                 if (msg instanceof Messages.Activity a) {
                     // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
                     recovered.set(a.recovered());
@@ -180,6 +192,19 @@ public final class HumanSpike {
         }
         GameHost.HumanSeat firstSeat = host.firstSeat();
         Driver driver = drivers.get(firstSeat);
+        if (spec != null) {
+            GameHost.SpectateResult sr = host.attachSpectator(9999L, "Zuschauer", spec, "Spike-Tisch");
+            if (sr.status() != GameHost.SpectateStatus.OK) {
+                out("  FEHLER: Zuschauer nicht angemeldet: %s", sr.status());
+            }
+            GameHost.SpectateResult seated = host.attachSpectator(1L, "Tester", msg -> {
+            }, "Spike-Tisch");
+            if (seated.status() != GameHost.SpectateStatus.SEATED) {
+                out("  FEHLER: Sitzender als Zuschauer angenommen: %s", seated.status());
+                spec.errorCount++;
+            }
+        }
+        boolean chatted = false;
         Map<GameHost.HumanSeat, Messages.GameOver> overs = new java.util.LinkedHashMap<>();
         ChainMeter chains = new ChainMeter();
         Map<String, Integer> fxKinds = new java.util.TreeMap<>();
@@ -206,6 +231,9 @@ public final class HumanSpike {
             }
             if (msg instanceof StateDto s) {
                 d.state = s;
+                if (spec != null && !chatted && s.turn >= 2) {
+                    chatted = host.chat(in.seat(), "Hallo Zuschauer");
+                }
                 if (d.convoke) {
                     d.convokeState(s);
                 }
@@ -299,6 +327,15 @@ public final class HumanSpike {
         }
         out("  Ereignisse (events): %s%s", fxKinds.isEmpty() ? "KEINE" : fxKinds, fxLeaks > 0 ? " | FEHLER: " + fxLeaks + " verdeckte Karten an Fremde" : "");
         chains.report();
+        boolean specOk = true;
+        if (spec != null) {
+            host.awaitEnd(10_000); // gameOver an Zuschauer kommt direkt nach den Sitzen
+            specOk = spec.ok() && spec.over != null && spec.chats > 0;
+            out("  Zuschauer: %s | %s", specOk ? "OK" : "FEHLER", spec.summary());
+            for (String e : spec.errors) {
+                out("    !! %s", e);
+            }
+        }
         out("  Sitzordnung (UI): %s", turnOrder.seats);
         out("  Zugfolge: %s", turnOrder.sequence);
         if (turnOrder.errors > 0) {
@@ -309,7 +346,7 @@ public final class HumanSpike {
         boolean gemOk = !driver.gemstone || (driver.gemResult != null && driver.gemResult.startsWith("OK"));
         boolean necroOk = !driver.necro || (driver.necroResult != null && driver.necroResult.startsWith("OK"));
         boolean convokeOk = !driver.convoke || (driver.cvErrors.isEmpty() && driver.cvPhase >= 99);
-        return !stalled && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
+        return !stalled && specOk && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
     }
 
     /**
@@ -518,6 +555,11 @@ public final class HumanSpike {
                 case "ASK":
                     if (p.mulligan) {
                         return GameHost.Response.ofBool(false);
+                    }
+                    if (p.messageText != null && p.messageText.contains("mana pool")) {
+                        // "Pass anyway?" mit Mana im Pool: Nein fuehrt zurueck zur Prioritaet, wo wir wieder passen -
+                        // endlose Schleife, sobald rep >= 3 (Nein) -> immer passen
+                        return GameHost.Response.ofBool(true);
                     }
                     return GameHost.Response.ofBool(rep < 3 && rnd.nextInt(4) != 0);
                 case "SELECT":

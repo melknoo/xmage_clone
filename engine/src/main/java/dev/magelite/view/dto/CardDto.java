@@ -40,6 +40,8 @@ public class CardDto {
     public List<TargetRefDto> targetRefs;
     /** z.B. "ability" fuer Stack-Faehigkeiten */
     public String kind;
+    /** nur Stapel-Faehigkeiten: triggered | activated | static | mana | ... (XMage AbilityType, klein) */
+    public String abilityType;
     public UUID sourceId;
     public UUID controllerId;
     /** angesagtes/bezahltes X (nur Stack-Objekte); X = 0 wird mitgesendet */

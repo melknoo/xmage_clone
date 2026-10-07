@@ -36,8 +36,19 @@ public final class TextDeckParser {
 
     public enum Section { MAIN, COMMANDER, SIDEBOARD, SIDE_GUESS, IGNORE }
 
-    public record Entry(int count, String name, String set, String number, Section section, String category, String line) {
+    /** @param lineNo 1-basierte Zeile im Rohtext (Leer- und Kopfzeilen mitgezaehlt) */
+    public record Entry(int count, String name, String set, String number, Section section, String category, String line, int lineNo) {
     }
+
+    /**
+     * Problemzeile fuer die Import-Vorschau. {@code kind}: unknown | unfinished. {@code suggestion} nur nach
+     * {@link CardNameSuggester#withSuggestions} (nie beim Speichern).
+     */
+    public record Issue(int line, int count, String name, String suggestion, String kind) {
+    }
+
+    /** Hoechstzahl Zeilen fuer Vorschau/Speichern. */
+    public static final int MAX_LINES = 600;
 
     public record Resolved(int count, String name, String set, String number, boolean commander) {
     }
@@ -50,8 +61,15 @@ public final class TextDeckParser {
             List<String> unfinished,
             boolean needsCommander,
             List<String> candidates,
-            int cardCount
+            int cardCount,
+            List<Issue> issues,
+            Map<String, String> types
     ) {
+        /** Grobe Kartenart fuer die Vorschau-Gruppen (siehe {@link #kindOf}); null = unbekannt. */
+        public String typeOf(String cardName) {
+            return types.get(cardName);
+        }
+
         public DeckCardLists toLists() {
             DeckCardLists l = new DeckCardLists();
             l.setName(name);
@@ -90,7 +108,9 @@ public final class TextDeckParser {
         Section section = Section.MAIN;
         boolean sawMainHeader = false;
         int blankAfterCards = 0;
+        int lineNo = 0;
         for (String raw : text.split("\\r?\\n")) {
+            lineNo++;
             String line = raw.strip();
             if (line.isEmpty()) {
                 if (!out.isEmpty()) {
@@ -120,7 +140,7 @@ public final class TextDeckParser {
             }
             Matcher d = DCK.matcher(line);
             if (d.matches()) {
-                out.add(new Entry(Integer.parseInt(d.group(1)), d.group(4).trim(), d.group(2), d.group(3), lineSection, null, raw));
+                out.add(new Entry(Integer.parseInt(d.group(1)), d.group(4).trim(), d.group(2), d.group(3), lineSection, null, raw, lineNo));
                 continue;
             }
             Matcher m = CARD.matcher(line);
@@ -139,7 +159,7 @@ public final class TextDeckParser {
                     s = Section.IGNORE;
                 }
             }
-            out.add(new Entry(count, name, m.group(3), m.group(4), s, category, raw));
+            out.add(new Entry(count, name, m.group(3), m.group(4), s, category, raw, lineNo));
         }
         return out;
     }
@@ -175,6 +195,8 @@ public final class TextDeckParser {
         Map<String, Resolved> guess = new LinkedHashMap<>();
         List<String> unknown = new ArrayList<>();
         List<String> unfinished = new ArrayList<>();
+        List<Issue> issues = new ArrayList<>();
+        Map<String, String> types = new LinkedHashMap<>();
 
         for (Entry e : entries) {
             if (e.section() == Section.IGNORE) {
@@ -185,8 +207,10 @@ public final class TextDeckParser {
                 String n = e.name();
                 boolean wip = XmageUnfinished.contains(n) || (n.contains("/") && XmageUnfinished.contains(frontFace(n)));
                 (wip ? unfinished : unknown).add(e.count() + " " + n);
+                issues.add(new Issue(e.lineNo(), e.count(), n, null, wip ? "unfinished" : "unknown"));
                 continue;
             }
+            types.putIfAbsent(info.getName(), kindOf(info));
             Map<String, Resolved> target = switch (e.section()) {
                 case COMMANDER -> cmd;
                 case SIDEBOARD -> side;
@@ -222,6 +246,7 @@ public final class TextDeckParser {
                     CardInfo info = resolve(c, null, null);
                     if (info != null) {
                         r = new Resolved(1, info.getName(), info.getSetCode(), info.getCardNumber(), true);
+                        types.putIfAbsent(info.getName(), kindOf(info));
                     }
                 } else {
                     take(main, r.name());
@@ -247,7 +272,29 @@ public final class TextDeckParser {
         int count = main.values().stream().mapToInt(Resolved::count).sum() + cmd.values().stream().mapToInt(Resolved::count).sum();
         String name = deckName != null && !deckName.isBlank() ? deckName.strip()
                 : cmd.isEmpty() ? "Neues Deck" : cmd.keySet().iterator().next().split(",")[0];
-        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), unknown, unfinished, needsCommander, candidates, count);
+        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), unknown, unfinished, needsCommander, candidates, count,
+                issues, types);
+    }
+
+    /** creature &gt; land &gt; planeswalker &gt; battle &gt; instant &gt; sorcery &gt; artifact &gt; enchantment &gt; other */
+    public static String kindOf(CardInfo info) {
+        List<CardType> t = info.getTypes();
+        if (t.contains(CardType.CREATURE)) return "creature";
+        if (t.contains(CardType.LAND)) return "land";
+        if (t.contains(CardType.PLANESWALKER)) return "planeswalker";
+        if (t.contains(CardType.BATTLE)) return "battle";
+        if (t.contains(CardType.INSTANT)) return "instant";
+        if (t.contains(CardType.SORCERY)) return "sorcery";
+        if (t.contains(CardType.ARTIFACT)) return "artifact";
+        if (t.contains(CardType.ENCHANTMENT)) return "enchantment";
+        return "other";
+    }
+
+    /** Wirft bei mehr als {@link #MAX_LINES} Zeilen. */
+    public static void checkSize(String text) {
+        if (text != null && text.split("\\r?\\n", -1).length > MAX_LINES) {
+            throw new IllegalArgumentException("Die Liste ist zu lang (höchstens " + MAX_LINES + " Zeilen).");
+        }
     }
 
     private static Resolved findByName(Map<String, Resolved> map, String name) {

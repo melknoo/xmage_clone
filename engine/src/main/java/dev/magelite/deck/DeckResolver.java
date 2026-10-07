@@ -68,6 +68,40 @@ public final class DeckResolver {
         }
     }
 
+    /**
+     * Anzeige-Infos einer Deck-Angabe fuer die Lobby (ohne das Deck zu laden). {@code commander} = Namen mit " & ",
+     * {@code deckName} = bisheriges Format "Name (Commander)".
+     */
+    public record DeckInfo(String title, String commander, String colors, String commanderSet, String commanderNum, String deckName) {
+    }
+
+    public Optional<DeckInfo> info(long userId, JsonNode spec) {
+        if (spec == null) {
+            return Optional.empty();
+        }
+        switch (spec.path("type").asText("random")) {
+            case "user" -> {
+                return deckStore.get(userId, spec.path("id").asLong()).map(d -> {
+                    String cmd = d.commanders().isEmpty() ? null : String.join(" & ", d.commanders());
+                    return new DeckInfo(d.name(), cmd, emptyToNull(d.colors()), d.commanderSet(), d.commanderNum(),
+                            d.name() + (cmd == null ? "" : " (" + cmd + ")"));
+                });
+            }
+            case "sample" -> {
+                return samples.find(spec.path("id").asText()).map(e -> new DeckInfo(e.name(),
+                        e.commanders().isEmpty() ? null : String.join(" & ", e.commanders()), emptyToNull(e.colors()),
+                        e.commanderSet(), e.commanderNum(), e.name()));
+            }
+            default -> {
+                return Optional.of(new DeckInfo("Zufälliges Deck", null, null, null, null, "Zufälliges Deck"));
+            }
+        }
+    }
+
+    private static String emptyToNull(String s) {
+        return s == null || s.isEmpty() ? null : s;
+    }
+
     /** Anzeigename einer Deck-Angabe ohne das Deck zu laden (fuer Lobby/Tisch). */
     public Optional<String> describe(long userId, JsonNode spec) {
         if (spec == null) {

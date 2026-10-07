@@ -2,7 +2,6 @@ package dev.magelite.deck;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.magelite.api.Auth;
-import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import io.javalin.Javalin;
@@ -35,6 +34,7 @@ public final class DeckRoutes implements HttpServer.Module {
         app.post("/api/decks", ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             String text = b.path("text").asText("");
+            TextDeckParser.checkSize(text);
             TextDeckParser.Result r = TextDeckParser.parse(text, text(b, "name"), commanders(b));
             if (r.commanders().isEmpty()) {
                 throw new IllegalArgumentException("Bitte zuerst einen Commander wählen");
@@ -78,18 +78,34 @@ public final class DeckRoutes implements HttpServer.Module {
     }
 
     private static Map<String, Object> preview(String text, String name, List<String> commanders) throws Exception {
-        TextDeckParser.Result r = TextDeckParser.parse(text, name, commanders);
+        TextDeckParser.checkSize(text);
+        // Vorschlaege ("Meintest du ...?") nur hier in der Vorschau, nie beim Speichern
+        TextDeckParser.Result r = CardNameSuggester.withSuggestions(TextDeckParser.parse(text, name, commanders));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("name", r.name());
         out.put("commanders", r.commanders());
         out.put("cardCount", r.cardCount());
         out.put("unknown", r.unknown());
         out.put("unfinished", r.unfinished());
+        List<Map<String, Object>> issues = new ArrayList<>();
+        for (TextDeckParser.Issue i : r.issues()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("line", i.line());
+            m.put("count", i.count());
+            m.put("name", i.name());
+            if (i.suggestion() != null) {
+                m.put("suggestion", i.suggestion());
+            }
+            m.put("kind", i.kind());
+            issues.add(m);
+        }
+        out.put("issues", issues);
         out.put("needsCommander", r.needsCommander());
         out.put("candidates", r.candidates());
         List<Map<String, Object>> cards = new ArrayList<>();
         for (TextDeckParser.Resolved c : r.main()) {
-            cards.add(Map.of("name", c.name(), "set", c.set(), "num", c.number(), "count", c.count()));
+            String type = r.typeOf(c.name());
+            cards.add(Map.of("name", c.name(), "set", c.set(), "num", c.number(), "count", c.count(), "type", type == null ? "other" : type));
         }
         out.put("cards", cards);
         if (!r.commanders().isEmpty()) {

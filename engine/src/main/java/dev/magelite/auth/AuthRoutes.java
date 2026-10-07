@@ -42,7 +42,7 @@ public final class AuthRoutes implements HttpServer.Module {
     public void register(Javalin app) {
         app.exception(AccountService.Conflict.class, (e, ctx) -> ctx.status(HttpStatus.CONFLICT).json(Map.of("error", e.getMessage())));
 
-        app.get("/api/me", ctx -> ctx.json(me(Auth.user(ctx))));
+        app.get("/api/me", ctx -> ctx.json(me(Auth.user(ctx), ctx.attribute(Auth.SESSION_ATTR))));
         app.post("/api/auth/login", this::login);
         app.post("/api/auth/logout", ctx -> {
             accounts.deleteSession(ctx.attribute(Auth.SESSION_ATTR));
@@ -85,7 +85,7 @@ public final class AuthRoutes implements HttpServer.Module {
     /** {@code {code}} (Gast) oder {@code {email, password}}; beides erzeugt eine Session. */
     private void login(Context ctx) throws Exception {
         if (!config.server()) {
-            ctx.json(me(User.LOCAL));
+            ctx.json(me(User.LOCAL, null));
             return;
         }
         if (auth.loginRateLimited(Auth.clientIp(ctx))) {
@@ -108,7 +108,7 @@ public final class AuthRoutes implements HttpServer.Module {
         String token = accounts.createSession(u.id(), via);
         ctx.cookie(sessionCookie(ctx, token));
         accounts.touch(u.id());
-        ctx.json(me(u));
+        ctx.json(me(u, Passwords.tokenHash(token)));
     }
 
     /** Konto sichern: E-Mail + Passwort fuer das angemeldete Gast-Konto. */
@@ -124,7 +124,7 @@ public final class AuthRoutes implements HttpServer.Module {
         String email = validEmail(b.path("email").asText(""));
         char[] pw = validPassword(b.path("password").asText(""));
         accounts.setCredentials(u.id(), email, Passwords.hash(pw));
-        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true)));
+        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true), ctx.attribute(Auth.SESSION_ATTR)));
     }
 
     /** E-Mail und/oder Passwort aendern; braucht das aktuelle Passwort. Passwortwechsel beendet andere Sessions. */
@@ -158,7 +158,7 @@ public final class AuthRoutes implements HttpServer.Module {
             accounts.updatePassword(u.id(), Passwords.hash(pw));
             accounts.deleteOtherSessions(u.id(), ctx.attribute(Auth.SESSION_ATTR));
         }
-        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true)));
+        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true), ctx.attribute(Auth.SESSION_ATTR)));
     }
 
     private Cookie sessionCookie(Context ctx, String token) {
@@ -191,7 +191,8 @@ public final class AuthRoutes implements HttpServer.Module {
         }
     }
 
-    private Map<String, Object> me(User u) {
+    /** @param sessionHash Token-Hash der aktuellen Session (null: lokal oder altes Code-Cookie) */
+    private Map<String, Object> me(User u, String sessionHash) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("mode", config.server() ? "server" : "local");
         Map<String, Object> user = new LinkedHashMap<>();
@@ -201,6 +202,13 @@ public final class AuthRoutes implements HttpServer.Module {
         user.put("email", u.email());
         user.put("hasPassword", u.hasPassword());
         m.put("user", user);
+        Map<String, Object> session = null;
+        if (config.server() && sessionHash != null) {
+            session = accounts.sessionInfo(u.id(), sessionHash)
+                    .<Map<String, Object>>map(si -> new LinkedHashMap<>(Map.of("since", si.since(), "via", si.via())))
+                    .orElse(null);
+        }
+        m.put("session", session);
         return m;
     }
 }

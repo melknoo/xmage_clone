@@ -22,7 +22,7 @@ public final class Scenarios {
     }
 
     public static boolean exists(String name) {
-        return name != null && List.of("swarm", "dredge", "gemstone", "necro", "convoke").contains(name.toLowerCase(Locale.ROOT));
+        return name != null && List.of("swarm", "dredge", "gemstone", "necro", "convoke", "blocker").contains(name.toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -44,6 +44,10 @@ public final class Scenarios {
         }
         if ("convoke".equals(name.toLowerCase(Locale.ROOT))) {
             convoke(game, humanId);
+            return;
+        }
+        if ("blocker".equals(name.toLowerCase(Locale.ROOT))) {
+            blocker(game, humanId);
             return;
         }
         if ("necro".equals(name.toLowerCase(Locale.ROOT))) {
@@ -109,6 +113,28 @@ public final class Scenarios {
         mine.addAll(battlefield("Savannah Lions", 2));
         cheat(game, humanId, cards("Blaze", "Guardian of Vitu-Ghazi"), mine, List.of());
         game.setStartingPlayerId(humanId);
+    }
+
+    /**
+     * {@code blocker}: Blocker-Wahl im ersten Bot-Zug. Jeder Bot: 3 Berge, Craw Wurm (6/4) und Hill Giant (3/3) -
+     * kampfbereit, weil sie schon vor seinem ersten Zug liegen. Ich: 3 Waelder, 2 Grizzly Bears, Llanowar Elves.
+     * Ein Bot beginnt.
+     */
+    private static void blocker(Game game, UUID humanId) {
+        List<PutToBattlefieldInfo> mine = new ArrayList<>(battlefield("Forest", 3));
+        mine.addAll(battlefield("Grizzly Bears", 2));
+        mine.addAll(battlefield("Llanowar Elves", 1));
+        cheat(game, humanId, List.of(), mine, List.of());
+        for (Player p : game.getPlayers().values()) {
+            if (p.getId().equals(humanId)) {
+                continue;
+            }
+            List<PutToBattlefieldInfo> bf = new ArrayList<>(battlefield("Mountain", 3));
+            bf.addAll(battlefield("Craw Wurm", 1));
+            bf.addAll(battlefield("Hill Giant", 1));
+            cheat(game, p.getId(), List.of(), bf, List.of());
+        }
+        botStarts(game, humanId);
     }
 
     private static void botStarts(Game game, UUID humanId) {

@@ -66,8 +66,37 @@ final class ReplacementAssist {
             byRule.computeIfAbsent(rule, r -> new ArrayList<>()).add(new PromptDto.ReplSource(it.key(), name, objectId));
         }
         List<PromptDto.ReplGroup> out = new ArrayList<>();
-        byRule.forEach((rule, sources) -> out.add(new PromptDto.ReplGroup(rule, label(rule), OPTIONAL.matcher(rule).find(), sources)));
+        byRule.forEach((rule, sources) -> out.add(new PromptDto.ReplGroup(rule, label(rule), OPTIONAL.matcher(rule).find(), sources,
+                cause(rule), sources.stream().map(PromptDto.ReplSource::name).distinct().count() == 1)));
         return out;
+    }
+
+    private static final List<Map.Entry<Pattern, String>> CAUSES = List.of(
+            Map.entry(Pattern.compile("(?i)\\bwould (draw|draws)\\b"), "Karte ziehen"),
+            Map.entry(Pattern.compile("(?i)\\bwould (discard|be discarded)\\b"), "Abwerfen"),
+            Map.entry(Pattern.compile("(?i)\\bwould (mill|be milled)\\b"), "Mahlen"),
+            Map.entry(Pattern.compile("(?i)\\bwould die\\b|\\bwould be destroyed\\b"), "Sterben"),
+            Map.entry(Pattern.compile("(?i)\\bwould be put into [a-z' ]*graveyard\\b"), "Auf den Friedhof"),
+            Map.entry(Pattern.compile("(?i)\\bwould (be dealt|deal) (combat )?damage\\b"), "Schaden"),
+            Map.entry(Pattern.compile("(?i)\\bwould gain life\\b"), "Lebensgewinn"),
+            Map.entry(Pattern.compile("(?i)\\bwould lose life\\b"), "Lebensverlust"),
+            Map.entry(Pattern.compile("(?i)\\bwould (create|be created)\\b"), "Spielstein erzeugen"),
+            Map.entry(Pattern.compile("(?i)\\bwould (put|be put|have|get)\\b[^.]*\\bcounters?\\b"), "Marken"),
+            Map.entry(Pattern.compile("(?i)\\bwould enter\\b|\\bas [^.]* enters\\b"), "Ins Spiel kommen"),
+            Map.entry(Pattern.compile("(?i)\\bwould be exiled\\b"), "Exil"),
+            Map.entry(Pattern.compile("(?i)\\bwould leave\\b"), "Spielfeld verlassen"));
+
+    /** Ersetztes Ereignis aus dem Regeltext ("If you would draw a card, ..." -&gt; "Karte ziehen"), sonst null. */
+    static String cause(String rule) {
+        if (rule == null) {
+            return null;
+        }
+        for (Map.Entry<Pattern, String> e : CAUSES) {
+            if (e.getKey().matcher(rule).find()) {
+                return e.getValue();
+            }
+        }
+        return null;
     }
 
     /** Kurzname fuer Anzeigen: Regeltext bis zum Erinnerungstext ("Dredge 2 (If you ...)" -> "Dredge 2"). */

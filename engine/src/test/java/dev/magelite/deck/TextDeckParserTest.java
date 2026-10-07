@@ -9,6 +9,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TextDeckParserTest {
@@ -134,5 +136,64 @@ class TextDeckParserTest {
         TextDeckParser.Result again = TextDeckParser.parse(DeckRoutes.dckToText(r.toDck()), "Test", null);
         assertEquals(r.cardCount(), again.cardCount());
         assertEquals(r.commanders().get(0).name(), again.commanders().get(0).name());
+    }
+    @Test
+    void issuesCarryRawLineNumbers() {
+        String text = """
+                Commander
+                1 Atraxa, Praetors' Voice (CM2) 10
+
+                Deck
+                1 Sol Ring
+                1 Totally Fake Card Name
+                1 Lluwen, Exchange Student // Pest Friend
+                """;
+        TextDeckParser.Result r = TextDeckParser.parse(text, null, null);
+        assertEquals(List.of("1 Totally Fake Card Name"), r.unknown());
+        assertEquals(2, r.issues().size(), r.issues().toString());
+        TextDeckParser.Issue fake = r.issues().get(0);
+        assertEquals(6, fake.line());
+        assertEquals("unknown", fake.kind());
+        assertEquals(1, fake.count());
+        assertNull(fake.suggestion(), "parse() schlaegt nie etwas vor");
+        assertEquals(7, r.issues().get(1).line());
+        assertEquals("unfinished", r.issues().get(1).kind());
+        assertEquals("artifact", r.typeOf("Sol Ring"));
+        assertEquals("creature", r.typeOf("Atraxa, Praetors' Voice"));
+    }
+
+    @Test
+    void suggestionsOnlyForNearNames() {
+        String text = """
+                1 Sol Rnig
+                1 Totally Fake Card Name
+                1 Arcane Signet
+                """;
+        TextDeckParser.Result r = CardNameSuggester.withSuggestions(TextDeckParser.parse(text, null, null));
+        assertEquals(List.of("1 Sol Rnig", "1 Totally Fake Card Name"), r.unknown());
+        assertEquals("Sol Ring", r.issues().get(0).suggestion());
+        assertEquals(1, r.issues().get(0).line());
+        assertNull(r.issues().get(1).suggestion(), r.issues().get(1).toString());
+        assertEquals(2, r.issues().get(1).line());
+        assertEquals("Lightning Bolt", CardNameSuggester.suggest("Lightnign Bolt"));
+        assertEquals("Sol Ring", CardNameSuggester.suggest("sol ring"));
+    }
+
+    @Test
+    void suggestionsAreBoundedInTime() {
+        StringBuilder sb = new StringBuilder("Deck\n");
+        for (int i = 0; i < 300; i++) {
+            sb.append("1 Qwzx Unknown Thing ").append(i).append('\n');
+        }
+        TextDeckParser.checkSize(sb.toString());
+        CardNameSuggester.suggest("warmup"); // Namensliste laden (einmalig)
+        long t0 = System.nanoTime();
+        TextDeckParser.Result r = CardNameSuggester.withSuggestions(TextDeckParser.parse(sb.toString(), null, null));
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+        assertEquals(300, r.issues().size());
+        assertTrue(ms < 20_000, "zu langsam: " + ms + " ms");
+        assertTrue(r.issues().stream().allMatch(i -> i.suggestion() == null));
+        String tooLong = "1 Sol Ring\n".repeat(TextDeckParser.MAX_LINES + 1);
+        assertThrows(IllegalArgumentException.class, () -> TextDeckParser.checkSize(tooLong));
     }
 }

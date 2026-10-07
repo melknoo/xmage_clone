@@ -63,7 +63,7 @@ public final class FriendStore {
             return out;
         });
         if (ids.isEmpty()) {
-            throw new SocialService.SocialException("Niemand heißt „" + name.strip() + "“");
+            throw new SocialService.SocialException("Kein Konto mit dem Namen „" + name.strip() + "“.");
         }
         if (ids.size() > 1) {
             throw new SocialService.SocialException("Den Namen gibt es mehrfach – klick die Person im Lobby-Chat an");
@@ -90,7 +90,8 @@ public final class FriendStore {
         if (other == me) {
             throw new SocialService.SocialException("Du kannst dich nicht selbst hinzufügen");
         }
-        if (other == 1 || nameOf(other) == null) {
+        String otherName = other == 1 ? null : nameOf(other);
+        if (otherName == null) {
             throw new IllegalArgumentException("Unbekannter Nutzer");
         }
         long a = Math.min(me, other);
@@ -104,10 +105,10 @@ public final class FriendStore {
                         long by = rs.getLong(1);
                         rs.getLong(2);
                         if (!rs.wasNull()) {
-                            throw new SocialService.SocialException("Ihr seid schon befreundet");
+                            throw new SocialService.SocialException(otherName + " ist schon dein Freund.");
                         }
                         if (by == me) {
-                            throw new SocialService.SocialException("Anfrage läuft schon");
+                            throw new SocialService.SocialException("Anfrage an " + otherName + " läuft bereits.");
                         }
                         acceptRow(c, a, b);
                         return "friend";
