@@ -338,6 +338,8 @@ Fallback auf manuelles Klicken.
   `--spectate` mit necro/dredge/gemstone/blocker (0 Fehler, keine STALLs); e2e social/tables/online/spectate/login
   (Server) und flow (lokal) grün; Screenshot-Läufe `steps-redesign-{board,meta,meta-leer,online}.json` gegen die
   Prototyp-Aufnahmen (`design/redesign-shots/`, nicht eingecheckt) verglichen; adversariale Leck- und Code-Review.
+- **Live deployt** 2026-10-07 (fly v10, Commit `fbda885`): Health ok, Migration V5 angewendet, FFA-KI aktiv,
+  Bundle = lokaler Build, `e2e-tables` gegen live grün. Lokale App (`build.ps1`) startet im neuen Design.
 - Offen (niedrig): Zuschau-Sicht wird bei Tisch-Spielen auch ohne Zuschauer gebaut (CPU); Entfernen per Platz-Index
   kann bei gleichzeitigem Platzwechsel die falsche Person treffen; Karten-ids bleiben über Zonenwechsel gleich
   (XMage, z. B. zurückgeschickt → später verdeckt gewirkt); Status „wartet auf X“ verrät indirekt Instants;
