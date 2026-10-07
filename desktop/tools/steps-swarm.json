@@ -1,99 +1,102 @@
 {
-  "url": "http://localhost:5173/?port=7317",
-  "width": 1700,
-  "height": 1000,
-  "timeout": 240000,
-  "steps": [
-    {
-      "waitFor": "#root div",
-      "timeout": 60000
-    },
-    {
-      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'swarm'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
-    },
-    {
-      "wait": 4000
-    },
-    {
-      "jsFile": "swarm-pilot.js"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.stack.length>=5){clearInterval(t);r('Stapel '+s.stack.length)}},100)})"
-    },
-    {
-      "wait": 1800
-    },
-    {
-      "shot": "../../engine/run/swarm-1-stapel.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/swarm-1-stapel.png"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const p=window.__ml.game.getState().prompt;if(p&&p.kind==='SELECT'&&p.mode==='attackers'){clearInterval(t);r('Angriff, moeglich: '+p.possibleAttackers.length)}},200)})"
-    },
-    {
-      "wait": 1800
-    },
-    {
-      "shot": "../../engine/run/swarm-2-angriff.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/swarm-2-angriff.png"
-    },
-    {
-      "js": "(()=>{const g=window.__ml.game.getState();const pa=new Set(g.prompt.possibleAttackers);const el=[...document.querySelectorAll('[data-objs]')].find(e=>e.getAttribute('data-objs').split(' ').some(id=>pa.has(id)));if(!el)return 'kein Stapel gefunden';el.querySelector('[data-obj]').dispatchEvent(new MouseEvent('click',{bubbles:true,shiftKey:true}));return 'markiert: '+window.__ml.game.getState().marked.size})()"
-    },
-    {
-      "wait": 1800
-    },
-    {
-      "shot": "../../engine/run/swarm-3-markiert.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/swarm-3-markiert.png"
-    },
-    {
-      "js": "(()=>{const s=window.__ml.game.getState().state;const opp=s.players.find(p=>!p.me&&!p.lost);document.querySelector('[data-player=\"'+opp.id+'\"] > div').click();return 'Ziel '+opp.name})()"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='SELECT'&&p.mode==='attackers'&&g.answeredPromptId!==p.id){clearInterval(t);r('Angreifer: '+g.state.combat.reduce((n,c)=>n+c.attackers.length,0))}},200)})"
-    },
-    {
-      "wait": 1800
-    },
-    {
-      "shot": "../../engine/run/swarm-4-pfeile.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/swarm-4-pfeile.png"
-    },
-    {
-      "js": "(()=>{window.__ml.game.getState().answer({bool:true});return 'bestaetigt'})()"
-    },
-    {
-      "wait": 8000
-    },
-    {
-      "shot": "../../engine/run/swarm-5-verlauf.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/swarm-5-verlauf.png"
-    }
-  ]
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 300000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'swarm'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (swarm)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "jsFile": "swarm-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.stack.length>=5)){clearInterval(t);r('Stapel '+s.stack.length)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},120000)})"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/swarm-1-stapel.png"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers')){clearInterval(t);r('Angriff, moeglich: '+p.possibleAttackers.length)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},120000)})"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/swarm-2-angriff.png"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();const pa=new Set(g.prompt.possibleAttackers);document.querySelectorAll('[data-shot-target]').forEach(e=>e.removeAttribute('data-shot-target'));const el=[...document.querySelectorAll('[data-objs]')].find(e=>e.getAttribute('data-objs').split(' ').some(id=>pa.has(id)));if(!el)return 'kein Stapel gefunden';el.querySelector('[data-obj]').setAttribute('data-shot-target','1');return 'Stapel markiert'})()"
+  },
+  {
+   "click": "[data-shot-target]",
+   "shift": true
+  },
+  {
+   "wait": 600
+  },
+  {
+   "js": "'markiert: '+window.__ml.game.getState().marked.size"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/swarm-3-markiert.png"
+  },
+  {
+   "js": "(()=>{const s=window.__ml.game.getState().state;const opp=s.players.find(p=>!p.me&&!p.lost);document.querySelectorAll('[data-shot-target]').forEach(e=>e.removeAttribute('data-shot-target'));const el=document.querySelector('[data-testid=opp-pod][data-player=\"'+opp.id+'\"]')||document.querySelector('[data-player=\"'+opp.id+'\"]');if(!el)return 'kein Pod';el.setAttribute('data-shot-target','1');return 'Ziel '+opp.name})()"
+  },
+  {
+   "click": "[data-shot-target]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers'&&s.combat.some(c=>c.attackers.length))){clearInterval(t);r('Angreifer: '+s.combat.reduce((n,c)=>n+c.attackers.length,0))}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},30000)})"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/swarm-4-etiketten.png"
+  },
+  {
+   "js": "(()=>{window.__ml.game.getState().answer({bool:true});return 'bestaetigt'})()"
+  },
+  {
+   "wait": 8000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/swarm-5-verlauf.png"
+  }
+ ]
 }

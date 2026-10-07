@@ -1,0 +1,898 @@
+{
+ "url": "{{UI}}/",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 1800000,
+ "vars": {
+  "UI": "http://localhost:5174"
+ },
+ "steps": [
+  {
+   "waitFor": "#root form",
+   "timeout": 60000
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-01-login.png",
+   "name": "online-01-login"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-01-login-1280.png",
+   "name": "online-01-login-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=login-tab-mail]"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-01b-login-mail.png",
+   "name": "online-01b-login-mail"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-01b-login-mail-1280.png",
+   "name": "online-01b-login-mail-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=login-tab-code]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "type": {
+    "target": "#root form input",
+    "text": "{{OWNER_CODE}}"
+   }
+  },
+  {
+   "click": "[data-testid=login-submit]"
+  },
+  {
+   "waitFor": "[data-testid=home-server], [data-testid=table-seat]",
+   "timeout": 30000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home'"
+  },
+  {
+   "waitFor": "[data-testid=home-server]",
+   "timeout": 15000
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-02-start.png",
+   "name": "online-02-start"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-02-start-1280.png",
+   "name": "online-02-start-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=chat-member][data-name=Hanna]"
+  },
+  {
+   "waitFor": "[data-testid=member-menu]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-03-mitglieder.png",
+   "name": "online-03-mitglieder"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-03-mitglieder-1280.png",
+   "name": "online-03-mitglieder-1280",
+   "optional": true
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=friends-tab]"
+  },
+  {
+   "waitFor": "[data-testid=friends-panel]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-04-freunde.png",
+   "name": "online-04-freunde"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-04-freunde-1280.png",
+   "name": "online-04-freunde-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=side-tab-chat]"
+  },
+  {
+   "waitFor": "[data-testid=lobby-chat]",
+   "timeout": 5000
+  },
+  {
+   "click": "[data-testid=chat-leave]"
+  },
+  {
+   "waitFor": "[data-testid=chat-hidden]",
+   "timeout": 8000
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-05-chat-verlassen.png",
+   "name": "online-05-chat-verlassen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-05-chat-verlassen-1280.png",
+   "name": "online-05-chat-verlassen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=chat-join]"
+  },
+  {
+   "waitFor": "[data-testid=lobby-chat]",
+   "timeout": 8000
+  },
+  {
+   "js": "fetch('{{SEED}}/do/sysline?name=Fritz',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /do/sysline?name=Fritz"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-16-systemzeile.png",
+   "name": "online-16-systemzeile"
+  },
+  {
+   "click": "[data-testid=seated-invite]"
+  },
+  {
+   "waitFor": "[data-testid=invite-popover]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-06-einladen.png",
+   "name": "online-06-einladen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-06-einladen-1280.png",
+   "name": "online-06-einladen-1280",
+   "optional": true
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "fetch('{{SEED}}/do/invite',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /do/invite"
+  },
+  {
+   "waitFor": "[data-testid=invite-card]",
+   "timeout": 15000
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-11a-einladungskarte.png",
+   "name": "online-11a-einladungskarte"
+  },
+  {
+   "js": "window.__realFetch=window.__realFetch||window.fetch;window.fetch=()=>Promise.reject(new TypeError('Failed to fetch'));'fetch offline'",
+   "name": "offline"
+  },
+  {
+   "waitFor": "[data-testid=conn-lost-bar]",
+   "timeout": 30000
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-11-einladung-verbindung.png",
+   "name": "online-11-einladung-verbindung"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-11-einladung-verbindung-1280.png",
+   "name": "online-11-einladung-verbindung-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "if(window.__realFetch){window.fetch=window.__realFetch};window.__ml.conn.getState().retryNow();'fetch online'",
+   "name": "online"
+  },
+  {
+   "waitGone": "[data-testid=conn-lost-bar]",
+   "timeout": 30000
+  },
+  {
+   "click": "[data-testid=invite-decline]",
+   "optional": true
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=lobby-row]",
+   "timeout": 15000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-07-lobby.png",
+   "name": "online-07-lobby"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-07-lobby-1280.png",
+   "name": "online-07-lobby-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home'"
+  },
+  {
+   "waitFor": "[data-testid=seated-to-table]",
+   "timeout": 15000
+  },
+  {
+   "click": "[data-testid=seated-to-table]"
+  },
+  {
+   "waitFor": "[data-testid=table-seat]",
+   "timeout": 15000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-08-tisch.png",
+   "name": "online-08-tisch"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-12-tisch-1280.png",
+   "name": "online-12-tisch-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=seat-kick]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-18a-entfernen-bestaetigen.png",
+   "name": "online-18a-entfernen-bestaetigen"
+  },
+  {
+   "click": "[data-testid=seat-kick]"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-18-entfernt-host.png",
+   "name": "online-18-entfernt-host"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('account');'account'"
+  },
+  {
+   "waitFor": "[data-testid=account-form]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-09-konto.png",
+   "name": "online-09-konto"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-09-konto-1280.png",
+   "name": "online-09-konto-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().go('admin');'admin'"
+  },
+  {
+   "waitFor": "[data-testid=admin-name]",
+   "timeout": 15000
+  },
+  {
+   "type": {
+    "target": "[data-testid=admin-name], [data-testid=admin-name] input",
+    "text": "Jonas"
+   }
+  },
+  {
+   "click": "[data-testid=admin-create-code]"
+  },
+  {
+   "waitFor": "[data-testid=admin-fresh-code]",
+   "timeout": 8000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-10-einladungen.png",
+   "name": "online-10-einladungen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-10-einladungen-1280.png",
+   "name": "online-10-einladungen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(async()=>{const t=window.__ml.table.getState();if(t.tableId){await fetch('/api/tables/'+t.tableId+'/leave',{method:'POST'});t.setTableId(null)}return 'Tisch verlassen (Zuschauen nur ohne Platz)'})()"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=spectate-btn]:not([disabled])",
+   "timeout": 20000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-17-lobby-laeuft.png",
+   "name": "online-17-lobby-laeuft"
+  },
+  {
+   "click": "[data-testid=spectate-btn]"
+  },
+  {
+   "waitFor": "[data-testid=game-header]",
+   "timeout": 30000
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-19-zuschauen.png",
+   "name": "online-19-zuschauen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-19-zuschauen-1280.png",
+   "name": "online-19-zuschauen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "waitFor": "[data-testid=lobby-row]",
+   "timeout": 15000
+  },
+  {
+   "js": "fetch('{{SEED}}/do/crowd?n=8',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "8 Zuschauer",
+   "optional": true
+  },
+  {
+   "waitFor": "[data-testid=spectate-btn][disabled]",
+   "timeout": 20000
+  },
+  {
+   "hover": "[data-testid=spectate-btn]",
+   "optional": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-20-zuschauer-voll.png",
+   "name": "online-20-zuschauer-voll"
+  },
+  {
+   "js": "fetch('{{SEED}}/phase/kick',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /phase/kick"
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=lobby-open]",
+   "timeout": 20000
+  },
+  {
+   "click": "[data-testid=lobby-open]"
+  },
+  {
+   "waitFor": "[data-testid=table-seat]",
+   "timeout": 15000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-21-gast-am-tisch.png",
+   "name": "online-21-gast-am-tisch"
+  },
+  {
+   "js": "fetch('{{SEED}}/do/kick',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /do/kick"
+  },
+  {
+   "waitFor": "[data-testid=toast]",
+   "timeout": 20000
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-21-entfernt-opfer.png",
+   "name": "online-21-entfernt-opfer"
+  },
+  {
+   "js": "fetch('{{SEED}}/do/anna-table',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /do/anna-table"
+  },
+  {
+   "js": "fetch('{{SEED}}/do/ready',{method:'POST'}).then(r=>r.text()).catch(e=>'kein Seed: '+e)",
+   "expect": "\"ok\":true",
+   "name": "Seed /do/ready"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=lobby-open]",
+   "timeout": 20000
+  },
+  {
+   "click": "[data-testid=lobby-open]"
+  },
+  {
+   "waitFor": "[data-testid=table-start]:not([disabled])",
+   "timeout": 20000
+  },
+  {
+   "click": "[data-testid=table-start]"
+  },
+  {
+   "waitFor": "[data-testid=game-header]",
+   "timeout": 60000
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&((window.__ml.game.getState().chat||[]).length>0)){clearInterval(t);r('Chat da')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Bob schreibt\")},90000)})",
+   "name": "Bob schreibt"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='ASK'&&p.mulligan)g.answer({bool:false});return 'ok'})()"
+  },
+  {
+   "click": "[data-testid=side-tab-chat]"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-13-spiel-chat.png",
+   "name": "online-13-spiel-chat"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-13-spiel-chat-1280.png",
+   "name": "online-13-spiel-chat-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "js": "(()=>{if(document.querySelector('[data-testid=pause-resign]'))return 'Menue';window.__ml.game.getState().setMenuOpen(true);return 'Menue per Store'})()"
+  },
+  {
+   "waitFor": "[data-testid=pause-resign]",
+   "timeout": 8000
+  },
+  {
+   "click": "[data-testid=pause-resign]"
+  },
+  {
+   "waitFor": "[data-testid=pause-resign-confirm]",
+   "timeout": 5000
+  },
+  {
+   "click": "[data-testid=pause-resign-confirm]"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-14-aufgegeben.png",
+   "name": "online-14-aufgegeben"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "waitFor": "[data-testid=eliminated-banner]",
+   "timeout": 10000,
+   "optional": false
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-15-ausgeschieden.png",
+   "name": "online-15-ausgeschieden"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset()}window.__ml.nav.getState().go('play');return 'raus'})()"
+  },
+  {
+   "js": "fetch('{{SEED}}/quit?cleanup=1',{method:'POST'}).then(r=>r.text()).catch(e=>'Seed schon weg')"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home'"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/online-07b-lobby-leer.png",
+   "name": "online-07b-lobby-leer"
+  }
+ ]
+}

@@ -1,47 +1,128 @@
 {
-  "url": "http://localhost:5173/?port=7317",
-  "width": 1700,
-  "height": 1000,
-  "timeout": 300000,
-  "steps": [
-    { "waitFor": "#root div", "timeout": 60000 },
-    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'convoke'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
-    { "wait": 3000 },
-    { "js": "window.__hold={convoke:true,firstMain:true,blazeTarget:true,afterGuardian:true};'hold'" },
-    { "jsFile": "scenario-pilot.js" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&g.state&&g.state.step==='PRECOMBAT_MAIN'&&g.answeredPromptId!==p.id){clearInterval(t);r('Main 1 nextStop='+p.nextStop)}},200);setTimeout(()=>{clearInterval(t);r('Timeout Main 1')},90000)})" },
-    { "wait": 800 },
-    { "shot": "../../engine/run/convoke-1-main1.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/convoke-1-main1.png" },
-    { "js": "window.__hold.firstMain=false;'weiter'" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='PICK_TARGET'&&s&&s.stack.length&&g.answeredPromptId!==p.id){clearInterval(t);r('Blaze X='+s.stack[0].x)}},200);setTimeout(()=>{clearInterval(t);r('Timeout Blaze')},30000)})" },
-    { "wait": 800 },
-    { "shot": "../../engine/run/convoke-2-blaze-x.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/convoke-2-blaze-x.png" },
-    { "js": "window.__hold.blazeTarget=false;'weiter'" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='PLAY_MANA'&&p.specialBtn&&g.answeredPromptId!==p.id){clearInterval(t);r('Mana: '+p.messageText+' | '+p.specialBtn+' | '+(p.specialTargets||[]).length)}},200);setTimeout(()=>{clearInterval(t);r('Timeout Mana')},60000)})" },
-    { "wait": 800 },
-    { "shot": "../../engine/run/convoke-3-mana.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/convoke-3-mana.png" },
-    { "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Länder automatisch'));if(!b)return 'kein Knopf';b.click();return 'Länder automatisch'})()" },
-    { "js": "new Promise(r=>{let n=0;const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.stack.length===0&&g.answeredPromptId!==p.id&&s.players.find(x=>x.me).battlefield.some(c=>c.name==='Guardian of Vitu-Ghazi')){clearInterval(t);r('fertig nach '+n+' Klicks, nextStop='+p.nextStop)}if(p&&p.kind==='PLAY_MANA'&&g.answeredPromptId!==p.id&&(p.specialTargets||[]).length){const id=p.specialTargets.find(x=>document.querySelector('[data-obj=\"'+x+'\"]'));const el=id&&document.querySelector('[data-obj=\"'+id+'\"]');if(el){n++;el.click()}}},600);setTimeout(()=>{clearInterval(t);r('Timeout Einberufen nach '+n)},60000)})" },
-    { "wait": 800 },
-    { "shot": "../../engine/run/convoke-4-after.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/convoke-4-after.png" },
-    { "js": "window.__hold.afterGuardian=false;window.__hold.convoke=false;'weiter'" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='POSTCOMBAT_MAIN'){clearInterval(t);g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('Main 2 nextStop='+p.nextStop+' -> F9')}},150);setTimeout(()=>{clearInterval(t);r('Timeout Main 2')},60000)})" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;const me=s&&s.players.find(x=>x.me);if(me&&me.skips&&me.skips.length&&!me.active){clearInterval(t);r('skips='+me.skips)}},150);setTimeout(()=>{clearInterval(t);r('Timeout skips')},60000)})" },
-    { "wait": 500 },
-    { "shot": "../../engine/run/convoke-5-skip.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/convoke-5-skip.png" },
-    { "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Stopp'));if(!b)return 'kein Stopp';b.click();return 'Stopp'})()" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;const me=s&&s.players.find(x=>x.me);if(me&&!me.skips){clearInterval(t);r('skips weg, Zug '+s.turn+' '+s.step)}},150);setTimeout(()=>{clearInterval(t);r('Timeout Stopp')},30000)})" },
-    { "wait": 800 },
-    { "shot": "../../engine/run/convoke-6-stopped.png" }
-  ]
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 300000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'convoke'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (convoke)"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "js": "window.__hold={convoke:true,firstMain:true,blazeTarget:true,afterGuardian:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='priority'&&s.step==='PRECOMBAT_MAIN')){clearInterval(t);r('Main 1 nextStop='+p.nextStop)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},90000)})"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-1-main1.png"
+  },
+  {
+   "js": "window.__hold.firstMain=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&s.stack.length)){clearInterval(t);r('Blaze X='+s.stack[0].x)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},30000)})"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-2-blaze-x.png"
+  },
+  {
+   "js": "window.__hold.blazeTarget=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PLAY_MANA'&&p.specialBtn)){clearInterval(t);r('Mana: '+p.messageText+' | '+p.specialBtn+' | '+(p.specialTargets||[]).length)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},60000)})"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-3-mana.png"
+  },
+  {
+   "click": {
+    "re": "Länder automatisch",
+    "i": true,
+    "within": "[data-testid=prompt-bar]"
+   }
+  },
+  {
+   "js": "new Promise(r=>{let n=0;const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.stack.length===0&&g.answeredPromptId!==p.id&&s.players.find(x=>x.me).battlefield.some(c=>c.name==='Guardian of Vitu-Ghazi')){clearInterval(t);r('fertig nach '+n+' Klicks, nextStop='+p.nextStop)}if(p&&p.kind==='PLAY_MANA'&&g.answeredPromptId!==p.id&&(p.specialTargets||[]).length){const id=p.specialTargets.find(x=>document.querySelector('[data-obj=\"'+x+'\"]'));const el=id&&document.querySelector('[data-obj=\"'+id+'\"]');if(el){n++;el.click()}}},600);setTimeout(()=>{clearInterval(t);r('Timeout Einberufen nach '+n)},60000)})"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-4-after.png"
+  },
+  {
+   "js": "window.__hold.afterGuardian=false;window.__hold.convoke=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='POSTCOMBAT_MAIN'){clearInterval(t);g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('Main 2 nextStop='+p.nextStop+' -> F9')}},150);setTimeout(()=>{clearInterval(t);r('Timeout Main 2')},60000)})"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&((()=>{const me=s.players.find(x=>x.me);return me&&me.skips&&me.skips.length&&!me.active})())){clearInterval(t);r('skips='+s.players.find(x=>x.me).skips)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},60000)})"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-5-skip.png"
+  },
+  {
+   "click": {
+    "text": "Stopp",
+    "i": true,
+    "prefix": true,
+    "within": "[data-testid=prompt-bar]"
+   }
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&((()=>{const me=s.players.find(x=>x.me);return me&&!me.skips})())){clearInterval(t);r('skips weg, Zug '+s.turn+' '+s.step)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},30000)})"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/convoke-6-stopped.png"
+  }
+ ]
 }

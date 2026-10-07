@@ -1,84 +1,109 @@
 {
-  "url": "http://localhost:5173/",
-  "timeout": 240000,
-  "steps": [
-    {
-      "waitFor": "#root div",
-      "timeout": 60000
-    },
-    {
-      "js": "fetch('/api/auth/logout',{method:'POST'}).then(()=>{location.reload();return 'logout'})"
-    },
-    {
-      "wait": 2500
-    },
-    {
-      "waitFor": "#root form input",
-      "timeout": 60000
-    },
-    {
-      "shot": "../../engine/run/shot-server-login.png"
-    },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('E-Mail & Passwort'));if(!b)return 'kein Tab';b.click();return 'E-Mail-Tab'})()"
-    },
-    {
-      "wait": 600
-    },
-    {
-      "shot": "../../engine/run/shot-server-login-email.png"
-    },
-    {
-      "js": "location.href = 'http://localhost:5173/#invite=DEV-OWNER-CODE'; location.reload()"
-    },
-    {
-      "waitFor": "#root nav",
-      "timeout": 60000
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "shot": "../../engine/run/shot-server-home.png"
-    },
-    {
-      "js": "window.__ml.nav.getState().go('account')"
-    },
-    {
-      "wait": 1200
-    },
-    {
-      "shot": "../../engine/run/shot-server-account.png"
-    },
-    {
-      "js": "fetch('/api/admin/invites',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Anna'})}).then(r=>r.json()).then(j=>j.code)"
-    },
-    {
-      "js": "window.__ml.nav.getState().go('admin')"
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "shot": "../../engine/run/shot-server-admin.png"
-    },
-    {
-      "js": "fetch('/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
-    },
-    {
-      "wait": 6000
-    },
-    {
-      "jsFile": "autoplay.js"
-    },
-    {
-      "wait": 30000
-    },
-    {
-      "js": "(() => { const s = window.__ml.game.getState().state; return s && ('Zug ' + s.turn + ' ' + s.step + ' conn=' + window.__ml.game.getState().conn) })()"
-    },
-    {
-      "shot": "../../engine/run/shot-server-game.png"
-    }
-  ]
+ "url": "{{UI}}/",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 240000,
+ "vars": {
+  "UI": "http://localhost:5174"
+ },
+ "steps": [
+  {
+   "waitFor": "#root form",
+   "timeout": 60000
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-login.png"
+  },
+  {
+   "click": "[data-testid=login-tab-mail]"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-login-email.png"
+  },
+  {
+   "goto": "{{UI}}/#invite={{OWNER_CODE}}"
+  },
+  {
+   "waitFor": "#root nav",
+   "timeout": 60000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-home.png"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('account');'account'"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-account.png"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('admin');'admin'"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-admin.png"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "jsFile": "autoplay.js",
+   "expect": "started|already"
+  },
+  {
+   "wait": 30000
+  },
+  {
+   "js": "(() => { const g = window.__ml.game.getState(); const s = g.state; return s ? ('Zug ' + s.turn + ' ' + s.step + ' conn=' + g.conn) : 'kein State' })()"
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/server-game.png"
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId)g.leave();return 'aufgegeben'})()"
+  }
+ ]
 }

@@ -1,0 +1,126 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 300000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset()}window.__ml.nav.getState().go('home');return 'home'})()",
+   "name": "zur Startseite"
+  },
+  {
+   "waitFor": "[data-testid=hero-header]",
+   "timeout": 30000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-12-held-neu.png",
+   "name": "meta-12-held-neu"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-12-held-neu-1280.png",
+   "name": "meta-12-held-neu-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().go('decks');'decks'"
+  },
+  {
+   "waitFor": "[data-testid=decks-empty]",
+   "timeout": 20000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-10-decks-leer.png",
+   "name": "meta-10-decks-leer"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-10-decks-leer-1280.png",
+   "name": "meta-10-decks-leer-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().go('stats');'stats'"
+  },
+  {
+   "waitFor": "[data-testid=stats-empty]",
+   "timeout": 20000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-11-statistik-leer.png",
+   "name": "meta-11-statistik-leer"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-11-statistik-leer-1280.png",
+   "name": "meta-11-statistik-leer-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  }
+ ]
+}

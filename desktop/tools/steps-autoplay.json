@@ -1,17 +1,47 @@
 {
-  "url": "http://localhost:5173/?port=7317",
-  "timeout": 200000,
-  "steps": [
-    { "waitFor": "#root div", "timeout": 60000 },
-    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
-    { "wait": 6000 },
-    { "jsFile": "autoplay.js" },
-    { "wait": 30000 },
-    { "js": "(() => { const s = window.__ml.game.getState().state; return s && ('Zug ' + s.turn + ' ' + s.step) })()" },
-    { "shot": "../../engine/run/shot-1.png" },
-    { "wait": 30000 },
-    { "shot": "../../engine/run/shot-2.png" },
-    { "wait": 30000 },
-    { "shot": "../../engine/run/shot-3.png" }
-  ]
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 200000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "wait": 6000
+  },
+  {
+   "jsFile": "autoplay.js",
+   "expect": "started|already"
+  },
+  {
+   "wait": 30000
+  },
+  {
+   "js": "(() => { const s = window.__ml.game.getState().state; return s ? ('Zug ' + s.turn + ' ' + s.step) : 'kein State' })()"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/shot-1.png"
+  },
+  {
+   "wait": 30000
+  },
+  {
+   "shot": "{{OUT}}/../szenario/shot-2.png"
+  },
+  {
+   "wait": 30000
+  },
+  {
+   "shot": "{{OUT}}/../szenario/shot-3.png"
+  }
+ ]
 }

@@ -1,0 +1,839 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 1800000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset();window.__ml.nav.getState().go('home');return 'altes Spiel beendet'}return 'frisch'})()"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&p.kind==='PICK_TARGET'&&/starting player/i.test(p.messageText||'')){g.answer({uuid:g.hello.myPlayerId})}else if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='ASK'&&p.mulligan)){clearInterval(t);r('Mulligan-Frage')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Mulligan\")},240000)})",
+   "name": "Mulligan"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-01-mulligan.png",
+   "name": "board-01-mulligan"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-01-mulligan-1280.png",
+   "name": "board-01-mulligan-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Tab"
+  },
+  {
+   "waitFor": "[data-testid=modal-pill]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-09b-pill.png",
+   "name": "board-09b-pill"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-09b-pill-1280.png",
+   "name": "board-09b-pill-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Tab"
+  },
+  {
+   "waitGone": "[data-testid=modal-pill]",
+   "timeout": 5000,
+   "optional": true
+  },
+  {
+   "click": "[data-testid=mulligan-keep]"
+  },
+  {
+   "waitGone": "[data-testid=game-modal]",
+   "timeout": 20000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "js": "(()=>{if(document.querySelector('[data-testid=pause-resign]'))return 'Menue per Esc';window.__ml.game.getState().setMenuOpen(true);return 'Menue per Store'})()",
+   "name": "Pause-Menue sicherstellen"
+  },
+  {
+   "waitFor": "[data-testid=pause-resign]",
+   "timeout": 10000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-10-pause.png",
+   "name": "board-10-pause"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-10-pause-1280.png",
+   "name": "board-10-pause-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=pause-resign]"
+  },
+  {
+   "waitFor": "[data-testid=pause-resign-confirm]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-10b-aufgeben.png",
+   "name": "board-10b-aufgeben"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-10b-aufgeben-1280.png",
+   "name": "board-10b-aufgeben-1280",
+   "optional": true
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "waitFor": "[data-testid=pause-resign-confirm]",
+   "timeout": 3000,
+   "optional": true
+  },
+  {
+   "click": "[data-testid=pause-resign-confirm]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(!!g.gameOver)){clearInterval(t);r('Spielende')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Spielende\")},60000)})",
+   "name": "Spielende"
+  },
+  {
+   "waitFor": "[data-testid=gameover-primary]",
+   "timeout": 20000
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-11-spielende.png",
+   "name": "board-11-spielende"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-11-spielende-1280.png",
+   "name": "board-11-spielende-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=gameover-view-table]"
+  },
+  {
+   "waitFor": "[data-testid=modal-pill]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-11b-tisch-ansehen.png",
+   "name": "board-11b-tisch-ansehen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-11b-tisch-ansehen-1280.png",
+   "name": "board-11b-tisch-ansehen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'convoke'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (convoke)"
+  },
+  {
+   "js": "window.__hold={convoke:true,firstMain:true,blazeTarget:true,afterGuardian:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='priority'&&s.step==='PRECOMBAT_MAIN')){clearInterval(t);r('Main 1')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout eigener Zug\")},90000)})",
+   "name": "eigener Zug"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-02-eigener-zug.png",
+   "name": "board-02-eigener-zug"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-12-eigener-zug-1280.png",
+   "name": "board-12-eigener-zug-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__hold.firstMain=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&s.stack.length&&s.stack[0].name==='Blaze')){clearInterval(t);r('Blaze-Ziel')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Ziel waehlen\")},30000)})",
+   "name": "Ziel waehlen"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-05-ziel.png",
+   "name": "board-05-ziel"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-05-ziel-1280.png",
+   "name": "board-05-ziel-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__hold.blazeTarget=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PLAY_MANA'&&p.specialBtn)){clearInterval(t);r('Mana fuer Guardian (Blaze im Friedhof)')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Mana-Prompt\")},60000)})",
+   "name": "Mana-Prompt"
+  },
+  {
+   "click": "[data-testid=player-info] [title=Friedhof]"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 8000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-09-friedhof.png",
+   "name": "board-09-friedhof"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-09-friedhof-1280.png",
+   "name": "board-09-friedhof-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "waitGone": "[data-testid=game-modal]",
+   "timeout": 5000,
+   "optional": true
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'swarm'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (swarm)"
+  },
+  {
+   "js": "window.__hold={attack:true,stack:5};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.stack.length>=5)){clearInterval(t);r('Stapel '+s.stack.length)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Stapel\")},120000)})",
+   "name": "Stapel"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&s.stack.length>=2)){clearInterval(t);r('Prioritaet bei Stapel '+s.stack.length)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},30000)})"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-06-stapel.png",
+   "name": "board-06-stapel"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-06-stapel-1280.png",
+   "name": "board-06-stapel-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "hover": {
+    "re": "Stapel auflösen",
+    "i": true,
+    "within": "[data-testid=prompt-bar]"
+   },
+   "optional": true
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-06b-f10.png",
+   "name": "board-06b-f10"
+  },
+  {
+   "js": "window.__hold.stack=0;'Stapel frei'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers')){clearInterval(t);r('Angreifer waehlen, moeglich: '+(p.possibleAttackers||[]).length)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Angriff\")},120000)})",
+   "name": "Angriff"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03-angreifer.png",
+   "name": "board-03-angreifer"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03-angreifer-1280.png",
+   "name": "board-03-angreifer-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=attack-all]"
+  },
+  {
+   "waitFor": "[data-testid=attack-all][data-armed=true]",
+   "timeout": 3000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03b-wirklich-alle.png",
+   "name": "board-03b-wirklich-alle"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03b-wirklich-alle-1280.png",
+   "name": "board-03b-wirklich-alle-1280",
+   "optional": true
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "waitFor": "[data-testid=attack-all][data-armed=true]",
+   "timeout": 2000,
+   "optional": true
+  },
+  {
+   "click": "[data-testid=attack-all]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&p.defenderPick)){clearInterval(t);r('Verteidiger waehlen: '+(p.targets||[]).length)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Verteidiger\")},20000)})",
+   "name": "Verteidiger"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03c-verteidiger.png",
+   "name": "board-03c-verteidiger"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03c-verteidiger-1280.png",
+   "name": "board-03c-verteidiger-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(()=>{const p=window.__ml.game.getState().prompt;document.querySelectorAll('[data-shot-target]').forEach(e=>e.removeAttribute('data-shot-target'));const pods=[...document.querySelectorAll('[data-testid=opp-pod]')];const el=pods.find(e=>{const id=e.getAttribute('data-player')||(e.querySelector('[data-player]')||{getAttribute:()=>null}).getAttribute('data-player');return p&&(p.targets||[]).includes(id)});if(!el)return 'kein Verteidiger-Pod';el.setAttribute('data-shot-target','1');return 'Pod markiert'})()",
+   "name": "Verteidiger-Pod markieren"
+  },
+  {
+   "click": "[data-shot-target]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers'&&s.combat.some(c=>c.attackers.length))){clearInterval(t);r('Angriff erklaert')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Angriff erklaert\")},30000)})",
+   "name": "Angriff erklaert"
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03d-erklaert.png",
+   "name": "board-03d-erklaert"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-03d-erklaert-1280.png",
+   "name": "board-03d-erklaert-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'necro'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (necro)"
+  },
+  {
+   "js": "window.__hold={necro:true,ability:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='CHOOSE_ABILITY'&&p.sourceId)){clearInterval(t);r('Faehigkeiten: '+p.choices.map(c=>c.text).join(' | '))}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Faehigkeit\")},120000)})",
+   "name": "Faehigkeit"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 8000
+  },
+  {
+   "click": {
+    "text": "×5",
+    "within": "[data-testid=game-modal]"
+   }
+  },
+  {
+   "click": {
+    "re": "Pay 1 life",
+    "within": "[data-testid=game-modal]"
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-07-faehigkeit.png",
+   "name": "board-07-faehigkeit"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-07-faehigkeit-1280.png",
+   "name": "board-07-faehigkeit-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'dredge'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (dredge)"
+  },
+  {
+   "jsFile": "dredge-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.choice&&p.choice.groups)){clearInterval(t);r('Ersatzeffekt: '+p.choice.groups.map(x=>x.label+'x'+x.sources.length).join(', '))}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Ersatzeffekt\")},120000)})",
+   "name": "Ersatzeffekt"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 8000
+  },
+  {
+   "hover": "[data-testid=game-modal] button[title^=\"Effekt von Necroplasm\"]",
+   "optional": true
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-08-ersatzeffekt.png",
+   "name": "board-08-ersatzeffekt"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-08-ersatzeffekt-1280.png",
+   "name": "board-08-ersatzeffekt-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'blocker'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "js": "window.__hold={blockers:true,cast:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='blockers')){clearInterval(t);r('Blocker waehlen')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Blocker\")},180000)})",
+   "name": "Blocker"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-04-blocker.png",
+   "name": "board-04-blocker"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/board-13-blocker-1280.png",
+   "name": "board-13-blocker-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId)g.leave();return 'Spiel verlassen'})()",
+   "optional": true
+  }
+ ]
+}

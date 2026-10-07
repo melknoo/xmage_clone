@@ -1,75 +1,88 @@
 {
-  "url": "http://localhost:5173/?port=7317",
-  "width": 1700,
-  "height": 1000,
-  "timeout": 300000,
-  "steps": [
-    {
-      "waitFor": "#root div",
-      "timeout": 60000
-    },
-    {
-      "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'dredge'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})"
-    },
-    {
-      "wait": 4000
-    },
-    {
-      "jsFile": "dredge-pilot.js"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.choice&&p.choice.groups&&g.answeredPromptId!==p.id){clearInterval(t);r('Dialog: '+p.choice.groups.map(x=>x.label+'x'+x.sources.length).join(', '))}},200)})"
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent==='Necroplasm');if(!b)return 'kein Chip';b.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));return 'hover Necroplasm'})()"
-    },
-    {
-      "wait": 800
-    },
-    {
-      "shot": "../../engine/run/dredge-1-dialog.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/dredge-1-dialog.png"
-    },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent==='Keinen anwenden');if(!b)return 'kein Knopf';b.click();return 'Keinen anwenden'})()"
-    },
-    {
-      "wait": 2500
-    },
-    {
-      "js": "(()=>{const g=window.__ml.game.getState();return 'Prompt jetzt: '+(g.prompt?g.prompt.kind+' '+(g.prompt.messageText||''):'-')+' | Hand: '+g.state.hand.map(c=>c.name).join(', ')})()"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.choice&&p.choice.groups&&g.answeredPromptId!==p.id){clearInterval(t);r('Dialog 2')}},200)})"
-    },
-    {
-      "wait": 1200
-    },
-    {
-      "js": "(()=>{const c=document.querySelector('input[type=checkbox]');if(c&&!c.checked)c.click();const b=[...document.querySelectorAll('button')].find(e=>e.textContent==='Keinen anwenden');if(!b)return 'kein Knopf';b.click();return 'merken + Keinen anwenden'})()"
-    },
-    {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;if(s&&s.replDeclines&&s.replDeclines.length){clearInterval(t);r('gemerkt: '+s.replDeclines.join(', '))}},200)})"
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "shot": "../../engine/run/dredge-2-gemerkt.png"
-    },
-    {
-      "wait": 300
-    },
-    {
-      "shot": "../../engine/run/dredge-2-gemerkt.png"
-    }
-  ]
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 420000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'dredge'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (dredge)"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "jsFile": "dredge-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.choice&&p.choice.groups)){clearInterval(t);r('Dialog: '+p.choice.groups.map(x=>x.label+'x'+x.sources.length).join(', '))}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},180000)})"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 8000
+  },
+  {
+   "hover": "[data-testid=game-modal] button[title^=\"Effekt von Necroplasm\"]"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/dredge-1-dialog.png"
+  },
+  {
+   "click": "[data-testid=repl-decline-all]"
+  },
+  {
+   "click": "[data-testid=repl-confirm]"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();return 'Prompt jetzt: '+(g.prompt?g.prompt.kind+' '+(g.prompt.messageText||''):'-')+' | Hand: '+g.state.hand.map(c=>c.name).join(', ')})()"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.choice&&p.choice.groups)){clearInterval(t);r('Dialog 2')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},180000)})"
+  },
+  {
+   "waitFor": "[data-testid=game-modal]",
+   "timeout": 8000
+  },
+  {
+   "wait": 800
+  },
+  {
+   "click": "[data-testid=repl-decline-all]"
+  },
+  {
+   "js": "(()=>{const c=document.querySelector('[data-testid=repl-remember]');if(!c)return 'kein Merken';if(!c.checked)c.click();return 'merken: '+c.checked})()"
+  },
+  {
+   "click": "[data-testid=repl-confirm]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.replDeclines&&s.replDeclines.length)){clearInterval(t);r('gemerkt: '+s.replDeclines.join(', '))}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},20000)})"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/dredge-2-gemerkt.png"
+  }
+ ]
 }

@@ -1,0 +1,1129 @@
+{
+ "url": "{{PROTO}}/_blank",
+ "width": 1704,
+ "height": 1073,
+ "exact": true,
+ "show": true,
+ "timeout": 900000,
+ "steps": [
+  {
+   "name": "Ursprung",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "goto": "{{PROTO}}/MageLite%20Online.dc.html"
+  },
+  {
+   "name": "Aufwaermen (Scryfall-Cache)",
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 25000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 2",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 3",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "name": "online-01-login@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01-login.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-01b-login-mail@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "E-MAIL & PASSWORT",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01b-login-mail.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-01c-laden@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "ANMELDEN",
+    "prefix": true,
+    "pointer": true
+   }
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01c-laden.png",
+   "clip": "[data-proto-stage]",
+   "settle": 50
+  },
+  {
+   "name": "online-01d-laden-konto@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "ANMELDEN",
+    "prefix": true,
+    "pointer": true
+   }
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01d-laden-konto.png",
+   "clip": "[data-proto-stage]",
+   "settle": 50
+  },
+  {
+   "name": "online-02-start@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-02-start.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-02b-gast@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "GAST",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-02b-gast.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-03-mitglieder@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Hanna",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-03-mitglieder.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-04-freunde@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "FREUNDE",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-04-freunde.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-05-chat-verlassen@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": false
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-05-chat-verlassen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-06-einladen@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "EINLADEN",
+    "pointer": true,
+    "nth": 0
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-06-einladen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-07-lobby@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "lobby",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-07-lobby.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-07b-lobby-leer@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "lobby",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "KEINE LOBBY",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-07b-lobby-leer.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-08-tisch@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "tisch",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-08-tisch.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-09-konto@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "konto",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-09-konto.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-10-einladungen@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "admin",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "CODE ERZEUGEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-10-einladungen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-11-einladung-verbindung@1680",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1680",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "EINLADUNG",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "VERBINDUNG WEG",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-11-einladung-verbindung.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-01-login@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01-login-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-01b-login-mail@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "E-MAIL & PASSWORT",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01b-login-mail-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-01c-laden@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "ANMELDEN",
+    "prefix": true,
+    "pointer": true
+   }
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01c-laden-1280.png",
+   "clip": "[data-proto-stage]",
+   "settle": 50
+  },
+  {
+   "name": "online-01d-laden-konto@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "login",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "ANMELDEN",
+    "prefix": true,
+    "pointer": true
+   }
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-01d-laden-konto-1280.png",
+   "clip": "[data-proto-stage]",
+   "settle": 50
+  },
+  {
+   "name": "online-02-start@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-02-start-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-02b-gast@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "GAST",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-02b-gast-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-03-mitglieder@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Hanna",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-03-mitglieder-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-04-freunde@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "FREUNDE",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-04-freunde-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-05-chat-verlassen@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": false
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-05-chat-verlassen-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-06-einladen@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "EINLADEN",
+    "pointer": true,
+    "nth": 0
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-06-einladen-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-07-lobby@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "lobby",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-07-lobby-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-07b-lobby-leer@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "lobby",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "KEINE LOBBY",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-07b-lobby-leer-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-08-tisch@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "tisch",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-12-tisch-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-09-konto@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "konto",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-09-konto-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-10-einladungen@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "admin",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "CODE ERZEUGEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-10-einladungen-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "online-11-einladung-verbindung@1280",
+   "localStorage": {
+    "ml-online": {
+     "screen": "held",
+     "size": "1280",
+     "chatIn": true
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "EINLADUNG",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "VERBINDUNG WEG",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/online-11-einladung-verbindung-1280.png",
+   "clip": "[data-proto-stage]"
+  }
+ ]
+}

@@ -1,22 +1,59 @@
 {
-  "url": "http://localhost:5173/?port=7317",
-  "width": 1700,
-  "height": 1000,
-  "timeout": 180000,
-  "steps": [
-    { "waitFor": "#root div", "timeout": 60000 },
-    { "js": "fetch('http://127.0.0.1:7317/api/games',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'gemstone'})}).then(r=>r.json()).then(j=>{window.__ml.game.getState().connect(j.gameId);window.__ml.nav.getState().go('game');return j.gameId})" },
-    { "wait": 3000 },
-    { "js": "window.__hold={openingHand:true};'hold'" },
-    { "jsFile": "scenario-pilot.js" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='ASK'&&!p.mulligan&&/battlefield/.test(p.messageText||'')&&g.answeredPromptId!==p.id){clearInterval(t);r('Frage: '+p.messageText+' | step='+g.state.step)}},200);setTimeout(()=>{clearInterval(t);r('keine Starthand-Frage')},30000)})" },
-    { "wait": 1200 },
-    { "shot": "../../engine/run/gemstone-1-dialog.png" },
-    { "wait": 300 },
-    { "shot": "../../engine/run/gemstone-1-dialog.png" },
-    { "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.includes('Auf das Spielfeld legen'));if(!b)return 'kein Knopf';b.click();return 'Auf das Spielfeld legen'})()" },
-    { "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;const me=s&&s.players.find(p=>p.me);if(me&&me.battlefield.some(c=>c.name==='Gemstone Caverns')){clearInterval(t);r('Gemstone auf dem Feld, Exil='+me.exile.length)}},200);setTimeout(()=>{clearInterval(t);r('Timeout Gemstone')},20000)})" },
-    { "wait": 1000 },
-    { "shot": "../../engine/run/gemstone-2-battlefield.png" }
-  ]
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 180000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'gemstone'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (gemstone)"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "js": "window.__hold={openingHand:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='ASK'&&!p.mulligan&&/battlefield/.test(p.messageText||''))){clearInterval(t);r('Frage: '+p.messageText+' | step='+s.step)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},60000)})"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/gemstone-1-dialog.png"
+  },
+  {
+   "click": {
+    "re": "Auf das Spielfeld legen",
+    "within": "[data-testid=game-modal]"
+   }
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.players.find(p=>p.me).battlefield.some(c=>c.name==='Gemstone Caverns'))){clearInterval(t);r('Gemstone auf dem Feld, Exil='+s.players.find(p=>p.me).exile.length)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},20000)})"
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/gemstone-2-battlefield.png"
+  }
+ ]
 }

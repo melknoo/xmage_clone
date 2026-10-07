@@ -1,0 +1,1100 @@
+{
+ "url": "{{PROTO}}/_blank",
+ "width": 1704,
+ "height": 1073,
+ "exact": true,
+ "show": true,
+ "timeout": 900000,
+ "steps": [
+  {
+   "name": "Ursprung",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "mulligan",
+     "size": "1680"
+    }
+   },
+   "goto": "{{PROTO}}/MageLite%20Spielbrett.dc.html"
+  },
+  {
+   "name": "Aufwaermen (Scryfall-Cache)",
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 25000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 2",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 3",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "name": "board-01-mulligan@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "mulligan",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-01-mulligan.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-02-eigener-zug@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "main",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-02-eigener-zug.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03-angreifer@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03-angreifer.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03b-wirklich-alle@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03b-wirklich-alle.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03c-verteidiger@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Wirklich alle?",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03c-verteidiger.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03d-erklaert@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Wirklich alle?",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Kotori",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03d-erklaert.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-04-blocker@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "blockers",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-04-blocker.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-05-ziel@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "target",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-05-ziel.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-06-stapel@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "stack",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-06-stapel.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-07-faehigkeit@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "ability",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-07-faehigkeit.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-08-ersatzeffekt@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "replace",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-08-ersatzeffekt.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-09-friedhof@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "grave",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-09-friedhof.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-09b-pill@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "mulligan",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "key": "Tab",
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-09b-pill.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-10-pause@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "pause",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-10-pause.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-10b-aufgeben@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "pause",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Aufgeben",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-10b-aufgeben.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-11-spielende@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "over",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-11-spielende.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-11b-tisch-ansehen@1680",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "over",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "click": {
+    "text": "Tisch ansehen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-11b-tisch-ansehen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-01-mulligan@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "mulligan",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-01-mulligan-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-02-eigener-zug@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "main",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-12-eigener-zug-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03-angreifer@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03-angreifer-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03b-wirklich-alle@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03b-wirklich-alle-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03c-verteidiger@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Wirklich alle?",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03c-verteidiger-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-03d-erklaert@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "attack",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Alle angreifen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Wirklich alle?",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "Kotori",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-03d-erklaert-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-04-blocker@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "blockers",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-13-blocker-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-05-ziel@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "target",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-05-ziel-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-06-stapel@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "stack",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-06-stapel-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-07-faehigkeit@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "ability",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-07-faehigkeit-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-08-ersatzeffekt@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "replace",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-08-ersatzeffekt-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-09-friedhof@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "grave",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-09-friedhof-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-09b-pill@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "mulligan",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "key": "Tab",
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-09b-pill-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-10-pause@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "pause",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-10-pause-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-10b-aufgeben@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "pause",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "Aufgeben",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-10b-aufgeben-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-11-spielende@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "over",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-11-spielende-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "board-11b-tisch-ansehen@1280",
+   "localStorage": {
+    "ml-proto": {
+     "scene": "over",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "wait": 2600
+  },
+  {
+   "click": {
+    "text": "Tisch ansehen",
+    "pointer": true,
+    "i": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/board-11b-tisch-ansehen-1280.png",
+   "clip": "[data-proto-stage]"
+  }
+ ]
+}

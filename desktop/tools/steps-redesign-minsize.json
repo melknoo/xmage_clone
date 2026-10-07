@@ -1,0 +1,201 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1280,
+ "height": 760,
+ "exact": true,
+ "show": true,
+ "timeout": 600000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset()}window.__ml.nav.getState().go('home');return 'home'})()",
+   "name": "zur Startseite"
+  },
+  {
+   "waitFor": "[data-testid=hero-header]",
+   "timeout": 30000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/minsize-home-1280.png"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "meta"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe meta 1280x760"
+  },
+  {
+   "size": [
+    1440,
+    900
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "meta"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe meta 1440x900"
+  },
+  {
+   "size": [
+    1920,
+    969
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "meta"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe meta 1920x969"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "meta"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe meta 1680x1000"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "jsFile": "autoplay.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.turn>=8)){clearInterval(t);r('Zug '+s.turn)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zug 8\")},240000)})",
+   "name": "Zug 8"
+  },
+  {
+   "js": "['__pilot','__auto','__swarm','__dredge'].forEach(k=>{clearInterval(window[k]);window[k]=null});window.__hold={};'Piloten aus'",
+   "name": "Piloten aus"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/minsize-brett-1280.png"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "board"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe board 1280x760"
+  },
+  {
+   "size": [
+    1440,
+    900
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/probe-brett-1440.png"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "board"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe board 1440x900"
+  },
+  {
+   "size": [
+    1920,
+    969
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/probe-brett-1920.png"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "board"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe board 1920x969"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "jsFile": "layout-probe.js",
+   "args": {
+    "expect": "@file:layout-expect.json",
+    "area": "board"
+   },
+   "expect": "\"ok\":true",
+   "name": "Probe board 1680x1000"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId)g.leave();return 'aufgegeben'})()"
+  },
+  {
+   "wait": 2000
+  }
+ ]
+}

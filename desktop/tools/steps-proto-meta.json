@@ -1,0 +1,1090 @@
+{
+ "url": "{{PROTO}}/_blank",
+ "width": 1704,
+ "height": 1073,
+ "exact": true,
+ "show": true,
+ "timeout": 900000,
+ "steps": [
+  {
+   "name": "Ursprung",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "goto": "{{PROTO}}/MageLite%20Meta.dc.html"
+  },
+  {
+   "name": "Aufwaermen (Scryfall-Cache)",
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 25000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 2",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "name": "Aufwaermen 3",
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680",
+    "cap": 20000
+   },
+   "expect": "^(bereit|teilweise)"
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "name": "meta-01-held@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-01-held.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-02-spielen@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "spielen",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-02-spielen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-03-deckauswahl@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-AUSWAHL",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-03-deckauswahl.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-03b-vorgefertigt@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-AUSWAHL",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "VORGEFERTIGT 70",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-03b-vorgefertigt.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-04-decks@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "decks",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-04-decks.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-05-import-text@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "IMPORT (TEXTLISTE)",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-05-import-text.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-06-import-link@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "IMPORT (LINK)",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-06-import-link.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-07-deck-bearbeiten@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK BEARBEITEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-07-deck-bearbeiten.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-07b-loeschen@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK BEARBEITEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "LÖSCHEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-07b-loeschen.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-08-statistik@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-KARTEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-08-statistik.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-09-verlauf@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "VERLAUF",
+    "pointer": true,
+    "nth": 0
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-09-verlauf.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-10-decks-leer@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "decks",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-10-decks-leer.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-11-statistik-leer@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "stat",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-11-statistik-leer.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-12-held-neu@1680",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1680"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1680"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-12-held-neu.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-01-held@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-13-held-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-02-spielen@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "spielen",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-02-spielen-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-03-deckauswahl@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-AUSWAHL",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-03-deckauswahl-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-03b-vorgefertigt@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-AUSWAHL",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "VORGEFERTIGT 70",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-03b-vorgefertigt-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-04-decks@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "decks",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-04-decks-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-05-import-text@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "IMPORT (TEXTLISTE)",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-05-import-text-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-06-import-link@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "IMPORT (LINK)",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-06-import-link-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-07-deck-bearbeiten@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK BEARBEITEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-07-deck-bearbeiten-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-07b-loeschen@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK BEARBEITEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": {
+    "text": "LÖSCHEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-07b-loeschen-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-08-statistik@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "DECK-KARTEN",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-08-statistik-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-09-verlauf@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "VERLAUF",
+    "pointer": true,
+    "nth": 0
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-09-verlauf-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-10-decks-leer@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "decks",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-10-decks-leer-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-11-statistik-leer@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "stat",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-11-statistik-leer-1280.png",
+   "clip": "[data-proto-stage]"
+  },
+  {
+   "name": "meta-12-held-neu@1280",
+   "localStorage": {
+    "ml-meta": {
+     "screen": "held",
+     "size": "1280"
+    }
+   },
+   "reload": true
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "click": {
+    "text": "LEERZUSTAND",
+    "pointer": true
+   }
+  },
+  {
+   "wait": 300
+  },
+  {
+   "jsFile": "proto-ready.js",
+   "args": {
+    "size": "1280"
+   },
+   "expect": "^bereit",
+   "optional": true
+  },
+  {
+   "shot": "../../design/redesign-shots/proto/meta-12-held-neu-1280.png",
+   "clip": "[data-proto-stage]"
+  }
+ ]
+}

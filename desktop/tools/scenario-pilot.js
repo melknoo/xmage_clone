@@ -7,6 +7,10 @@
 //   { convoke: true }     Szenario convoke: Blaze (X=2), dann Guardian of Vitu-Ghazi wirken; Mana-Prompt mit
 //                         Einberufen offen lassen. Zusaetzlich (von den steps zurueckgesetzt):
 //                         firstMain / blazeTarget / afterGuardian = an dieser Stelle warten
+//   { blockers: true }    Blocker-Prompt nicht beantworten (Bots greifen an -> Screenshot "Blocker waehlen")
+//   { stack: N }          bei Prioritaet mit >= N Stapelobjekten nicht passen (F10-Knopf, Stapel-Screenshot)
+//   { cast: true }        wie autoplay.js auch Commander/Zauber wirken (aber nie angreifen) - fuer eigene Blocker
+// Die steps duerfen window.__hold spaeter aendern (gleiches Objekt), z. B. window.__hold.stack = 0.
 (() => {
   if (window.__pilot) return 'already'
   const G = window.__ml.game
@@ -14,6 +18,8 @@
   let necroClicked = false
   let blazeCast = false
   let guardianCast = false
+  let castKey = ''
+  let castCount = 0
   window.__pilot = setInterval(() => {
     const g = G.getState()
     const p = g.prompt
@@ -28,8 +34,9 @@
         return ans({ bool: true })
       case 'SELECT': {
         if (p.mode === 'attackers') return hold.attack ? undefined : ans({ bool: true })
-        if (p.mode === 'blockers') return ans({ bool: true })
+        if (p.mode === 'blockers') return hold.blockers ? undefined : ans({ bool: true })
         const acts = new Set(s.actions || [])
+        if (hold.stack && p.mode === 'priority' && s.stack.length >= hold.stack) return
         if (hold.convoke && me && me.active && s.step === 'PRECOMBAT_MAIN' && s.stack.length === 0) {
           if (!blazeCast) {
             if (hold.firstMain) return
@@ -55,6 +62,21 @@
         }
         const land = s.hand.find((c) => acts.has(c.id) && c.types && c.types.includes('LAND'))
         if (land) return ans({ uuid: land.id })
+        if (hold.cast && me && me.active && s.stack.length === 0 && /MAIN/.test(s.step || '')) {
+          const key = s.turn + s.step
+          if (key !== castKey) {
+            castKey = key
+            castCount = 0
+          }
+          if (castCount < 4) {
+            const cmd = me.command.find((c) => acts.has(c.id))
+            const spell = cmd || s.hand.find((c) => acts.has(c.id))
+            if (spell) {
+              castCount++
+              return ans({ uuid: spell.id })
+            }
+          }
+        }
         return ans({ bool: false })
       }
       case 'PICK_TARGET': {

@@ -1,8 +1,12 @@
 // Zweiter Mensch fuer steps-design-server.json (Server-Modus, gradlew runServer): legt per Owner-Code eine
 // Einladung "Bob" an, wartet auf einen offenen Tisch des Owners, tritt bei, waehlt ein Deck, schreibt in den
 // Tisch-Chat und spielt nach dem Start passiv mit (Laender, sonst passen) inkl. Chatnachricht im Spiel.
-// Aufruf (vor den Steps starten):  node desktop/tools/design-mate.mjs
-const base = process.env.MAGELITE_URL ?? 'http://127.0.0.1:7317'
+// Aufruf (vor den Steps starten):  MAGELITE_URL=http://127.0.0.1:7401 node desktop/tools/design-mate.mjs
+const base = process.env.MAGELITE_URL
+if (!base) {
+  console.error('MAGELITE_URL fehlt (z. B. http://127.0.0.1:7401) - kein Default, nie gegen 7317')
+  process.exit(2)
+}
 const ownerCode = process.env.MAGELITE_OWNER_CODE ?? 'DEV-OWNER-CODE'
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 async function call(method, path, { body, cookie } = {}) {

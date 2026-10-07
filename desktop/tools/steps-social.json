@@ -1,33 +1,84 @@
 {
-  "url": "http://localhost:5173/#invite=DEV-OWNER-CODE",
-  "timeout": 120000,
-  "show": true,
-  "steps": [
-    { "waitFor": "#root nav", "timeout": 60000 },
-    { "wait": 5000 },
-    { "shot": "../../engine/run/shot-social-home.png" },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Bob');if(!b)return 'kein Bob';b.click();return 'Bob angeklickt'})()"
-    },
-    { "wait": 600 },
-    { "shot": "../../engine/run/shot-social-pick.png" },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Beitreten');if(!b)return 'kein Beitreten';b.click();return 'beigetreten'})()"
-    },
-    { "wait": 2500 },
-    { "shot": "../../engine/run/shot-social-table.png" },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Verlassen');window.__ml.nav.getState().go('home');return 'home'})()"
-    },
-    { "wait": 1500 },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Verlassen');if(!b)return 'kein Verlassen';b.click();return 'Chat verlassen'})()"
-    },
-    { "wait": 1500 },
-    { "shot": "../../engine/run/shot-social-left.png" },
-    {
-      "js": "(()=>{const b=[...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Beitreten');if(!b)return 'kein Beitreten';b.click();return 'Chat beigetreten'})()"
-    },
-    { "wait": 1000 }
-  ]
+ "url": "{{UI}}/#invite={{OWNER_CODE}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 120000,
+ "vars": {
+  "UI": "http://localhost:5174"
+ },
+ "steps": [
+  {
+   "waitFor": "#root nav",
+   "timeout": 60000
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/social-home.png"
+  },
+  {
+   "click": "[data-testid=chat-member][data-name=Bob]"
+  },
+  {
+   "waitFor": "[data-testid=member-menu]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/social-pick.png"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "click": "[data-testid=invite-accept]",
+   "optional": true
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/social-table.png"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home'"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "click": "[data-testid=chat-leave]"
+  },
+  {
+   "waitFor": "[data-testid=chat-hidden]",
+   "timeout": 8000
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../szenario/social-left.png"
+  },
+  {
+   "click": "[data-testid=chat-join]"
+  },
+  {
+   "waitFor": "[data-testid=lobby-chat]",
+   "timeout": 8000
+  }
+ ]
 }

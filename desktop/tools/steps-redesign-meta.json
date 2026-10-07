@@ -1,0 +1,577 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 900000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset()}window.__ml.nav.getState().go('home');return 'home'})()",
+   "name": "zur Startseite"
+  },
+  {
+   "waitFor": "[data-testid=hero-header]",
+   "timeout": 30000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-01-held.png",
+   "name": "meta-01-held"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-13-held-1280.png",
+   "name": "meta-13-held-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=my-deck-change]",
+   "timeout": 20000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-02-spielen.png",
+   "name": "meta-02-spielen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-02-spielen-1280.png",
+   "name": "meta-02-spielen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=my-deck-change]"
+  },
+  {
+   "waitFor": "[data-testid=deck-picker]",
+   "timeout": 10000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-03-deckauswahl.png",
+   "name": "meta-03-deckauswahl"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-03-deckauswahl-1280.png",
+   "name": "meta-03-deckauswahl-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=picker-tab-pre]"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-03b-vorgefertigt.png",
+   "name": "meta-03b-vorgefertigt"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-03b-vorgefertigt-1280.png",
+   "name": "meta-03b-vorgefertigt-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=deck-picker] [data-testid=modal-cancel]"
+  },
+  {
+   "waitGone": "[data-testid=deck-picker]",
+   "timeout": 5000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('decks');'decks'"
+  },
+  {
+   "waitFor": "[data-testid=deck-import-tile]",
+   "timeout": 20000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-04-decks.png",
+   "name": "meta-04-decks"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-04-decks-1280.png",
+   "name": "meta-04-decks-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=deck-import-tile]"
+  },
+  {
+   "waitFor": "[data-testid=import-dialog]",
+   "timeout": 8000
+  },
+  {
+   "click": "[data-testid=import-tab-text]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(()=>{const el=document.querySelector(\"[data-testid=import-dialog] input[type=text], [data-testid=import-dialog] input:not([type])\");if(!el)return 'kein Feld';const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,\"Madness Test\");el.dispatchEvent(new Event('input',{bubbles:true}));return 'Text gesetzt'})()",
+   "optional": true
+  },
+  {
+   "js": "(()=>{const el=document.querySelector(\"[data-testid=import-dialog] textarea\");if(!el)return 'kein Feld';const proto=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(el,\"1 Anje Falkenrath *CMDR*\\n1 Terminate\\n1 Faithless Looting\\n1 Fiery Temper\\n1 Stromkirk Occultist\\n1 Anje's Ravager\\n1 Bloodhal Priest\\n1 Blasphemous Act\\n10 Mountain\\n10 Swamp\");el.dispatchEvent(new Event('input',{bubbles:true}));return 'Text gesetzt'})()"
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-05-import-text.png",
+   "name": "meta-05-import-text"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-05-import-text-1280.png",
+   "name": "meta-05-import-text-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=import-tab-link]"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-06-import-link.png",
+   "name": "meta-06-import-link"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-06-import-link-1280.png",
+   "name": "meta-06-import-link-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=import-dialog] [data-testid=modal-cancel]"
+  },
+  {
+   "waitGone": "[data-testid=import-dialog]",
+   "timeout": 5000
+  },
+  {
+   "click": "[data-testid=deck-edit]"
+  },
+  {
+   "waitFor": "[data-testid=import-dialog]",
+   "timeout": 8000
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-07-deck-bearbeiten.png",
+   "name": "meta-07-deck-bearbeiten"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-07-deck-bearbeiten-1280.png",
+   "name": "meta-07-deck-bearbeiten-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=import-delete]"
+  },
+  {
+   "waitFor": "[data-testid=deck-delete-dialog]",
+   "timeout": 5000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-07b-loeschen.png",
+   "name": "meta-07b-loeschen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-07b-loeschen-1280.png",
+   "name": "meta-07b-loeschen-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=deck-delete-dialog] [data-testid=modal-cancel]"
+  },
+  {
+   "waitGone": "[data-testid=deck-delete-dialog]",
+   "timeout": 5000
+  },
+  {
+   "click": "[data-testid=import-dialog] [data-testid=modal-cancel]"
+  },
+  {
+   "waitGone": "[data-testid=import-dialog]",
+   "timeout": 5000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('stats');'stats'"
+  },
+  {
+   "waitFor": "[data-testid=stats-tab-overview]",
+   "timeout": 20000
+  },
+  {
+   "waitFor": "[data-testid=stats-deck-row]",
+   "timeout": 20000
+  },
+  {
+   "js": "(()=>{const r=document.querySelector('[data-testid=stats-deck-row]');return r&&r.getAttribute('data-open')==='true'?'schon offen':'zu'})()"
+  },
+  {
+   "click": "[data-testid=stats-deck-row][aria-expanded=false]",
+   "optional": true
+  },
+  {
+   "waitFor": "[data-testid=stats-deck-cards]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-08-statistik.png",
+   "name": "meta-08-statistik"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-08-statistik-1280.png",
+   "name": "meta-08-statistik-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "click": "[data-testid=stats-tab-history]"
+  },
+  {
+   "waitFor": "[data-testid=stats-history]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-09-verlauf.png",
+   "name": "meta-09-verlauf"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-09-verlauf-1280.png",
+   "name": "meta-09-verlauf-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.nav.getState().setLastSetup({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'});'lastSetup'"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home bei laufender Partie'"
+  },
+  {
+   "waitFor": "[data-testid=home-quickstart]",
+   "timeout": 20000
+  },
+  {
+   "click": "[data-testid=home-quickstart]"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-14-laufende-partie.png",
+   "name": "meta-14-laufende-partie"
+  },
+  {
+   "key": "Escape"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset()}return 'Partie beendet'})()"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "window.__ml.nav.getState().go('home');'home'"
+  },
+  {
+   "waitFor": "[data-testid=home-quickstart]",
+   "timeout": 20000
+  },
+  {
+   "js": "window.__ml.ui.getState().pushToast({kind:'error',text:'Spiel konnte nicht gestartet werden: Deck nicht gefunden (vermutlich gelöscht)'});'Fehler-Toast'"
+  },
+  {
+   "waitFor": "[data-testid=toast][data-kind=error]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-15-fehler-toast.png",
+   "name": "meta-15-fehler-toast"
+  },
+  {
+   "click": "[data-testid=toast][data-kind=error]",
+   "optional": true
+  },
+  {
+   "js": "window.__ml.nav.getState().setLastSetup({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'});'lastSetup repariert'"
+  },
+  {
+   "goto": "{{UI}}/?port=7398"
+  },
+  {
+   "waitFor": "[data-testid=boot-screen][data-phase=engine]",
+   "timeout": 15000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-16-boot-engine.png",
+   "name": "meta-16-boot-engine"
+  },
+  {
+   "waitFor": "[data-testid=boot-screen][data-phase=down]",
+   "timeout": 90000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/meta-17-boot-down.png",
+   "name": "meta-17-boot-down"
+  },
+  {
+   "goto": "file:///{{REPO}}/desktop/src/splash.html"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "{{OUT}}/meta-18-splash.png",
+   "name": "meta-18-splash"
+  }
+ ]
+}
