@@ -47,32 +47,26 @@ export function ZoomPanel({ layout }: ZoomPanelProps) {
           </div>
         )}
       </div>
-      {card && (
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-[15px] font-semibold text-fg-1">{card.name}</span>
-            <span className="flex shrink-0 gap-0.5">
-              <ManaCost cost={card.manaCost} flat />
-            </span>
-          </div>
-          {(card.typeLine || (card as Permanent).tapped) && (
-            <span className="-mt-1 text-[12px] text-fg-3">
-              {card.typeLine}
-              {(card as Permanent).tapped && <span className="text-fg-4">{card.typeLine ? ' · ' : ''}getappt</span>}
-            </span>
-          )}
-          {!layout.compact && card.rules && card.rules.length > 0 && (
-            <div className="scrollbar-thin flex max-h-[152px] flex-col gap-1 overflow-y-auto text-[13px] leading-[1.45] text-fg-2">
-              {card.rules.map((r, i) => (
-                <div key={i}>
-                  <RulesText text={r} />
-                </div>
-              ))}
+      {/* Infobereich mit fester Hoehe: wechselnde Karten (Hover im Verlauf) verschieben den Verlauf darunter nicht */}
+      <div className="flex h-[22px] items-center justify-between gap-2">
+        <span className="min-w-0 truncate text-[15px] font-semibold text-fg-1">{card?.name}</span>
+        <span className="flex shrink-0 gap-0.5">{card && <ManaCost cost={card.manaCost} flat />}</span>
+      </div>
+      <span className="-mt-1 h-[18px] truncate text-[12px] leading-[18px] text-fg-3">
+        {card?.typeLine}
+        {card && (card as Permanent).tapped && <span className="text-fg-4">{card.typeLine ? ' · ' : ''}getappt</span>}
+      </span>
+      {!layout.compact && (
+        <div className="scrollbar-thin flex h-[152px] flex-col gap-1 overflow-y-auto text-[13px] leading-[1.45] text-fg-2">
+          {card?.rules?.map((r, i) => (
+            <div key={i}>
+              <RulesText text={r} />
             </div>
-          )}
-          {card.back && <span className="text-[12px] text-fg-4">Rückseite: {card.back.name}</span>}
-        </>
+          ))}
+          {card?.back && <span className="text-[12px] text-fg-4">Rückseite: {card.back.name}</span>}
+        </div>
       )}
+      {layout.compact && <span className="h-[16px] truncate text-[12px] leading-[16px] text-fg-4">{card?.back && `Rückseite: ${card.back.name}`}</span>}
     </div>
   )
 }

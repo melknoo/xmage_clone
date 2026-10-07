@@ -346,6 +346,16 @@ Fallback auf manuelles Klicken.
   verdecktes Exil wird per Regeltext erkannt (Lücken möglich); entfernte Nutzer dürfen zuschauen;
   `e2e-online` „Owner spielt weiter“ ist timing-anfällig (Spiel endet mitunter regulär).
 
+## Playtest-Fixes (2026-10-07)
+
+- **The Mighty Thor, Jane Foster:** XMage-Bug (Filter `FilterCreaturePermanent` → nur Kreaturen statt „Artefakt oder
+  Kreatur“). Ersatzklasse `engine/src/main/java/mage/cards/t/TheMightyThorJaneFoster.java` (wie `GameStateEvaluator2`,
+  Engine-Jar vor XMage-Jars); Test `CardOverridesTest`. Weitere Karten-Bugs nach demselben Muster überschreibbar.
+- Kartenvorschau (`ZoomPanel`) mit fester Höhe → Spielverlauf springt beim Hovern nicht mehr.
+- Eigenes Feld dreigeteilt: Kreaturen / Artefakte · Verzauberungen (nur wenn vorhanden, `battlefield-others`) / Länder.
+  Gegner-Pods unverändert.
+- Geprüft: `gradlew test`, `humanSpike` (0 Fehler), `tsc -b`, Screenshots (Verlauf-Oberkante bei 40 Hovers konstant).
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

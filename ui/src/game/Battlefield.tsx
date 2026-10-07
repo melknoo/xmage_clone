@@ -126,7 +126,7 @@ export interface BattlefieldProps {
   perms: Permanent[]
   inter: Interaction
   onHover: (c: Card | null) => void
-  /** own: Kreaturen oben, Laender/Artefakte darunter; opponent: Pod-Feld eines Gegners */
+  /** own: Kreaturen, Artefakte/Verzauberungen (nur falls vorhanden), Laender; opponent: Pod-Feld eines Gegners */
   variant: 'own' | 'opponent'
   /** Kartenbreiten (creatureW, landW, oppCardW), Abstaende (rowGap, bfPad, myPad, myGap), compact */
   layout: BoardLayoutState
@@ -186,10 +186,18 @@ export const Battlefield = memo(function Battlefield({ perms, inter, onHover, va
         Kreaturen
       </span>
       <Row {...common} perms={creatures} width={layout.creatureW} gap={16} rowGap={18} opponent={false} testId="battlefield-creatures" />
+      {others.length > 0 && (
+        <>
+          <span className="label mt-1.5 shrink-0" style={SECTION_LABEL}>
+            Artefakte · Verzauberungen
+          </span>
+          <Row {...common} perms={others} width={layout.landW} gap={12} rowGap={12} opponent={false} testId="battlefield-others" />
+        </>
+      )}
       <span className="label mt-1.5 shrink-0" style={SECTION_LABEL}>
-        Länder · Artefakte
+        Länder
       </span>
-      <Row {...common} perms={[...lands, ...others]} width={layout.landW} gap={12} rowGap={12} opponent={false} testId="battlefield-lands" />
+      <Row {...common} perms={lands} width={layout.landW} gap={12} rowGap={12} opponent={false} testId="battlefield-lands" />
     </div>
   )
 })
