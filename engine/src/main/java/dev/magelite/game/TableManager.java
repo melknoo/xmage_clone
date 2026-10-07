@@ -456,6 +456,39 @@ public final class TableManager {
         return t;
     }
 
+    /**
+     * Admin: Tisch schliessen. Ein laufendes Tischspiel wird abgebrochen; die Sitzenden fallen beim naechsten Polling
+     * (4xx) aus dem Tisch. @return false, wenn es den Tisch nicht (mehr) gibt
+     */
+    public boolean adminClose(String id) {
+        Table t;
+        List<Long> seated = new ArrayList<>();
+        synchronized (this) {
+            t = tables.remove(normalize(id));
+            if (t == null) {
+                return false;
+            }
+            for (Seat s : t.seats) {
+                if (s.kind == SeatKind.HUMAN) {
+                    seated.add(s.userId);
+                }
+            }
+        }
+        LOG.info("Tisch " + t.id + " vom Admin geschlossen");
+        // ausserhalb der Sperre: onGameFinished findet den Tisch nicht mehr und tut nichts
+        if (t.gameId != null) {
+            games.get(t.gameId).ifPresent(GameHost::abort);
+        }
+        for (long userId : seated) {
+            try {
+                onKicked.accept(userId, t.id);
+            } catch (RuntimeException e) {
+                LOG.warn("onKicked: " + e);
+            }
+        }
+        return true;
+    }
+
     private synchronized void onGameFinished(String tableId, GameHost host) {
         Table t = tables.get(tableId);
         if (t == null || !host.getId().equals(t.gameId)) {

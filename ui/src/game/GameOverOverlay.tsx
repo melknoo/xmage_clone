@@ -205,7 +205,7 @@ export function GameOverOverlay() {
           </Button>
           {!spectator && (
             <Button variant="secondary" onClick={toHome}>
-              Hauptmenü
+              Startseite
             </Button>
           )}
           <Button variant="primary" kbd="Space" testId="gameover-primary" disabled={primary.disabled} onClick={primary.run}>

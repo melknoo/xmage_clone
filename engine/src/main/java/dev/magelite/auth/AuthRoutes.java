@@ -7,7 +7,6 @@ import dev.magelite.api.Json;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
 import io.javalin.http.Cookie;
-import io.javalin.http.ForbiddenResponse;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.SameSite;
 import io.javalin.http.UnauthorizedResponse;
@@ -186,9 +185,7 @@ public final class AuthRoutes implements HttpServer.Module {
     }
 
     private void requireAdmin(Context ctx) {
-        if (!Auth.user(ctx).admin()) {
-            throw new ForbiddenResponse("admin");
-        }
+        Auth.requireAdmin(ctx);
     }
 
     /** @param sessionHash Token-Hash der aktuellen Session (null: lokal oder altes Code-Cookie) */

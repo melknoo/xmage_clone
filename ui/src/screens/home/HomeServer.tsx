@@ -4,6 +4,7 @@ import { useDeckCatalog } from '../../decks/catalog'
 import { Icon, type IconName } from '../../lib/icons'
 import { SeatedStrip } from '../../social/SeatedStrip'
 import { SocialSidebar } from '../../social/SocialSidebar'
+import { useMarkLobbyRead } from '../../social/useMarkLobbyRead'
 import { useAuth } from '../../store/auth'
 import { useNav } from '../../store/nav'
 import { useSocial } from '../../store/social'
@@ -28,25 +29,19 @@ function useWide(): boolean {
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /**
- * Held-Screen im Server-Modus: links Gast-Hinweis, Held-Kopf (kompakt), Tisch-Leiste, Lobby / Allein ueben,
+ * Startseite im Server-Modus: links Gast-Hinweis, Held-Kopf (kompakt), Tisch-Leiste, Lobby / Allein ueben,
  * Letzte Partien; rechts Seitenleiste mit Lobby-Chat und Freunden. Solange der Screen offen ist, gilt der Chat als gelesen.
  */
 export function HomeServer() {
   const go = useNav((s) => s.go)
   const lastSetup = useNav((s) => s.lastSetup)
   const me = useAuth((s) => s.me)
-  const seq = useSocial((s) => s.seq)
-  const chatIn = useSocial((s) => s.chatIn)
-  const markRead = useSocial((s) => s.markRead)
   const tables = useSocial((s) => s.tables)
   const online = useSocial((s) => s.online)
   const { describe } = useDeckCatalog()
   const wide = useWide()
 
-  // Held offen = Lobby-Chat gelesen (Badge an der Nav zaehlt nur ausserhalb)
-  useEffect(() => {
-    markRead()
-  }, [seq, chatIn, markRead])
+  useMarkLobbyRead()
 
   const guest = !!me && !me.hasPassword
   const lobbySub =

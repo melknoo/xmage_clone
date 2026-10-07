@@ -123,14 +123,14 @@ export function TopBar({ layout }: TopBarProps) {
               <button
                 type="button"
                 className={HDR_MENU}
-                title="Zurück zum Hauptmenü"
+                title="Zurück zur Startseite"
                 onClick={() => {
                   reset()
                   go('home')
                 }}
               >
-                <Icon name="menu" size={14} />
-                Zum Menü
+                <Icon name="home" size={14} />
+                Zum Start
               </button>
             ) : (
               <button type="button" className={HDR_MENU} title="Pausemenü: Optionen, Aufgeben, Spiel verlassen (Esc)" onClick={() => setMenuOpen(true)}>

@@ -1,0 +1,137 @@
+{
+ "url": "{{UI}}/",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 1500000,
+ "vars": {
+  "UI": "http://localhost:5174"
+ },
+ "steps": [
+  {
+   "waitFor": "#root form, #root nav",
+   "timeout": 60000
+  },
+  {
+   "js": "fetch('/api/auth/logout',{method:'POST'}).then(()=>{setTimeout(()=>location.reload(),100);return 'abgemeldet'})"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "waitFor": "#root form",
+   "timeout": 60000
+  },
+  {
+   "click": "[data-testid=login-tab-code]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "type": {
+    "target": "#root form input",
+    "text": "{{OWNER_CODE}}"
+   }
+  },
+  {
+   "click": "[data-testid=login-submit]"
+  },
+  {
+   "waitFor": "[data-testid=home-server], [data-testid=game-header]",
+   "timeout": 30000
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten"
+  },
+  {
+   "wait": 5000
+  },
+  {
+   "jsFile": "autoplay.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "(window.__mlFxSlow=6,'FX-Zeitlupe x6 (nur Dev)')"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const now=Date.now();if(Object.keys(g.entered).length>0){clearInterval(t);r('Betreten')}},15);setTimeout(()=>{clearInterval(t);r('Timeout: Betreten')},240000)})"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "shot": "{{OUT}}/fx-a-betreten.png",
+   "name": "fx-a-betreten"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const now=Date.now();if(Object.keys(g.lunging).length>0){clearInterval(t);r('Angriff')}},15);setTimeout(()=>{clearInterval(t);r('Timeout: Angriff')},240000)})"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "shot": "{{OUT}}/fx-b-angriff.png",
+   "name": "fx-b-angriff"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const now=Date.now();if(g.fx.some(e=>e.kind==='damage'&&e.hit&&now-e.at<60)){clearInterval(t);r('Treffer-Flug')}},15);setTimeout(()=>{clearInterval(t);r('Timeout: Treffer-Flug')},240000)})"
+  },
+  {
+   "wait": 350
+  },
+  {
+   "shot": "{{OUT}}/fx-c-treffer-flug.png",
+   "name": "fx-c-treffer-flug"
+  },
+  {
+   "wait": 550
+  },
+  {
+   "shot": "{{OUT}}/fx-d-treffer-einschlag.png",
+   "name": "fx-d-treffer-einschlag"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const now=Date.now();if(g.fx.some(e=>(e.kind==='died'||e.kind==='tokenDied')&&e.rect&&now-e.at<60)){clearInterval(t);r('Tod')}},15);setTimeout(()=>{clearInterval(t);r('Timeout: Tod')},400000)})"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();const d=g.fx.find(e=>(e.kind==='died'||e.kind==='tokenDied')&&e.rect);return 'Tod: '+(d&&d.name)+' delay='+(d&&d.delay)})()"
+  },
+  {
+   "wait": 200
+  },
+  {
+   "shot": "{{OUT}}/fx-e-tod-blitz.png",
+   "name": "fx-e-tod-blitz"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "shot": "{{OUT}}/fx-f-tod-splitter.png",
+   "name": "fx-f-tod-splitter"
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "{{OUT}}/fx-g-tod-geist.png",
+   "name": "fx-g-tod-geist"
+  },
+  {
+   "js": "window.__ml.game.getState().setFxEnabled(false);'Effekte aus'"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();return 'aus: fx='+g.fx.length+' entered='+Object.keys(g.entered).length+' lunging='+Object.keys(g.lunging).length})()"
+  },
+  {
+   "js": "window.__ml.game.getState().setFxEnabled(true);'Effekte an'"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave&&g.leave()}return 'verlassen'})()"
+  }
+ ]
+}

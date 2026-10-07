@@ -1,5 +1,7 @@
 package dev.magelite;
 
+import dev.magelite.admin.AdminRoutes;
+import dev.magelite.admin.AdminService;
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
@@ -26,6 +28,8 @@ import dev.magelite.stats.ProfileService;
 import dev.magelite.stats.StatsRoutes;
 import org.apache.log4j.Logger;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.SecureRandom;
@@ -34,6 +38,7 @@ import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -49,9 +54,26 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Main {
 
-    public static final String VERSION = "0.1.0";
+    /** App-Version aus {@code desktop/package.json} (vom Build in {@code magelite-version.properties} geschrieben). */
+    public static final String VERSION = loadVersion();
 
     private Main() {
+    }
+
+    private static String loadVersion() {
+        try (InputStream in = Main.class.getResourceAsStream("/magelite-version.properties")) {
+            if (in != null) {
+                Properties p = new Properties();
+                p.load(in);
+                String v = p.getProperty("version", "").strip();
+                if (!v.isEmpty() && !v.contains("$")) {
+                    return v;
+                }
+            }
+        } catch (IOException ignored) {
+            // Fallback unten
+        }
+        return "dev";
     }
 
     public static void main(String[] args) throws Exception {
@@ -117,6 +139,8 @@ public final class Main {
             httpServer.addModule(tableRoutes);
             // Lobby-Chat, Freunde, Einladungen
             httpServer.addModule(new SocialRoutes(social));
+            // Admin-Bereich: Nutzer, Server-Uebersicht, Eingriffe
+            httpServer.addModule(new AdminRoutes(new AdminService(db, accounts, games, tableManager, social, VERSION)));
         }
         int port = httpServer.start();
 

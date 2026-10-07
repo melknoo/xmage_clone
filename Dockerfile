@@ -15,6 +15,8 @@ FROM eclipse-temurin:17-jdk AS engine
 WORKDIR /src
 COPY vendor/xmage/lib vendor/xmage/lib
 COPY engine/ engine/
+# Versionsquelle (build.gradle.kts liest "version")
+COPY desktop/package.json desktop/package.json
 WORKDIR /src/engine
 # gradlew hat im Repo keine Ausfuehrungsrechte -> ueber sh starten
 RUN --mount=type=cache,target=/root/.gradle sh ./gradlew installDist --no-daemon -q
@@ -38,6 +40,6 @@ ENV MAGELITE_IDLE_EXIT_MIN=10 \
 # Engine-Jar explizit VOR lib/* (harte Regel 10: eigener GameStateEvaluator2 muss zuerst geladen werden)
 CMD exec java -XX:MaxRAMPercentage=70 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError \
     -Djava.awt.headless=true -Dfile.encoding=UTF-8 -Dmagelite.vendor=/app/vendor/xmage \
-    -cp "/app/lib/magelite-engine-0.1.0.jar:/app/lib/*" dev.magelite.Main \
+    -cp "/app/lib/magelite-engine.jar:/app/lib/*" dev.magelite.Main \
     --server --host=0.0.0.0 --port=8080 --data=/data --vendor=/app/vendor/xmage --ui=/app/ui \
     --max-games=${MAGELITE_MAX_GAMES} --idle-exit-min=${MAGELITE_IDLE_EXIT_MIN}

@@ -1,0 +1,217 @@
+{
+ "url": "{{UI}}/",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 600000,
+ "vars": {
+  "UI": "http://localhost:5174"
+ },
+ "steps": [
+  {
+   "waitFor": "#root form, #root nav",
+   "timeout": 60000
+  },
+  {
+   "js": "fetch('/api/auth/logout',{method:'POST'}).then(()=>{setTimeout(()=>location.reload(),100);return 'abgemeldet'})"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "waitFor": "#root form",
+   "timeout": 60000
+  },
+  {
+   "click": "[data-testid=login-tab-code]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "type": {
+    "target": "#root form input",
+    "text": "{{OWNER_CODE}}"
+   }
+  },
+  {
+   "click": "[data-testid=login-submit]"
+  },
+  {
+   "waitFor": "[data-testid=home-server], [data-testid=table-seat]",
+   "timeout": 30000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('play');'play'"
+  },
+  {
+   "waitFor": "[data-testid=lobby-screen] [data-testid=social-sidebar]",
+   "timeout": 15000
+  },
+  {
+   "wait": 4000
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/admin-01-lobby-chat.png",
+   "name": "admin-01-lobby-chat"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "{{OUT}}/admin-01-lobby-chat-1280.png",
+   "name": "admin-01-lobby-chat-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "click": "[data-testid=nav-logo]"
+  },
+  {
+   "waitFor": "[data-testid=home-server]",
+   "timeout": 10000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/admin-02-start-per-logo.png",
+   "name": "admin-02-start-per-logo"
+  },
+  {
+   "js": "window.__ml.nav.getState().go('admin');'admin'"
+  },
+  {
+   "waitFor": "[data-testid=admin-tab-users]",
+   "timeout": 15000
+  },
+  {
+   "click": "[data-testid=admin-tab-users]"
+  },
+  {
+   "waitFor": "[data-testid=admin-user-row]",
+   "timeout": 15000
+  },
+  {
+   "wait": 800
+  },
+  {
+   "shot": "{{OUT}}/admin-03-nutzer.png",
+   "name": "admin-03-nutzer"
+  },
+  {
+   "click": "[data-testid=admin-user-row]:nth-of-type(3)"
+  },
+  {
+   "waitFor": "[data-testid=admin-detail-sessions]",
+   "timeout": 10000
+  },
+  {
+   "wait": 600
+  },
+  {
+   "shot": "{{OUT}}/admin-04-nutzer-detail.png",
+   "name": "admin-04-nutzer-detail"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "{{OUT}}/admin-04-nutzer-detail-1280.png",
+   "name": "admin-04-nutzer-detail-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "click": "[data-testid=admin-tab-invites]"
+  },
+  {
+   "waitFor": "[data-testid=admin-name]",
+   "timeout": 10000
+  },
+  {
+   "type": {
+    "target": "[data-testid=admin-name], [data-testid=admin-name] input",
+    "text": "Jonas"
+   }
+  },
+  {
+   "click": "[data-testid=admin-create-code]"
+  },
+  {
+   "waitFor": "[data-testid=admin-fresh-code]",
+   "timeout": 8000
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "{{OUT}}/admin-05-einladungen.png",
+   "name": "admin-05-einladungen"
+  },
+  {
+   "click": "[data-testid=admin-tab-server]"
+  },
+  {
+   "waitFor": "[data-testid=admin-server]",
+   "timeout": 10000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "shot": "{{OUT}}/admin-06-server.png",
+   "name": "admin-06-server"
+  },
+  {
+   "click": "[data-testid=admin-abort]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "shot": "{{OUT}}/admin-07-server-bestaetigen.png",
+   "name": "admin-07-server-bestaetigen"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 500
+  },
+  {
+   "shot": "{{OUT}}/admin-06-server-1280.png",
+   "name": "admin-06-server-1280"
+  }
+ ]
+}

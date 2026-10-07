@@ -187,20 +187,42 @@ public final class SocialService {
     }
 
     private FriendView friendView(FriendStore.Entry e, long now) {
-        if (games.currentOf(e.userId()).isPresent()) {
-            return new FriendView(e.userId(), e.name(), "game", null, null);
+        Presence p = presence(e.userId(), now);
+        return new FriendView(e.userId(), e.name(), p.status(), p.tableId(), p.tableName());
+    }
+
+    /** Status eines Nutzers: {@code game} | {@code table} (mit Tisch) | {@code online} | {@code offline}. */
+    public record Presence(String status, String tableId, String tableName) {
+    }
+
+    /** Status wie in der Freundesliste (auch fuer die Admin-Uebersicht). Ruft andere Dienste ausserhalb von {@code lock}. */
+    public Presence presence(long userId) {
+        return presence(userId, System.currentTimeMillis());
+    }
+
+    private Presence presence(long userId, long now) {
+        if (games.currentOf(userId).isPresent()) {
+            return new Presence("game", null, null);
         }
         boolean on;
         synchronized (lock) {
-            Seen s = seen.get(e.userId());
+            Seen s = seen.get(userId);
             on = s != null && now - s.ts() <= ONLINE_MS;
         }
         if (!on) {
-            return new FriendView(e.userId(), e.name(), "offline", null, null);
+            return new Presence("offline", null, null);
         }
-        Optional<TableManager.TableSnap> t = tables.mineSnapshot(e.userId());
-        return t.map(table -> new FriendView(e.userId(), e.name(), "table", table.id(), table.name()))
-                .orElseGet(() -> new FriendView(e.userId(), e.name(), "online", null, null));
+        Optional<TableManager.TableSnap> t = tables.mineSnapshot(userId);
+        return t.map(table -> new Presence("table", table.id(), table.name()))
+                .orElseGet(() -> new Presence("online", null, null));
+    }
+
+    /** Anzahl Nutzer, die gerade pollen (auch unsichtbare, die den Lobby-Chat verlassen haben). */
+    public int onlineCount() {
+        long now = System.currentTimeMillis();
+        synchronized (lock) {
+            return (int) seen.values().stream().filter(s -> now - s.ts() <= ONLINE_MS).count();
+        }
     }
 
     private static int statusRank(String status) {

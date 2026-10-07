@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { wsUrl } from '../api/client'
 import { useAuth } from './auth'
-import { anchorOf, objCenter, stackAnchor, zoneAnchor, zoneKey, type Point } from '../game/overlayGeometry'
+import { anchorOf, objCenter, objRect, sourceCenter, stackAnchor, zoneAnchor, zoneKey, type Point, type Rect } from '../game/overlayGeometry'
+import { fxSlow, fxTiming } from '../lib/motion'
 import { isSpectateClose, SPECTATE_CLOSE_TEXT } from '../api/types'
 import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, ReplacementMode, RichSeg, SeatConn, ServerMessage, Tempo, UUID, FxEvent, ChatEntry } from '../api/types'
 import { sounds } from '../lib/sounds'
@@ -65,6 +66,10 @@ interface GameStore {
   fx: FxItem[]
   /** Ereignisleiste: die letzten Ereignisse (~5 s) */
   recent: FxItem[]
+  /** Brett-FX: frisch aufs Spielfeld gekommene Permanents (id -> ms), solange die Eintritts-Animation laeuft */
+  entered: Record<UUID, number>
+  /** Brett-FX: frisch erklaerte Angreifer (id -> ms), solange der Angriffsstoss laeuft */
+  lunging: Record<UUID, number>
   /** Animationen an/aus (Leiste bleibt) */
   fxEnabled: boolean
   setFxEnabled: (on: boolean) => void
@@ -135,10 +140,19 @@ export interface FxItem extends FxEvent {
   /** Start-/Zielposition auf dem Bildschirm (from/to sind die XMage-Zonen) */
   src?: Point
   dst?: Point
+  /** Schaden: Position der Quelle - der Treffer-Funke fliegt von hier nach src */
+  hit?: Point
+  /** Kartenflaeche: Schadensziel (roter Blitz) bzw. sterbende Karte (Zerbersten, Geisterkarte in Kartengroesse) */
+  rect?: Rect
+  /** ms bis zum Einschlag: Schaden = Flugzeit des Funkens, Tod = Rest eines noch fliegenden Funkens auf diese Karte */
+  delay?: number
 }
 let fxSeq = 0
-const FX_MS = 1300
-const FX_MAX = 24
+/** Lebensdauer eines FX-Stapels: laengste Kette = Funke (240) + Schadenszahl (1200) */
+const FX_MS = 1500
+const FX_MAX = 40
+/** Funke erst ab diesem Abstand Quelle -> Ziel (sonst nur Einschlag) */
+const HIT_MIN_PX = 12
 const RECENT_MS = 5000
 const RECENT_MAX = 6
 const CHAT_MAX = 200
@@ -196,6 +210,20 @@ function newReveals(s: GameState): Reveal[] {
   return out
 }
 
+/** erster State nach "hello" (Verbinden/Reconnect) ist ein Komplettstand - kein Betreten/Angriff animieren */
+let afterHello = true
+
+/** Brett-Diff aller Spieler: neue Permanent-ids (Betreten) und neu erklaerte Angreifer (Angriffsstoss) */
+function boardDiff(prev: GameState, next: GameState): { entered: UUID[]; attackers: UUID[] } {
+  const before = new Set<UUID>()
+  for (const p of prev.players) for (const c of p.battlefield) before.add(c.id)
+  const entered: UUID[] = []
+  for (const p of next.players) for (const c of p.battlefield) if (!before.has(c.id)) entered.push(c.id)
+  const wasAttacking = new Set((prev.combat ?? []).flatMap((g) => g.attackers))
+  const attackers = (next.combat ?? []).flatMap((g) => g.attackers).filter((id) => !wasAttacking.has(id))
+  return { entered, attackers }
+}
+
 export const useGame = create<GameStore>((set, get) => {
   function send(msg: { t: string; [k: string]: unknown }) {
     // Zuschauer senden nur Pings; alle Eingaben sind wirkungslos
@@ -210,11 +238,30 @@ export const useGame = create<GameStore>((set, get) => {
     if (!get().spectator) sounds.play(name)
   }
 
+  /**
+   * Brett-FX vormerken: liefert die neue Tabelle (ids -> at) fuer set() und traegt die ids nach der CSS-Animation
+   * wieder aus (sonst liefe sie beim naechsten Neuaufbau der Gruppe, z. B. Tappen, noch einmal).
+   */
+  function pulse(field: 'entered' | 'lunging', ids: UUID[], at: number, ms: number): Record<UUID, number> {
+    // Reste verpasster Timer (z. B. Tab im Hintergrund) gleich mit aufraeumen
+    const next = Object.fromEntries(Object.entries(get()[field]).filter(([, t]) => at - t < 2000))
+    for (const id of ids) next[id] = at
+    window.setTimeout(() => {
+      const cur = get()[field]
+      const left = Object.entries(cur).filter(([, t]) => t !== at)
+      if (left.length === Object.keys(cur).length) return
+      const v = Object.fromEntries(left)
+      set(field === 'entered' ? { entered: v } : { lunging: v })
+    }, ms + 60)
+    return next
+  }
+
   function handle(msg: ServerMessage) {
     switch (msg.t) {
       case 'hello':
         // nach einem Reconnect schickt die Engine Verlauf, State, offenen Prompt und ggf. "seat" erneut
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], chat: [], unreadChat: 0 })
+        afterHello = true
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
         break
       case 'state': {
         const prev = get().state
@@ -222,7 +269,18 @@ export const useGame = create<GameStore>((set, get) => {
         if (prev && msg.seq < prev.seq) break
         if (prev && msg.turn !== prev.turn && msg.myPlayerId && msg.activePlayerId === msg.myPlayerId) play('turn')
         const fresh = newReveals(msg)
-        set({ state: msg, objects: indexObjects(msg), ...(fresh.length ? { reveals: [...get().reveals, ...fresh].slice(-4) } : {}) })
+        // Betreten/Angriff im selben set wie der State, sonst blitzt die neue Karte einen Frame ohne Animation auf
+        const board = prev && !afterHello && get().fxEnabled && !reducedMotion() ? boardDiff(prev, msg) : null
+        afterHello = false
+        const now = Date.now()
+        const t = fxTiming(get().tempo)
+        set({
+          state: msg,
+          objects: indexObjects(msg),
+          ...(fresh.length ? { reveals: [...get().reveals, ...fresh].slice(-4) } : {}),
+          ...(board?.entered.length ? { entered: pulse('entered', board.entered, now, t.enter) } : {}),
+          ...(board?.attackers.length ? { lunging: pulse('lunging', board.attackers, now, t.lunge) } : {}),
+        })
         for (const r of fresh) window.setTimeout(() => get().dismissReveal(r.key), REVEAL_MS)
         break
       }
@@ -287,10 +345,15 @@ export const useGame = create<GameStore>((set, get) => {
     }
   }
 
-  /** Positionen sofort erfassen: der passende State kommt erst danach, der DOM zeigt noch die alte Lage. */
+  /**
+   * Positionen sofort erfassen: der passende State kommt erst danach, der DOM zeigt noch die alte Lage.
+   * Schaden: zusaetzlich Quelle (Funke) und Kartenflaeche des Ziels; Tod: Kartenflaeche und ggf. Wartezeit auf einen
+   * noch fliegenden Funken auf dieselbe Karte (gleicher oder frueherer Stapel).
+   */
   function onEvents(items: FxEvent[]) {
     const now = Date.now()
     const animate = get().fxEnabled && !reducedMotion()
+    const t = fxTiming(get().tempo)
     const fxNew: FxItem[] = []
     const recentNew: FxItem[] = []
     for (const e of items) {
@@ -298,12 +361,25 @@ export const useGame = create<GameStore>((set, get) => {
       if (animate) {
         if (e.kind === 'damage' || e.kind === 'life' || e.kind === 'counter') {
           item.src = (e.objectId ? objCenter(e.objectId) : null) ?? (e.playerId ? anchorOf(e.playerId) : null) ?? undefined
+          if (e.kind === 'damage' && item.src) {
+            if (e.objectId) item.rect = objRect(e.objectId) ?? undefined
+            const hit = e.sourceId && e.sourceId !== e.objectId ? sourceCenter(e.sourceId) : null
+            if (hit && Math.hypot(hit.x - item.src.x, hit.y - item.src.y) > HIT_MIN_PX) {
+              item.hit = hit
+              item.delay = t.hit
+            }
+          }
         } else if (e.kind === 'countered' || e.from === 'STACK') {
           item.src = stackAnchor(e.objectId) ?? undefined
           item.dst = zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.to) ?? 'graveyard') ?? undefined
         } else {
           item.src = (e.objectId ? objCenter(e.objectId) : null) ?? zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.from)) ?? undefined
           item.dst = e.kind === 'tokenDied' ? item.src : (zoneAnchor(e.ownerId ?? e.playerId, zoneKey(e.to)) ?? undefined)
+          if ((e.kind === 'died' || e.kind === 'tokenDied') && e.objectId) {
+            item.rect = objRect(e.objectId) ?? undefined
+            const wait = [...fxNew, ...get().fx].reduce((w, i) => (i.hit && i.objectId === e.objectId ? Math.max(w, i.at + (i.delay ?? 0) - now) : w), 0)
+            if (wait > 0) item.delay = wait
+          }
         }
         if (item.src) fxNew.push(item)
       }
@@ -315,7 +391,7 @@ export const useGame = create<GameStore>((set, get) => {
       window.setTimeout(() => {
         const keys = new Set(fxNew.map((i) => i.key))
         set({ fx: get().fx.filter((i) => !keys.has(i.key)) })
-      }, FX_MS)
+      }, FX_MS * fxSlow())
     }
     if (recentNew.length) {
       set({ recent: [...get().recent, ...recentNew].slice(-RECENT_MAX) })
@@ -439,16 +515,19 @@ export const useGame = create<GameStore>((set, get) => {
     spectator: false,
     fx: [],
     recent: [],
+    entered: {},
+    lunging: {},
     fxEnabled: loadBool('magelite.fx', true),
     setFxEnabled: (on) => {
       saveBool('magelite.fx', on)
-      set({ fxEnabled: on, ...(on ? {} : { fx: [] }) })
+      set({ fxEnabled: on, ...(on ? {} : { fx: [], entered: {}, lunging: {} }) })
     },
 
     connect: (gameId, opts) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, spectator: !!opts?.spectate, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], chat: [], unreadChat: 0 })
+      afterHello = true
+      set({ gameId, spectator: !!opts?.spectate, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
       open(gameId)
     },
     stopSpectating: () => {
@@ -550,7 +629,7 @@ export const useGame = create<GameStore>((set, get) => {
     },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, spectator: false, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], chat: [], unreadChat: 0 })
+      set({ gameId: null, spectator: false, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
     },
   }
 })

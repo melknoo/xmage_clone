@@ -196,6 +196,22 @@ input::-ms-clear {
 
   /* Brett: ab hier volles Layout (zusaetzlich Hoehe >= 900, siehe game/layout.ts) */
   --breakpoint-board: 1440px;
+
+  /* Brett-FX (Dauern wie lib/motion.ts fxTiming; bei Blitz kuerzer per animation-duration am Element) */
+  --animate-fx-enter: fx-enter 360ms var(--ease-out);
+  --animate-fx-lunge: fx-lunge 280ms var(--ease-in-out);
+}
+
+/* Karte betritt das Spielfeld: aufziehen, kurz ueberschwingen, Ember-Schein klingt ab (drop-shadow folgt der Drehung) */
+@keyframes fx-enter {
+  0% { opacity: 0; transform: scale(.82); filter: drop-shadow(0 0 12px var(--color-ember)); }
+  55% { opacity: 1; transform: scale(1.04); filter: drop-shadow(0 0 8px var(--color-ember)); }
+  100% { opacity: 1; transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+}
+/* Angriffsstoss: kurz zum Verteidiger und zurueck; Richtung setzt Battlefield als --lunge-x/--lunge-y */
+@keyframes fx-lunge {
+  0%, 100% { transform: translate(0, 0); }
+  40% { transform: translate(var(--lunge-x, 0px), var(--lunge-y, 0px)); }
 }
 
 /* ---------- Tastenhinweise: komplette Varianten, nie mit .kbd kombinieren ---------- */

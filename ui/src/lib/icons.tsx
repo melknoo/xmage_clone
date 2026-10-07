@@ -24,6 +24,7 @@ import {
   Hand,
   Heart,
   History,
+  House,
   Info,
   KeyRound,
   LayoutGrid,
@@ -47,6 +48,7 @@ import {
   Search,
   SendHorizontal,
   Shield,
+  ShieldCheck,
   Shuffle,
   Skull,
   Star,
@@ -72,11 +74,13 @@ import {
 /** Semantische Icon-Namen (Mapping laut Handoff-README "Icons" und Designsystem). */
 export type IconName =
   // Navigation
+  | 'home'
   | 'held'
   | 'play'
   | 'decks'
   | 'stats'
   | 'invites'
+  | 'admin'
   | 'toTable'
   | 'lobby'
   | 'account'
@@ -157,11 +161,13 @@ export type IconName =
   | 'discarded'
 
 export const ICONS: Record<IconName, LucideIcon> = {
+  home: House,
   held: Shield,
   play: Swords,
   decks: Layers,
   stats: ChartColumn,
   invites: Ticket,
+  admin: ShieldCheck,
   toTable: LogIn,
   lobby: LayoutGrid,
   account: CircleUser,

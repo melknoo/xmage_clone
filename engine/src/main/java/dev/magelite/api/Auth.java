@@ -5,6 +5,7 @@ import dev.magelite.auth.InviteCodes;
 import dev.magelite.auth.Passwords;
 import dev.magelite.auth.User;
 import io.javalin.http.Context;
+import io.javalin.http.ForbiddenResponse;
 import io.javalin.http.UnauthorizedResponse;
 
 import java.net.URI;
@@ -76,6 +77,15 @@ public final class Auth {
     public static User user(Context ctx) {
         User u = ctx.attribute(ATTR);
         return u == null ? User.LOCAL : u;
+    }
+
+    /** Nutzer der Anfrage, wenn er Admin ist; sonst 403. */
+    public static User requireAdmin(Context ctx) {
+        User u = user(ctx);
+        if (!u.admin()) {
+            throw new ForbiddenResponse("admin");
+        }
+        return u;
     }
 
     /** Nutzer zu den Cookies (Server-Modus): Session zuerst, sonst Legacy-Code. Lokal immer {@link User#LOCAL}. */

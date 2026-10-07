@@ -69,22 +69,26 @@ Der **erste Start** auf fly baut die Karten-DB auf dem Volume (gemessen 05.10.20
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1        # bricht ab, wenn gerade ein Spiel laeuft
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1 -Force # trotzdem
+powershell -ExecutionPolicy Bypass -File scripts
+elease.ps1 -Fly      # neue Version: bauen, installieren, deployen
 ```
 
-Das Skript prüft `GET /api/health` (`games` = laufende Spiele) und ruft dann `fly deploy` auf. Gebaut wird lokal
+Das Skript findet `flyctl` selbst (PATH, winget-Paket, `~\.flyin`), bricht bei uncommitteten Änderungen ab
+(`-AllowDirty` erlaubt es), prüft `GET /api/health` (`games` = laufende Spiele), ruft `fly deploy` auf und wartet,
+bis Health die neue Version meldet (`desktop/package.json`). Gebaut wird lokal
 mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --remote-only`.
 
 ## Freunde einladen
 
 1. Als Owner anmelden: `https://<app>.fly.dev`, Owner-Code eingeben.
-2. Links **Einladungen** → Name eintragen → „Anlegen“. Der Code erscheint **einmalig**; „Link kopieren“ erzeugt
+2. Links **Admin** → Tab „Einladungen“ → Name eintragen → „Code erzeugen“. Der Code erscheint **einmalig**; „Link kopieren“ erzeugt
    `https://<app>.fly.dev/#invite=XXXX-XXXX-XXXX-XXXX`.
 3. Der Freund öffnet den Link und ist angemeldet (ein Jahr, pro Browser). Code von Hand eintippen geht auch.
    Die Startseite schlägt vor, das Konto mit E-Mail + Passwort zu sichern („Als Gast weiterspielen“ ist ok).
 4. „Neuer Code“ macht den alten sofort ungültig (offene Verbindungen werden getrennt). „Entfernen“ löscht Konto,
    Held und Decks; Spiele bleiben in der Statistik-Tabelle.
 
-5. **Freunde in der App:** Auf der Startseite gibt es den **Lobby-Chat** (alle Angemeldeten, standardmäßig drin,
+5. **Freunde in der App:** Auf der Startseite und unter „Spielen“ (Lobby) gibt es den **Lobby-Chat** (alle Angemeldeten, standardmäßig drin,
    „Verlassen“ macht unsichtbar) und die **Freundesliste** (Name eintippen oder im Chat auf den Namen klicken →
    Anfrage, der andere nimmt an). Wer an einem Tisch sitzt, kann Freunde per „Einladen“ holen; die Einladung
    erscheint beim Freund als Karte oben rechts („Beitreten“), auch wenn er gerade woanders in der App ist (nicht
@@ -93,6 +97,12 @@ mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --r
 6. **Zuschauen / Entfernen:** In der Lobby zeigt ein laufender Tisch „Läuft · Zug N“ und „Zuschauen“ (nur wer an
    keinem Tisch sitzt, max. 8 pro Spiel; Zuschauer sehen keine Hände). Der Gastgeber kann vor dem Start Mitspieler
    entfernen („Wirklich entfernen?“); sie kommen erst nach einer neuen Einladung wieder an den Tisch.
+
+7. **Admin-Bereich** (nur Owner): Tab „Nutzer“ zeigt alle angemeldeten Konten mit Status (online / am Tisch /
+   im Spiel / offline), Level, Spielen, Siegen, zuletzt online und Gast/E-Mail; Klick öffnet rechts das Detail
+   (letzte Partien, Decks, Sessions) mit „Abmelden“ (alle Sessions enden, Code bleibt gültig), „Code rotieren“ und
+   „Löschen“. Tab „Server“: Version, Laufzeit, Speicher, Belegung x/max, laufende Spiele („Beenden“) und Tische
+   („Schließen“).
 
 Text für Freunde:
 
@@ -127,7 +137,7 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
 
 - **Leistungsmessung** (gemacht 05.10.2026): kurz `fly scale memory 8192`, dann per `fly ssh console` in einem
   eigenen Ordner (vermeidet den H2-Lock mit der laufenden Engine, baut die Karten-DB einmal neu, 44 s):
-  `mkdir -p /data/spike && cd /data/spike && java -Xmx2g -Dmagelite.vendor=/app/vendor/xmage -cp "/app/lib/magelite-engine-0.1.0.jar:/app/lib/*" dev.magelite.spike.BotSpike --games=2 --tempo=BLITZ --turnCap=40`
+  `mkdir -p /data/spike && cd /data/spike && java -Xmx2g -Dmagelite.vendor=/app/vendor/xmage -cp "/app/lib/magelite-engine.jar:/app/lib/*" dev.magelite.spike.BotSpike --games=2 --tempo=BLITZ --turnCap=40`
   Ergebnis: 3,9 bzw. 1,5 s/Zug (max 14,2 s), Heap-Spitze 1,7 GB, 0 Fehler – schneller als lokal (≈ 5 s/Zug).
   Danach `rm -rf /data/spike` und `fly scale memory 4096`.
 - **Verbindungsabbruch eines Mitspielers:** Die anderen sehen „getrennt seit N s“ an seinem Platz; kommt er

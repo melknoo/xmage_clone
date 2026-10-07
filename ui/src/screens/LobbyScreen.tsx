@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { tablesApi, type Table, type TableSeat } from '../api/tables'
 import { Button, EmptyState } from '../components/ui'
 import { Icon, type IconName } from '../lib/icons'
+import { SocialSidebar } from '../social/SocialSidebar'
+import { useMarkLobbyRead } from '../social/useMarkLobbyRead'
 import { tempoLabel } from '../lib/tempo'
 import { useAuth } from '../store/auth'
 import { useGame } from '../store/game'
@@ -12,8 +14,8 @@ import { pushToast } from '../store/ui'
 
 const POLL_MS = 3000
 
-/** Spalten: Tisch · Plaetze · Tempo · Status · Aktion */
-const COLUMNS = 'minmax(200px,1.6fr) minmax(200px,1.4fr) 100px 120px 150px'
+/** Spalten: Tisch · Plaetze · Tempo · Status · Aktion (Minima passen bei 1280 px neben den Lobby-Chat) */
+const COLUMNS = 'minmax(150px,1.6fr) minmax(170px,1.4fr) 84px 110px 128px'
 
 function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
@@ -25,7 +27,7 @@ function selectOnline(s: unknown): number | undefined {
   return typeof v === 'number' ? v : undefined
 }
 
-/** Online: Lobby mit offenen und laufenden Tischen, Tisch eroeffnen, allein ueben, zuschauen. */
+/** Online: Lobby mit offenen und laufenden Tischen, Tisch eroeffnen, allein ueben, zuschauen; rechts Lobby-Chat/Freunde. */
 export function LobbyScreen() {
   const go = useNav((s) => s.go)
   const me = useAuth((s) => s.me)
@@ -34,6 +36,7 @@ export function LobbyScreen() {
   const online = useSocial(selectOnline)
   const [tables, setTables] = useState<Table[] | null>(null)
   const [busy, setBusy] = useState(false)
+  useMarkLobbyRead()
 
   const load = useCallback(async () => {
     const stamp = useTable.getState().stamp
@@ -82,48 +85,51 @@ export function LobbyScreen() {
   const sub = [count === 1 ? '1 Tisch' : `${count} Tische`, online !== undefined ? `${online} Spieler online` : null].filter(Boolean).join(' · ')
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-y-auto px-8 py-[26px] scrollbar-thin board:gap-[26px] board:px-14 board:py-11">
-      <div className="flex items-center gap-4">
-        <h1 className="m-0 font-display text-[36px] font-semibold uppercase leading-none tracking-[.03em] text-fg-1">Lobby</h1>
-        {tables !== null && <span className="text-[14px] text-fg-3">{count === 0 ? 'Kein offener Tisch' : sub}</span>}
-        <span className="flex-1" />
-        <Button variant="secondary" icon="autoMana" onClick={() => go('solo')} testId="lobby-solo">
-          Allein üben
-        </Button>
-        <Button variant="primary" icon="plus" disabled={busy} onClick={openTable} testId="lobby-open-table">
-          Tisch eröffnen
-        </Button>
-      </div>
-
-      {tables !== null && tables.length === 0 ? (
-        <EmptyState
-          className="flex-1"
-          icon="lobby"
-          title="Gerade kein offener Tisch"
-          text="Eröffne einen Tisch und lade Freunde ein. Freie Plätze bleiben leer – setze Bots oder lade Freunde ein."
-          primary={
-            <Button variant="primary" icon="plus" disabled={busy} onClick={openTable}>
-              Tisch eröffnen
-            </Button>
-          }
-        />
-      ) : (
-        <div className="flex flex-col" role="table" aria-label="Tische">
-          <div role="row" className="tbl-head" style={{ gridTemplateColumns: COLUMNS, padding: '0 14px 10px' }}>
-            <span>Tisch</span>
-            <span>Plätze</span>
-            <span>Tempo</span>
-            <span>Status</span>
-            <span />
-          </div>
-          {tables?.map((t) => (
-            <LobbyRow key={t.id} t={t} meName={me?.name} busy={busy} onOpen={() => {
-              setTableId(t.id)
-              go('table')
-            }} onJoin={() => void run(() => tablesApi.join(t.id))} onSpectate={() => spectate(t)} />
-          ))}
+    <div className="flex h-full min-h-0" data-testid="lobby-screen">
+      <div className="flex h-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-8 py-[26px] scrollbar-thin board:gap-[26px] board:px-14 board:py-11">
+        <div className="flex items-center gap-4">
+          <h1 className="m-0 font-display text-[36px] font-semibold uppercase leading-none tracking-[.03em] text-fg-1">Lobby</h1>
+          {tables !== null && <span className="text-[14px] text-fg-3">{count === 0 ? 'Kein offener Tisch' : sub}</span>}
+          <span className="flex-1" />
+          <Button variant="secondary" icon="autoMana" onClick={() => go('solo')} testId="lobby-solo">
+            Allein üben
+          </Button>
+          <Button variant="primary" icon="plus" disabled={busy} onClick={openTable} testId="lobby-open-table">
+            Tisch eröffnen
+          </Button>
         </div>
-      )}
+
+        {tables !== null && tables.length === 0 ? (
+          <EmptyState
+            className="flex-1"
+            icon="lobby"
+            title="Gerade kein offener Tisch"
+            text="Eröffne einen Tisch und lade Freunde ein. Freie Plätze bleiben leer – setze Bots oder lade Freunde ein."
+            primary={
+              <Button variant="primary" icon="plus" disabled={busy} onClick={openTable}>
+                Tisch eröffnen
+              </Button>
+            }
+          />
+        ) : (
+          <div className="flex flex-col" role="table" aria-label="Tische">
+            <div role="row" className="tbl-head" style={{ gridTemplateColumns: COLUMNS, padding: '0 14px 10px' }}>
+              <span>Tisch</span>
+              <span>Plätze</span>
+              <span>Tempo</span>
+              <span>Status</span>
+              <span />
+            </div>
+            {tables?.map((t) => (
+              <LobbyRow key={t.id} t={t} meName={me?.name} busy={busy} onOpen={() => {
+                setTableId(t.id)
+                go('table')
+              }} onJoin={() => void run(() => tablesApi.join(t.id))} onSpectate={() => spectate(t)} />
+            ))}
+          </div>
+        )}
+      </div>
+      <SocialSidebar />
     </div>
   )
 }

@@ -15,7 +15,7 @@ const LOG_ITEMS: { id: LogFilter; label: string; title: string }[] = [
 
 /**
  * Pausemenue (Esc / Knopf „Menü“): Optionen, Bot-Tempo, Verlauf, Aufgeben mit Inline-Bestaetigung, Spiel verlassen.
- * Nach dem Aufgeben (oder Ausscheiden) laeuft das Spiel fuer die anderen weiter; von hier geht es ins Hauptmenue
+ * Nach dem Aufgeben (oder Ausscheiden) laeuft das Spiel fuer die anderen weiter; von hier geht es zur Startseite
  * oder zurueck zum Tisch. Solo (keine anderen Menschen) beendet Aufgeben das Spiel, das Ergebnis zeigt GameOverOverlay.
  * Zuschauer: nur lokale Optionen und „Zuschauen beenden“.
  */
@@ -86,7 +86,7 @@ export function PauseMenu() {
           </Button>
         )}
         <Button variant={tableId ? 'secondary' : 'primary'} onClick={() => exit('home')}>
-          Zum Hauptmenü
+          Zur Startseite
         </Button>
       </>
     )

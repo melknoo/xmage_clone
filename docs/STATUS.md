@@ -356,6 +356,40 @@ Fallback auf manuelles Klicken.
   Gegner-Pods unverändert.
 - Geprüft: `gradlew test`, `humanSpike` (0 Fehler), `tsc -b`, Screenshots (Verlauf-Oberkante bei 40 Hovers konstant).
 
+## Admin, Startseite, Lobby-Chat, Animationen, Release (2026-10-07)
+
+- **Startseite:** Nav-Punkt „Held“ heißt „Start“ (Haus-Icon), Logo „ML“ führt immer zur Startseite; „Hauptmenü“-
+  Texte im Spiel heißen „Startseite“/„Zum Start“. Inhalt unverändert. Unten in der Nav die Version (`v0.x.y`).
+- **Lobby-Chat auch unter „Spielen“** (Lobby, Server-Modus): `SocialSidebar` rechts, `useMarkLobbyRead`; Badge an
+  „Start“ nur außerhalb von Start/Lobby. Lobby-Spalten passen bei 1280 px neben den Chat.
+- **Admin-Bereich** (Nav „Admin“, nur Owner): Tabs Nutzer (Status live, Level/Titel, Spiele/Siege, zuletzt online,
+  Gast/E-Mail; Detail rechts mit Partien/Decks/Sessions, Abmelden/Code rotieren/Löschen), Einladungen (wie bisher,
+  nur offene Codes), Server (Version, Laufzeit, Heap, Belegung, laufende Spiele „Beenden“, Tische „Schließen“).
+  Engine `admin/AdminService` + `AdminRoutes`, `Auth.requireAdmin`, `SocialService.presence`,
+  `AccountService.revokeSessions`, `TableManager.adminClose`, `GameHost.humanSeats/startedAt`.
+- **Animationen** (`FxLayer`, `Battlefield`, `store/game.ts`): Treffer-Funke Quelle → Ziel mit Einschlag/Flash (Zahl
+  erst beim Einschlag), Betreten des Felds (Skalieren + Glow), Angriffsstoß Richtung Verteidiger, Tod (roter Blitz +
+  Splitter, Geisterkarte danach). Alle am Schalter „Effekte“ und `prefers-reduced-motion`, Blitz kürzer.
+  Dev-Zeitlupe für Aufnahmen: `window.__mlFxSlow = 6` (nur Vite-Dev).
+- **Release:** `scripts/release.ps1` (Version +1, `package.ps1`, Setup still installieren, Registry-Check, optional
+  `-Fly`). Eine Versionsquelle `desktop/package.json` → Gradle → `magelite-version.properties` → `/api/health`.
+  Jar heißt fest `magelite-engine.jar` (Dockerfile/SERVER.md angepasst). `deploy-fly.ps1` findet flyctl selbst,
+  bricht bei uncommitteten Änderungen ab und wartet auf die neue Version.
+- **Auto-Bezahlen:** Nutzer meldet Hänger/Endlosschleife beim automatischen Bezahlen (Henzie-Deck, Karte unbekannt).
+  Ursache noch offen; neu: INFO-Logzeilen „Auto-Bezahlen …“ (Stapelobjekt, XMage-Text, gewählte Quelle,
+  Abbruchgrund) in `engine.log`.
+- **Frage „mehrere Spiele?“:** Jeder Eingeloggte kann allein gegen Bots spielen, aber auf fly läuft nur **ein** Spiel
+  gleichzeitig (`MAGELITE_MAX_GAMES=1`, 4 GB); der Zweite bekommt 409 „Gerade spielt …“. Entscheidung 2026-10-07:
+  bleibt so; die Admin-Server-Übersicht zeigt die Belegung.
+- Geprüft: `compileJava`, `e2e-admin` 44/44 (eigene Server-Engine 7401), `tsc -b`, Screenshots `steps-admin.json`
+  (Lobby+Chat 1680/1280, Logo → Start, Nutzer, Detail kompakt bei 1280, Einladungen, Server) und
+  `steps-fx-anim.json` (Zeitlupe: Betreten, Angriff, Funke, Einschlag, Tod-Splitter nach Treffer; „Effekte aus“
+  leert alles), `gradlew test` grün, `humanSpike` 1/1 ohne Fehler (Auto-Bezahlen-Logzeilen erscheinen),
+  `release.ps1` echt durchlaufen: Version 0.1.0 → **0.1.1**, Setup 308 MB, still installiert
+  (`%LOCALAPPDATA%\Programs\MageLite`, Registry 0.1.1), installierte App startet mit gebündelter JRE und
+  `magelite-engine.jar` („FFA aktiv“). Versionsdateien noch nicht committet. **Nicht deployt** (fly).
+- Offen: Tisch, dessen Gastgeber geht, lässt ein laufendes Spiel ohne Tisch weiterlaufen (Admin kann es beenden).
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

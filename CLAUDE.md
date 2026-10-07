@@ -37,6 +37,7 @@ Begründungen: `docs/DECISIONS.md`.
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1   # alles bauen (UI, Engine, Electron-Deps)
 MageLite.cmd                                                 # App starten
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1 # Windows-Installer (braucht JDK 17+)
+powershell -ExecutionPolicy Bypass -File scriptselease.ps1 # Version +1, bauen, Setup, installieren [-Fly] (docs/DEVELOPMENT.md §7)
 
 cd engine; .\gradlew.bat run        # Dev-Engine: Port 7317, kein Token, Daten in engine\run
 cd engine; .\gradlew.bat runServer  # Dev-Engine im Server-Modus (Cookie-Login, Owner-Code DEV-OWNER-CODE)
@@ -46,6 +47,7 @@ node scripts\e2e-online.mjs         # Server-Modus: 2 Menschen in einem Spiel (R
 node scripts\e2e-tables.mjs         # Server-Modus: Lobby/Tische (eroeffnen, beitreten, Start, Revanche, 409-Faelle)
 node scripts\e2e-social.mjs         # Server-Modus: Lobby-Chat, Freunde, Tisch-Einladungen
 node scripts\e2e-spectate.mjs       # Server-Modus: Zuschauen (braucht MAGELITE_URL + MAGELITE_OWNER_CODE)
+node scripts\e2e-admin.mjs          # Server-Modus: Admin-Bereich (Nutzer, Server-Uebersicht, Abmelden/Beenden/Schliessen)
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB

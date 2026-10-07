@@ -43,7 +43,7 @@ export function MatchSummary({ seats, tempo, busy, armed, disabled, onStart }: {
           Spiel starten
         </Button>
       )}
-      <span className="text-[12.5px] leading-[1.45] text-fg-3">Startet mit dieser Konfiguration. Sie wird als Schnellstart auf dem Held-Screen gemerkt.</span>
+      <span className="text-[12.5px] leading-[1.45] text-fg-3">Startet mit dieser Konfiguration. Sie wird als Schnellstart auf der Startseite gemerkt.</span>
     </aside>
   )
 }

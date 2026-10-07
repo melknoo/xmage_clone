@@ -154,6 +154,20 @@ public final class AccountService {
         });
     }
 
+    /**
+     * Admin: Nutzer abmelden - alle Sessions loeschen, WebSockets schliessen, laufendes Spiel aufgeben. Der Code bleibt
+     * gueltig (komplett aussperren: {@link #rotate}).
+     */
+    public boolean revokeSessions(long userId) {
+        if (userId == 1) {
+            return false;
+        }
+        deleteSessionsOf(userId);
+        onRevoke.accept(userId);
+        LOG.info("Konto #" + userId + " vom Admin abgemeldet");
+        return true;
+    }
+
     /** Alle anderen Sessions des Nutzers beenden (nach Passwortwechsel). */
     public void deleteOtherSessions(long userId, String keepTokenHash) {
         db.with(c -> {

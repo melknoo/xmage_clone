@@ -326,7 +326,7 @@ public final class GameHost {
     private long lastStateAt;
     private boolean stateDirty;
     private volatile Thread gameThread;
-    private long startedAt;
+    private volatile long startedAt;
     // Wachhund / Aktivitaet
     private volatile long lastProgressAt = System.currentTimeMillis();
     private volatile long lastHumanQueryAt;
@@ -1718,6 +1718,7 @@ public final class GameHost {
         boolean partial = p.specialBtn != null;
         callExecutor.execute(() -> {
             AutoPayer.Step st = AutoPayer.next(game, seat.playerId, p.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
+            LOG.info("Auto-Bezahlen (Knopf) " + seat.name() + ": " + payInfo(p) + " -> " + (st == null ? "keine Quelle" : describeSource(st)));
             if (st == null) {
                 send(seat, new Messages.Toast("info", RichText.parse(partial
                         ? "Länder reichen nicht – Rest per " + p.specialBtn + " (Kreaturen anklicken bzw. Knopf)."
@@ -1773,12 +1774,16 @@ public final class GameHost {
                     seat.autoPayLastMsg = null;
                 }
                 if (seat.autoPaySteps++ > 30 || prompt.messageText.equals(seat.autoPayLastMsg)) {
+                    LOG.info("Auto-Bezahlen gestoppt (" + (seat.autoPaySteps > 31 ? "zu viele Schritte" : "kein Fortschritt") + ") "
+                            + seat.name() + ": " + payInfo(prompt));
                     stopAutoPay(seat, true);
                     return false;
                 }
                 seat.autoPayLastMsg = prompt.messageText;
                 boolean partial = seat.autoPayPartial && prompt.specialBtn != null;
                 AutoPayer.Step st = AutoPayer.next(game, seat.playerId, prompt.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
+                LOG.info("Auto-Bezahlen Schritt " + seat.autoPaySteps + " " + seat.name() + ": " + payInfo(prompt) + " -> "
+                        + (st == null ? "keine Quelle (Abbruch)" : describeSource(st)));
                 if (st == null) {
                     stopAutoPay(seat, true);
                     if (partial) {
@@ -1834,6 +1839,28 @@ public final class GameHost {
         if (failed) {
             seat.autoPayFailed = true;
             seat.autoPayFailedKey = payKey();
+        }
+    }
+
+    /** Diagnose fuers Log: was bezahlt wird (oberstes Stapelobjekt) und der XMage-Text des Bezahl-Prompts. */
+    private String payInfo(PromptDto p) {
+        String what;
+        try {
+            var top = game.getStack().getFirstOrNull();
+            what = top == null ? "-" : top.getName();
+        } catch (RuntimeException e) {
+            what = "?";
+        }
+        return what + " | " + p.messageText;
+    }
+
+    private String describeSource(AutoPayer.Step st) {
+        try {
+            var perm = game.getPermanent(st.sourceId());
+            String name = perm != null ? perm.getName() : String.valueOf(game.getObject(st.sourceId()));
+            return name + (st.color() != null ? " (" + st.color() + ")" : "");
+        } catch (RuntimeException e) {
+            return String.valueOf(st.sourceId());
         }
     }
 
@@ -2246,6 +2273,16 @@ public final class GameHost {
     /** Zug des zuletzt gesendeten States (0 = noch keiner); thread-sicher, ohne Spiel-Thread. */
     public int currentTurn() {
         return turn;
+    }
+
+    /** Startzeit (ms); 0 vor dem Start. */
+    public long startedAt() {
+        return startedAt;
+    }
+
+    /** Menschliche Sitze (nach dem Aufbau unveraenderlich; Zustandsfelder volatile, von jedem Thread lesbar). */
+    public List<HumanSeat> humanSeats() {
+        return List.copyOf(humans.values());
     }
 
     public GameSetup getSetup() {

@@ -4,7 +4,12 @@ plugins {
 }
 
 group = "dev.magelite"
-version = "0.1.0"
+
+// Eine Versionsquelle fuer App, Installer, Engine und /api/health: desktop/package.json (scripts/release.ps1 erhoeht sie)
+val appVersion: String = rootDir.resolve("../desktop/package.json").let { f ->
+    if (!f.isFile) "dev" else Regex("\"version\"\\s*:\\s*\"([^\"]+)\"").find(f.readText())?.groupValues?.get(1) ?: "dev"
+}
+version = appVersion
 
 repositories { mavenCentral() }
 
@@ -31,6 +36,18 @@ configurations.all {
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
     options.release.set(17)
+}
+
+// Fester Jar-Name (Dockerfile/Electron setzen ihn vor lib/* auf den Classpath, harte Regel 10)
+tasks.jar {
+    archiveFileName.set("magelite-engine.jar")
+    manifest { attributes("Implementation-Version" to appVersion) }
+}
+
+// Version fuer Main.VERSION (auch bei `gradlew run` ohne Jar)
+tasks.processResources {
+    inputs.property("appVersion", appVersion)
+    filesMatching("magelite-version.properties") { expand("version" to appVersion) }
 }
 
 val runDir = layout.projectDirectory.dir("run")

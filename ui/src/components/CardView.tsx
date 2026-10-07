@@ -261,8 +261,9 @@ export const CardView = memo(function CardView({
         className={`absolute inset-0 transition-transform duration-2 ease-out ${clickable && lift ? 'group-hover/card:-translate-y-1' : ''}`}
         style={dim ? { opacity: 0.45 } : undefined}
       >
-        {/* Karte (dreht sich beim Tappen) */}
+        {/* Karte (dreht sich beim Tappen); data-card-face = sichtbare Kartenflaeche fuer FX (objRect) */}
         <div
+          data-card-face=""
           className="absolute"
           style={{
             left: tapped ? (h - w) / 2 : 0,

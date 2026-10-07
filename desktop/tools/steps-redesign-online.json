@@ -553,6 +553,13 @@
    "js": "window.__ml.nav.getState().go('admin');'admin'"
   },
   {
+   "waitFor": "[data-testid=admin-tab-invites]",
+   "timeout": 15000
+  },
+  {
+   "click": "[data-testid=admin-tab-invites]"
+  },
+  {
    "waitFor": "[data-testid=admin-name]",
    "timeout": 15000
   },

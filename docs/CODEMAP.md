@@ -7,7 +7,7 @@ Wie die Implementierung aufgebaut ist. Die ursprüngliche Analyse mit vielen XMa
 
 ```
 Electron (desktop/src/main.cjs)
-  ├─ spawn: java -cp engine/lib/magelite-engine-*.jar;engine/lib/* dev.magelite.Main --port=0 --data=%APPDATA%\MageLite\engine --vendor=… --ui=… --parent-pid=…
+  ├─ spawn: java -cp engine/lib/magelite-engine.jar;engine/lib/* dev.magelite.Main --port=0 --data=%APPDATA%\MageLite\engine --vendor=… --ui=… --parent-pid=…
   │         stdout-Zeile "MAGELITE_READY {port, token, bootMs}" → Fenster lädt http://127.0.0.1:<port>/?port=…&token=…
   └─ BrowserWindow (React-UI aus ui/dist, von der Engine ausgeliefert)
         ├─ REST  /api/*, /img/*         (Token als Query oder Header X-MageLite-Token)
@@ -66,6 +66,7 @@ Electron (desktop/src/main.cjs)
 | `social/SocialService` | Server-Modus: Lobby-Chat (≤ 100, nur im Speicher, `seq`-Cursor), Präsenz (Poll < 15 s = online), Freundes-Status `online/table/game/offline`, Tisch-Einladungen (10 min, nur an Freunde, nur sichtbar solange der Tisch in der Lobby einen freien Platz hat). Eigene Sperre, Tisch/Spiel/DB-Abfragen außerhalb davon |
 | `social/FriendStore` | SQL für `friendships` (Paar `a<b`, Anfrage → `accepted_at`, Gegenanfrage = Annehmen) und `users.lobby_chat` |
 | `social/SocialRoutes` | REST `/api/social`, `/api/friends`, `/api/tables/{id}/invite`; `SocialException` → 409 |
+| `admin/AdminService`, `AdminRoutes` | Server-Modus, nur Admins (`Auth.requireAdmin`): Nutzerliste mit Kennzahlen (SQL über alle Nutzer) und Status (`SocialService.presence`), Nutzer-Detail (Partien, Decks, Sessions ohne Token), Server-Übersicht (`GameHost.humanSeats/startedAt`, Tische, Heap) und Eingriffe (`AccountService.revokeSessions`, `GameHost.abort`, `TableManager.adminClose`) |
 | `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
@@ -156,6 +157,10 @@ Client → Server:
 | POST/PUT | `/api/auth/register`, `/api/auth/account` | Konto sichern `{email,password}` (eingeloggt, 409 wenn schon gesichert/E-Mail vergeben) / ändern `{current, email?, password?}` (Passwortwechsel beendet andere Sessions) |
 | GET/POST | `/api/admin/invites` | Admin: Konten auflisten / anlegen `{name}` → `{id,name,code}` (Code nur einmal) |
 | POST/DELETE | `/api/admin/invites/{id}/rotate`, `/api/admin/invites/{id}` | neuer Code / Konto entfernen (schließt dessen WebSockets, beendet sein Spiel) |
+| GET | `/api/admin/users`, `/api/admin/users/{id}` | Admin: Konten mit Level/Titel, Spiele/Siege, Decks, Sessions, Status `online\|table\|game\|offline` / Detail mit letzten 15 Partien, Decks, Sessions |
+| POST | `/api/admin/users/{id}/logout` | Admin: alle Sessions beenden, WebSockets schließen, Sitz aufgeben (Code bleibt gültig; nicht das eigene Konto) |
+| GET | `/api/admin/server` | Admin: Version, Laufzeit, Heap, `maxGames`, online, laufende Spiele (Sitze, Bots, Zug, Zuschauer), Tische |
+| POST/DELETE | `/api/admin/games/{id}/abort`, `/api/admin/tables/{id}` | Admin: Spiel beenden / Tisch schließen (laufendes Tischspiel wird abgebrochen); 404 `{error}` wenn weg |
 | GET | `/api/samples` | Sample-Decks (`id` = relativer Pfad) |
 | GET/DELETE | `/api/decks`, `/api/decks/{id}` | eigene Decks |
 | GET | `/api/decks/{id}/text` | Deck als bearbeitbarer Text |
@@ -207,17 +212,17 @@ Design „Graphit & Glut“ (Handoff: `design/design_handoff_magelite_redesign/`
 | `components/ui/*` | Bausteine (Button, Kbd, Chip, Badge, Tabs, Segmented, Toggle, Checkbox, TextField, Table, Progress, XpRing, Avatar, StatusDot, EmptyState, Popover, Overlay, OptionRow, Wordmark, ConnectionBar) |
 | `components/CardView.tsx`, `BoardModal.tsx` | Karte (Rang-Reihenfolge der Hervorhebung, Etiketten, getappt in h×h-Box, Fallback-Rahmen); Spiel-Dialog mit Pille (Tab), Space/Esc, `BoardModalRoot` als Portal-Ziel |
 | `lib/{icons,motion,mana,tempo,mastery,format,useHotkey,sounds}` | Icons (lucide), Animationskonstanten, Mana/Rich-Text, Tempo-Texte, Meisterschaftskurve, Formate, Hotkeys, Töne |
-| `shell/*`, `screens/home/*` | Navigation, Boot, Held lokal (`HomeLocal`: Schnellstart, letzte Partien, Meisterschaft) bzw. Server (`HomeServer` + `social/SocialSidebar`) |
+| `shell/*`, `screens/home/*` | Navigation (`NavRail`: Logo/„Start“ → Startseite, Badge Lobby-Chat außerhalb von Start/Lobby, Version unten), Boot, Startseite lokal (`HomeLocal`: Held-Kopf, Schnellstart, letzte Partien, Meisterschaft) bzw. Server (`HomeServer` + `social/SocialSidebar`) |
 | `screens/PlaySetupScreen.tsx`, `setup/*`, `decks/{catalog.ts,DeckPicker.tsx}` | Spiel-Setup, Deck-Katalog mit Cache, Deck-Auswahl (auswählen + Übernehmen) |
 | `screens/DecksScreen.tsx`, `decks/*` | Decks, Import/Bearbeiten mit Auto-Vorschau und Zeilen-Hinweisen, Löschen |
 | `screens/StatsScreen.tsx`, `stats/*` | KPIs, Formkurve, Tempo/Mulligans/Gegner, Deck-Tabelle mit aufklappbarer Kartenstatistik, Verlauf |
-| `screens/{Login,Account,Admin,Lobby,Table}Screen.tsx` | Login (Scryfall-Art), Konto, Einladungen, Lobby (Zuschauen), Tisch (Plätze, Bots, Entfernen, Freunde einladen, Tisch-Chat) |
+| `screens/{Login,Account,Admin,Lobby,Table}Screen.tsx` | Login (Scryfall-Art), Konto, Admin (Tabs Nutzer/Einladungen/Server, `screens/admin/*`, Detail-Panel rechts), Lobby (Zuschauen, rechts `SocialSidebar`), Tisch (Plätze, Bots, Entfernen, Freunde einladen, Tisch-Chat) |
 | `social/*` | Lobby-Chat (Systemzeilen), Freunde, Einladungskarte mit Countdown, Einladen-Popover |
 | `game/GameScreen.tsx`, `layout.ts` | Brett-Gerüst; Größen per `useBoardLayout` (kompakt bei < 1440×900), Hotkeys, Ausgeschieden-Banner |
 | `game/{TopBar,PhaseBar,PromptBar,ActivityIndicator}` | Kopf (Runde, Zug-Chip, Phasen), Prompt-Leiste mit Status-Chip, Kontext, Knöpfen; Zuschauer-Leiste |
 | `game/{OpponentPod,PlayerInfo,MyArea,Battlefield,Hand,ZoneViewer,LifeTotal,ZoneCounter,CommanderDamage,CommandZone,ManaPool}` | Spielflächen; Hand ohne Fächer (beim Zuschauen verdeckt) |
 | `game/boardDecor.ts`, `interaction.ts`, `promptActions.ts` | Kampf-/Ziel-Etiketten + Pod-Chips; **Klicklogik** (unverändert: Klick = Engine fragt, Shift = markieren); Knöpfe/F-Tasten pro Prompt |
-| `game/{StackPanel,ZoomPanel,SidePanel,LogPanel,ChatPanel,RevealPopups,FxLayer}` | Stapel, Kartenvorschau, Verlauf (Tabs, Spielerfarben), Chat (Zuschauer nur lesend), Einblendungen, FX |
+| `game/{StackPanel,ZoomPanel,SidePanel,LogPanel,ChatPanel,RevealPopups,FxLayer}` | Stapel, Kartenvorschau, Verlauf (Tabs, Spielerfarben), Chat (Zuschauer nur lesend), Einblendungen, FX (`FxLayer`: Geisterkarte, Zahlen, Treffer-Funke Quelle → Ziel, Tod-Splitter; `Battlefield`: `animate-fx-enter`/`-lunge` aus `store/game.ts` `entered`/`lunging`; Dauern `lib/motion.ts` `fxTiming`, Dev-Zeitlupe `window.__mlFxSlow`) |
 | `game/PromptDialogs.tsx`, `dialogs/*` | Dialoge (Starthand, Fähigkeit ×N, Ersatzeffekte, Ziele, Menge, Stapel, Karten) |
 | `game/{PauseMenu,GameOverOverlay}` | Pause (Optionen, Aufgeben), Spielende (XP-Ring, Meisterschaft, Zuschauer-Variante) |
 

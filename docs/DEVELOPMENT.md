@@ -69,6 +69,7 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 | Lobby/Tische | `gradlew runServer`, dann `node scripts\e2e-tables.mjs` | „alles gruen“ (Tisch eröffnen/beitreten, Decks, Bot-Platz, Start mit 3 Spielern, Revanche, schließen, 409-Fälle) |
 | Server-UI visuell | `runServer` + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-server.json` in `desktop/` | `engine/run/shot-server-*.png` (Login, Einladungen, Spiel) |
 | Szenario-Screenshots | Dev-Engine + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-<necro\|attack-undo\|gemstone\|fx\|modal-hover\|convoke\|pass-ui>.json` | `engine/run/necro-*.png`, `attack-*.png`, `gemstone-*.png`, `fx-*.png`, `modal-hover-*.png`, `convoke-*.png` (Weiter-Ziel, X, Einberufen), `pass-*.png` (F9 + Stopp, Startfehler, Login-Auge) |
+| Admin + Brett-FX (Server-Modus) | Engine `--server --dev` auf 7401 (Owner Anna), Vite 5174, `social-seed.mjs`, dann `tools\steps-admin.json` bzw. `tools\steps-fx-anim.json` | `admin-*.png` (Lobby-Chat, Logo → Start, Nutzer/Detail, Einladungen, Server), `fx-*.png` (Zeitlupe `window.__mlFxSlow=6`) |
 | Design-Screenshots (alle Screens) | Dev-Engine + `npm run dev`: `tools\steps-design-<splash\|meta\|game\|swarm\|necro\|dredge\|gemstone\|minsize>.json`; danach `runServer` + `node tools\design-mate.mjs` (zweiter Mensch) parallel zu `tools\steps-design-server.json` | `design/claude-design/screenshots/*.png`, Übersicht in `INDEX.md`; für Vorher/Nachher-Vergleiche beim Redesign |
 | UI visuell | siehe unten | Screenshots ansehen |
 
@@ -155,8 +156,19 @@ Die echte App einmal starten und nach X ms abfotografieren (beendet sich danach)
 ## 7. Release: Windows-Installer
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1   # -> desktop\dist\MageLite-Setup-<version>.exe
+powershell -ExecutionPolicy Bypass -File scripts
+elease.ps1          # Version +1, bauen, Setup, still installieren
+powershell -ExecutionPolicy Bypass -File scripts
+elease.ps1 -Fly     # dazu fly-Deploy (braucht committeten Stand)
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1          # nur Setup bauen -> desktop\dist\MageLite-Setup-<version>.exe
 ```
+
+- **`release.ps1`** (ein Aufruf für alles): bricht ab, solange MageLite läuft (installierte App oder `MageLite.cmd`
+  sperren die Engine-Jars) → `npm version <patch|minor|major|none>` in `desktop` (ui zieht mit) → `package.ps1`
+  (enthält `build.ps1`, danach startet `MageLite.cmd` den neuen Stand) → alte Setups bis auf 2 löschen → Setup still
+  installieren (`/S`, Benutzerdaten in `%APPDATA%\MageLite` bleiben) → Registry-Version prüfen → optional
+  `deploy-fly.ps1`. Committet nichts; am Ende steht der Commit-Befehl für die Versionsdateien.
+  Schalter: `-Bump`, `-NoInstall`, `-Fly`, `-Force` (fly trotz laufendem Spiel), `-AllowDirty`.
 
 - Braucht zum Bauen ein **JDK 17+** (wegen `jlink`/`jdeps`, ein JRE reicht nicht) und Node.js. Auf dem Ziel-PC
   muss nichts installiert sein.
@@ -172,4 +184,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1   # -> desktop\dist
   → Modul in `$extraModules` ergänzen.
 - Bricht `electron-builder` beim Entpacken von `winCodeSign` mit „Cannot create symbolic link“ ab: Windows-
   Entwicklermodus einschalten oder das Skript einmal als Administrator ausführen.
-- Version: `version` in `desktop/package.json`.
+- Version: **eine Quelle** `version` in `desktop/package.json`. `engine/build.gradle.kts` liest sie (auch im Docker-
+  Build, `.dockerignore` lässt `desktop/package.json` durch) und schreibt `magelite-version.properties` →
+  `Main.VERSION` → `/api/health` → Anzeige unten in der Navigation (`v0.x.y`). Engine-Jar heißt fest
+  `magelite-engine.jar` (Dockerfile-Classpath).

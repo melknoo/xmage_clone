@@ -86,6 +86,11 @@ public final class GameRegistry {
                 .findFirst();
     }
 
+    /** Obergrenze gleichzeitiger Spiele ({@code --max-games}). */
+    public int maxGames() {
+        return maxGames;
+    }
+
     /** Anzahl laufender Spiele. */
     public int running() {
         return (int) games.values().stream().filter(GameHost::isRunning).count();
