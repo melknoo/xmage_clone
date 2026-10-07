@@ -1,77 +1,128 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, endpoint } from './api/client'
+import { takeTableFromUrl, tablesApi } from './api/tables'
+import { Toaster } from './components/Toaster'
+import { useCatalogStore } from './decks/catalog'
 import { GameScreen } from './game/GameScreen'
+import { screenFade } from './lib/motion'
 import { AccountScreen } from './screens/AccountScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { DecksScreen } from './screens/DecksScreen'
 import { HomeScreen } from './screens/HomeScreen'
+import { LobbyScreen } from './screens/LobbyScreen'
 import { LoginScreen } from './screens/LoginScreen'
 import { PlaySetupScreen } from './screens/PlaySetupScreen'
 import { StatsScreen } from './screens/StatsScreen'
-import { takeTableFromUrl, tablesApi } from './api/tables'
-import { LobbyScreen } from './screens/LobbyScreen'
 import { TableScreen } from './screens/TableScreen'
+import { BootScreen, type BootPhase } from './shell/BootScreen'
+import { ConnectionBarSlot } from './shell/ConnectionBarSlot'
+import { NavRail } from './shell/NavRail'
+import { InviteCard } from './social/InviteCard'
 import { takeInviteFromUrl, useAuth } from './store/auth'
+import { onConnectionRecovered, useConn } from './store/conn'
 import { useGame } from './store/game'
-import { useNav, type Screen } from './store/nav'
-import { useTable } from './store/table'
+import { useNav } from './store/nav'
 import { useSocial } from './store/social'
-import { InviteToasts } from './social/InviteToasts'
-
-const NAV: { key: Screen; label: string; icon: string }[] = [
-  { key: 'home', label: 'Held', icon: '🛡️' },
-  { key: 'play', label: 'Spielen', icon: '⚔️' },
-  { key: 'decks', label: 'Decks', icon: '🃏' },
-  { key: 'stats', label: 'Statistik', icon: '📊' },
-]
+import { useTable } from './store/table'
+import { pushToast } from './store/ui'
 
 // Lokal startet die Engine in Sekunden; auf fly kann der Kaltstart (Maschine + Karten-DB) deutlich laenger dauern.
 const HEALTH_TRIES = endpoint.mode === 'local' ? 40 : 360
 
+type EngineState = 'wait' | 'account' | 'ok' | 'down'
+
 /** Online: Tisch aus dem Link (#table=…) betreten oder an den eigenen Tisch zurueck. */
-async function resumeTable(stop: boolean) {
+async function resumeTable(stopped: () => boolean) {
   if (useAuth.getState().mode !== 'server') return
   const fromUrl = takeTableFromUrl()
   try {
     const t = fromUrl ? await tablesApi.join(fromUrl) : await tablesApi.mine()
-    if (stop) return
+    if (stopped()) return
     useTable.getState().setTableId(t.id)
     useNav.getState().go('table')
-  } catch {
+  } catch (e) {
     if (!fromUrl) useTable.getState().setTableId(null)
+    // Link-Tisch nicht betretbar (voll, laeuft, entfernt, geschlossen): sagen warum
+    else if (!stopped()) pushToast({ kind: 'error', text: e instanceof Error ? e.message : String(e) })
   }
+}
+
+/** Nach dem Anmelden: laufendes Spiel wieder aufnehmen, sonst an den eigenen Tisch (Server). */
+async function resumeSession(stopped: () => boolean) {
+  try {
+    const cur = await api.get<{ gameId: string }>('/api/games/current')
+    if (!stopped() && cur?.gameId && !useGame.getState().gameId) {
+      useGame.getState().connect(cur.gameId)
+      useNav.getState().go('game')
+      return
+    }
+  } catch {
+    /* kein laufendes Spiel */
+  }
+  if (!stopped()) await resumeTable(stopped)
+}
+
+/** Social-Snapshot: eigener Tisch (Feld kommt von O1; undefined = noch nicht bekannt/unterstuetzt) */
+function selectMyTableId(s: unknown): string | null | undefined {
+  const m = (s as { loaded?: boolean; myTable?: { id: string } | null }).myTable
+  if (!(s as { loaded?: boolean }).loaded || m === undefined) return undefined
+  return m?.id ?? null
 }
 
 export function App() {
   const screen = useNav((s) => s.screen)
-  const go = useNav((s) => s.go)
   const gameId = useGame((s) => s.gameId)
-  const connect = useGame((s) => s.connect)
   const authStatus = useAuth((s) => s.status)
   const mode = useAuth((s) => s.mode)
-  const me = useAuth((s) => s.me)
-  const [engine, setEngine] = useState<'wait' | 'ok' | 'down'>('wait')
+  const version = useConn((s) => s.version)
+  /** wait: Engine/Server noch nicht erreichbar · account: erreichbar, Anmeldung/Spiel/Tisch wird geprueft */
+  const [engine, setEngine] = useState<EngineState>('wait')
+  const engineRef = useRef<EngineState>(engine)
+  engineRef.current = engine
   const inGame = screen === 'game' && !!gameId
   const socialOn = engine === 'ok' && authStatus === 'ok' && mode === 'server' && !inGame
-  const homeBadge = useSocial((s) => s.incoming.length + s.invites.length + s.msgs.filter((m) => m.seq > s.readSeq && m.userId !== me?.id).length)
 
   // Lobby-Chat/Freunde/Einladungen: Polling außerhalb des Spiels (Server-Modus)
   useEffect(() => {
     const social = useSocial.getState()
     if (socialOn) social.start()
-    else if (authStatus !== 'ok') social.reset()
-    else social.stop()
+    else if (authStatus !== 'ok') {
+      social.reset()
+      useCatalogStore.getState().reset()
+    } else social.stop()
   }, [socialOn, authStatus])
 
-  // Engine erreichbar? Angemeldet? Laufendes Spiel wieder aufnehmen?
+  // Verbindungsleiste erst nach dem Boot (vorher zeigt der Boot-Screen den Zustand)
+  useEffect(() => {
+    useConn.getState().setEnabled(engine === 'ok')
+  }, [engine])
+
+  // Verbindung wieder da: Social sofort neu laden, eigenen Tisch pruefen
+  useEffect(
+    () =>
+      onConnectionRecovered(() => {
+        const social = useSocial.getState()
+        if (social.running) void social.refresh()
+        if (useTable.getState().tableId) void useTable.getState().verify()
+      }),
+    [],
+  )
+
+  // Engine erreichbar? Angemeldet? Laufendes Spiel oder Tisch wieder aufnehmen?
+  const retryBoot = useRef<() => void>(() => window.location.reload())
   useEffect(() => {
     let stop = false
     let tries = 0
+    let timer: number | undefined
+    let running = false
     const check = async () => {
+      running = true
       try {
-        await api.get('/api/health')
+        const health = await api.get<{ version?: string } | null>('/api/health')
         if (stop) return
+        if (health?.version) useConn.getState().setVersion(health.version)
+        setEngine('account')
         const auth = useAuth.getState()
         const invite = takeInviteFromUrl()
         if (invite) {
@@ -81,130 +132,96 @@ export function App() {
           await auth.load()
         }
         if (stop) return
-        setEngine('ok')
-        if (useAuth.getState().status !== 'ok') return
-        try {
-          const cur = await api.get<{ gameId: string }>('/api/games/current')
-          if (!stop && cur?.gameId && !useGame.getState().gameId) {
-            connect(cur.gameId)
-            go('game')
-            return
-          }
-        } catch {
-          /* kein laufendes Spiel */
-        }
-        await resumeTable(stop)
+        if (useAuth.getState().status === 'ok') await resumeSession(() => stop)
+        if (!stop) setEngine('ok')
       } catch {
         tries++
         if (!stop) {
           setEngine(tries > HEALTH_TRIES ? 'down' : 'wait')
-          window.setTimeout(check, 500)
+          timer = window.setTimeout(check, 500)
         }
+      } finally {
+        running = false
       }
     }
-    check()
+    // "Jetzt versuchen" im Boot-Screen: Zaehler zuruecksetzen und sofort neu pruefen
+    retryBoot.current = () => {
+      if (stop) return
+      tries = 0
+      setEngine('wait')
+      if (running) return
+      window.clearTimeout(timer)
+      void check()
+    }
+    void check()
     return () => {
       stop = true
+      window.clearTimeout(timer)
     }
-  }, [connect, go])
+  }, [])
 
-  // Nach einem spaeteren Login (z.B. Cookie abgelaufen) laufendes Spiel pruefen
+  // Spaeterer Login (Login-Screen, Cookie abgelaufen): kurz "Lade Konto und Decks …", dann Spiel/Tisch aufnehmen
+  const prevAuth = useRef(authStatus)
   useEffect(() => {
-    if (engine !== 'ok' || authStatus !== 'ok') return
-    let stop = false
-    api
-      .get<{ gameId: string }>('/api/games/current')
-      .then((cur) => {
-        if (!stop && cur?.gameId && !useGame.getState().gameId) {
-          connect(cur.gameId)
-          go('game')
-        }
-      })
-      .catch(() => {
-        // kein laufendes Spiel: kam der Freund ueber einen Tisch-Link (#table=...) und musste sich erst anmelden?
-        if (!stop && /table=/.test(window.location.hash)) void resumeTable(false)
-      })
-    return () => {
-      stop = true
-    }
-  }, [engine, authStatus, connect, go])
+    const prev = prevAuth.current
+    prevAuth.current = authStatus
+    if (authStatus !== 'ok' || prev !== 'login' || engineRef.current !== 'ok') return
+    setEngine('account')
+    void resumeSession(() => false).finally(() => setEngine('ok'))
+  }, [authStatus])
 
+  // Entfernt-Erkennung ausserhalb von Lobby/Tisch: meldet der Social-Poll keinen eigenen Tisch mehr, nachfragen
+  const myTableId = useSocial(selectMyTableId)
+  const prevMyTable = useRef(myTableId)
+  useEffect(() => {
+    const prev = prevMyTable.current
+    prevMyTable.current = myTableId
+    const tableId = useTable.getState().tableId
+    if (myTableId === null && prev && prev === tableId) void useTable.getState().verify()
+  }, [myTableId])
+
+  let body
   if (engine !== 'ok') {
-    return (
-      <div className="bg-table flex h-full flex-col items-center justify-center gap-4">
-        <div className="font-display text-5xl font-bold tracking-[0.2em] text-gold-300">MAGELITE</div>
-        {engine === 'wait' ? (
-          <div className="flex items-center gap-3 text-ink-300">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gold-400 border-t-transparent" />
-            {endpoint.mode === 'local' ? 'Engine startet – Kartendatenbank wird geladen …' : 'Server wird gestartet – das kann beim ersten Mal eine Minute dauern …'}
-          </div>
-        ) : (
-          <div className="text-blood-400">{endpoint.mode === 'local' ? 'Engine nicht erreichbar. Läuft der Java-Prozess?' : 'Server nicht erreichbar. Bitte später noch einmal versuchen.'}</div>
-        )}
+    const local = endpoint.mode === 'local'
+    const phase: BootPhase = engine === 'down' ? 'down' : engine === 'account' ? 'account' : local ? 'engine' : 'server'
+    body = <BootScreen phase={phase} mode={local ? 'local' : 'server'} version={version ?? undefined} onRetry={() => retryBoot.current()} />
+  } else if (authStatus === 'login') {
+    body = <LoginScreen />
+  } else if (screen === 'game' && gameId) {
+    body = <GameScreen />
+  } else {
+    body = (
+      <div className="flex h-full flex-col bg-bg-1">
+        <ConnectionBarSlot />
+        <div className="flex min-h-0 flex-1">
+          <NavRail />
+          {/* relative: Meta-Overlays (ui/Overlay) liegen innerhalb von <main> */}
+          <main className="relative min-w-0 flex-1 overflow-hidden">
+            {/* Screenwechsel: reine Ueberblendung <= 120 ms, alter und neuer Screen liegen kurz uebereinander */}
+            <AnimatePresence initial={false}>
+              <motion.div key={screen} className="absolute inset-0" {...screenFade}>
+                {screen === 'home' && <HomeScreen />}
+                {screen === 'play' && (mode === 'server' ? <LobbyScreen /> : <PlaySetupScreen />)}
+                {screen === 'solo' && <PlaySetupScreen />}
+                {screen === 'table' && <TableScreen />}
+                {screen === 'decks' && <DecksScreen />}
+                {screen === 'stats' && <StatsScreen />}
+                {screen === 'admin' && <AdminScreen />}
+                {screen === 'account' && <AccountScreen />}
+              </motion.div>
+            </AnimatePresence>
+          </main>
+        </div>
+        {mode === 'server' && <InviteCard />}
       </div>
     )
   }
 
-  if (authStatus === 'login') {
-    return <LoginScreen />
-  }
-
-  if (screen === 'game' && gameId) {
-    return <GameScreen />
-  }
-
-  const nav = mode === 'server' && me?.admin ? [...NAV, { key: 'admin' as Screen, label: 'Einladungen', icon: '✉️' }] : NAV
-
   return (
-    <div className="bg-table flex h-full">
-      <nav className="flex w-[84px] shrink-0 flex-col items-center gap-2 border-r border-white/5 bg-ink-950/50 py-5">
-        <div className="mb-4 font-display text-xs font-bold tracking-[0.25em] text-gold-300">ML</div>
-        {nav.map((n) => (
-          <button
-            key={n.key}
-            className={`relative flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === n.key || (n.key === 'play' && (screen === 'solo' || screen === 'table')) ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:bg-white/5 hover:text-ink-100'}`}
-            onClick={() => go(n.key)}
-          >
-            <span className="text-xl">{n.icon}</span>
-            {n.label}
-            {n.key === 'home' && mode === 'server' && homeBadge > 0 && screen !== 'home' && (
-              <span className="absolute right-2 top-1.5 min-w-4 rounded-full bg-gold-400 px-1 text-[10px] font-bold leading-4 text-ink-950">{homeBadge > 9 ? '9+' : homeBadge}</span>
-            )}
-          </button>
-        ))}
-        {gameId && (
-          <button className="mt-auto flex w-16 flex-col items-center gap-1 rounded-xl bg-arcane-500/15 py-2.5 text-[11px] font-semibold text-arcane-400 ring-1 ring-arcane-400/40" onClick={() => go('game')}>
-            <span className="text-xl">▶</span>
-            Zum Tisch
-          </button>
-        )}
-        {mode === 'server' && (
-          <button
-            className={`${gameId ? '' : 'mt-auto '}relative flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${screen === 'account' ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-400 hover:bg-white/5 hover:text-ink-100'}`}
-            onClick={() => go('account')}
-            title={me ? `Angemeldet als ${me.name}${me.hasPassword ? '' : ' (Gast – Konto sichern)'}` : undefined}
-          >
-            <span className="text-xl">👤</span>
-            <span className="max-w-full truncate px-1">{me?.name ?? 'Konto'}</span>
-            {me && !me.hasPassword && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-gold-400" title="Gast – Konto noch nicht gesichert" />}
-          </button>
-        )}
-      </nav>
-      <main className="min-w-0 flex-1 overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div key={screen} className="h-full" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            {screen === 'home' && <HomeScreen />}
-            {screen === 'play' && (mode === 'server' ? <LobbyScreen /> : <PlaySetupScreen />)}
-            {screen === 'solo' && <PlaySetupScreen />}
-            {screen === 'table' && <TableScreen />}
-            {screen === 'decks' && <DecksScreen />}
-            {screen === 'stats' && <StatsScreen />}
-            {screen === 'admin' && <AdminScreen />}
-            {screen === 'account' && <AccountScreen />}
-          </motion.div>
-        </AnimatePresence>
-      </main>
-      {mode === 'server' && <InviteToasts />}
-    </div>
+    <>
+      {body}
+      {/* ein Toast-System fuer alle Screens, auch im Spiel */}
+      <Toaster />
+    </>
   )
 }

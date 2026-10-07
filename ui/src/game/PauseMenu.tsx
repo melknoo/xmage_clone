@@ -1,48 +1,59 @@
 import { useState } from 'react'
-import type { Tempo } from '../api/types'
-import { Modal } from '../components/Modal'
-import { sounds } from '../lib/sounds'
-import { me as meOf, useGame } from '../store/game'
+import { BoardModal } from '../components/BoardModal'
+import { Button, Segmented, Toggle } from '../components/ui'
+import { Icon } from '../lib/icons'
+import { TEMPOS } from '../lib/tempo'
+import { me as meOf, useGame, type LogFilter } from '../store/game'
 import { useNav } from '../store/nav'
 import { useTable } from '../store/table'
-import type { LogFilter } from './Side'
+import { useBoardLayout } from './layout'
 
-const TEMPOS: { key: Tempo; label: string }[] = [
-  { key: 'BLITZ', label: 'Blitz' },
-  { key: 'NORMAL', label: 'Normal' },
-  { key: 'BEDACHT', label: 'Bedacht' },
-  { key: 'MAX', label: 'Max' },
+const LOG_ITEMS: { id: LogFilter; label: string; title: string }[] = [
+  { id: 'important', label: 'Wichtiges', title: 'Nur Wichtiges im Spielverlauf' },
+  { id: 'all', label: 'Alles', title: 'Alle Einträge im Spielverlauf' },
 ]
 
 /**
- * Pausemenue (Esc / Knopf „Menü“): Optionen, Aufgeben mit Bestaetigung, Spiel verlassen.
+ * Pausemenue (Esc / Knopf „Menü“): Optionen, Bot-Tempo, Verlauf, Aufgeben mit Inline-Bestaetigung, Spiel verlassen.
  * Nach dem Aufgeben (oder Ausscheiden) laeuft das Spiel fuer die anderen weiter; von hier geht es ins Hauptmenue
  * oder zurueck zum Tisch. Solo (keine anderen Menschen) beendet Aufgeben das Spiel, das Ergebnis zeigt GameOverOverlay.
+ * Zuschauer: nur lokale Optionen und „Zuschauen beenden“.
  */
-export function PauseMenu({ logFilter, setLogFilter }: { logFilter: LogFilter; setLogFilter: (f: LogFilter) => void }) {
+export function PauseMenu() {
+  const layout = useBoardLayout()
   const close = () => useGame.getState().setMenuOpen(false)
   const state = useGame((s) => s.state)
   const conceded = useGame((s) => s.conceded)
   const gameOver = useGame((s) => s.gameOver)
   const hello = useGame((s) => s.hello)
+  const spectator = useGame((s) => s.spectator)
   const tempo = useGame((s) => s.tempo)
   const setTempo = useGame((s) => s.setTempo)
   const autoMana = useGame((s) => s.autoMana)
   const setAutoMana = useGame((s) => s.setAutoMana)
   const autoPass = useGame((s) => s.autoPass)
+  const setAutoPass = useGame((s) => s.setAutoPass)
   const fxEnabled = useGame((s) => s.fxEnabled)
   const setFxEnabled = useGame((s) => s.setFxEnabled)
-  const setAutoPass = useGame((s) => s.setAutoPass)
+  const muted = useGame((s) => s.muted)
+  const setMuted = useGame((s) => s.setMuted)
+  const logFilter = useGame((s) => s.logFilter)
+  const setLogFilter = useGame((s) => s.setLogFilter)
   const leave = useGame((s) => s.leave)
   const reset = useGame((s) => s.reset)
+  const stopSpectating = useGame((s) => s.stopSpectating)
   const go = useNav((s) => s.go)
   const tableId = useTable((s) => s.tableId)
-  const [muted, setMuted] = useState(sounds.isMuted())
   const [confirm, setConfirm] = useState(false)
 
-  const isHost = hello?.host !== false
+  const isHost = !spectator && hello?.host !== false
   const otherHumans = (hello?.seats.filter((x) => x.human && x.playerId !== hello?.myPlayerId).length ?? 0) > 0
-  const out = conceded || !!meOf(state)?.lost || !!gameOver
+  const out = !spectator && (conceded || !!meOf(state)?.lost || !!gameOver)
+  // Aufgeben jetzt = letzter Platz unter den noch Lebenden
+  const place = Math.max(1, state?.players.filter((p) => !p.lost).length ?? 1)
+  const turn = state?.turn ?? 0
+  const round = Math.ceil(turn / Math.max(1, state?.players.length ?? 1))
+
   const exit = (where: 'home' | 'table') => {
     reset()
     go(where)
@@ -54,98 +65,126 @@ export function PauseMenu({ logFilter, setLogFilter }: { logFilter: LogFilter; s
     if (!otherHumans) close()
   }
 
-  const Toggle = ({ on, label, hint, onClick }: { on: boolean; label: string; hint?: string; onClick: () => void }) => (
-    <button className={`flex w-full items-center justify-between rounded-xl px-4 py-2.5 text-left ring-1 transition ${on ? 'bg-arcane-500/15 ring-arcane-400/50' : 'bg-ink-950/50 ring-white/10 hover:ring-white/25'}`} onClick={onClick} title={hint}>
-      <span className="text-sm font-semibold text-ink-100">{label}</span>
-      <span className={`text-xs font-semibold ${on ? 'text-arcane-400' : 'text-ink-400'}`}>{on ? 'an' : 'aus'}</span>
-    </button>
-  )
+  let footer
+  if (spectator) {
+    footer = (
+      <Button variant="primary" icon="spectate" onClick={stopSpectating}>
+        Zuschauen beenden
+      </Button>
+    )
+  } else if (out) {
+    footer = (
+      <>
+        {!gameOver && (
+          <Button variant="ghost" icon="spectate" kbd="Esc" onClick={close}>
+            Zuschauen
+          </Button>
+        )}
+        {tableId && (
+          <Button variant="primary" onClick={() => exit('table')}>
+            Zurück zum Tisch
+          </Button>
+        )}
+        <Button variant={tableId ? 'secondary' : 'primary'} onClick={() => exit('home')}>
+          Zum Hauptmenü
+        </Button>
+      </>
+    )
+  } else if (confirm) {
+    footer = (
+      <>
+        <Button variant="ghost" onClick={() => setConfirm(false)}>
+          Nein
+        </Button>
+        <Button variant="dangerConfirm" testId="pause-resign-confirm" onClick={concede}>
+          Ja, aufgeben
+        </Button>
+      </>
+    )
+  } else {
+    footer = (
+      <>
+        <Button variant="danger" testId="pause-resign" onClick={() => setConfirm(true)}>
+          Aufgeben
+        </Button>
+        <Button variant="primary" kbd="Esc" onClick={close}>
+          Weiterspielen
+        </Button>
+      </>
+    )
+  }
 
   return (
-    <Modal title="Menü" onClose={close} viewer>
-      <div className="flex flex-col gap-5">
-        <section>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-400">Optionen</div>
-          <div className="grid grid-cols-2 gap-2">
-            <Toggle on={autoMana} label="Auto-Mana" hint="Mana automatisch bezahlen" onClick={() => setAutoMana(!autoMana)} />
-            <Toggle on={autoPass} label="Auto-Passen" hint="Automatisch passen, wenn nichts spielbar ist" onClick={() => setAutoPass(!autoPass)} />
-            <Toggle
-              on={!muted}
-              label="Ton"
-              onClick={() => {
-                sounds.setMuted(!muted)
-                setMuted(!muted)
-              }}
-            />
-            <Toggle on={logFilter === 'all'} label="Verlauf: alles" hint="Aus = nur Wichtiges im Spielverlauf" onClick={() => setLogFilter(logFilter === 'all' ? 'important' : 'all')} />
-            <Toggle on={fxEnabled} label="Animationen" hint="Zonenwechsel, Schaden und Lebensänderungen einblenden (die Ereignisleiste bleibt)" onClick={() => setFxEnabled(!fxEnabled)} />
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <span className="text-sm text-ink-300">Bot-Tempo</span>
-            <div className="flex items-center gap-0.5 rounded-lg bg-ink-950/60 p-0.5 ring-1 ring-white/10">
-              {TEMPOS.map((t) => (
-                <button
-                  key={t.key}
-                  disabled={!isHost}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold disabled:cursor-default ${tempo === t.key ? 'bg-arcane-500 text-ink-950' : isHost ? 'text-ink-300 hover:text-ink-100' : 'text-ink-500'}`}
-                  onClick={() => setTempo(t.key)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-            {!isHost && <span className="text-xs text-ink-500">stellt der Gastgeber</span>}
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-ink-400">Spiel</div>
-          {!out ? (
-            confirm ? (
-              <div className="flex items-center gap-2 rounded-xl bg-blood-500/10 px-4 py-3 ring-1 ring-blood-400/40">
-                <span className="flex-1 text-sm text-ink-100">Wirklich aufgeben?{otherHumans ? ' Die anderen spielen ohne dich weiter.' : ' Das Spiel endet.'}</span>
-                <button className="btn-danger !px-3 !py-1 !text-xs" onClick={concede}>
-                  Ja, aufgeben
-                </button>
-                <button className="btn-ghost !px-3 !py-1 !text-xs" onClick={() => setConfirm(false)}>
-                  Nein
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button className="btn-primary" onClick={close}>
-                  Weiterspielen
-                </button>
-                <button className="btn-ghost" onClick={() => setConfirm(true)}>
-                  Aufgeben …
-                </button>
-              </div>
-            )
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div className="text-sm text-ink-300">
-                {gameOver ? 'Das Spiel ist vorbei.' : conceded ? 'Du hast aufgegeben – die anderen spielen weiter. Dein Ergebnis landet in der Statistik.' : 'Du bist ausgeschieden – die anderen spielen weiter.'}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!gameOver && (
-                  <button className="btn-ghost" onClick={close}>
-                    Zuschauen
-                  </button>
-                )}
-                {tableId && (
-                  <button className="btn-primary" onClick={() => exit('table')}>
-                    Zurück zum Tisch
-                  </button>
-                )}
-                <button className={tableId ? 'btn-ghost' : 'btn-primary'} onClick={() => exit('home')}>
-                  Zum Hauptmenü
-                </button>
-              </div>
-            </div>
+    <BoardModal
+      label="Pause"
+      title={state ? `Runde ${round} · Zug ${turn}` : 'Spiel pausiert'}
+      width={layout.modal.pause}
+      viewer
+      onClose={close}
+      footer={footer}
+    >
+      <div className="grid grid-cols-2 gap-7" style={{ padding: '16px 20px' }}>
+        <div className="flex flex-col gap-3">
+          <span className="label">Optionen</span>
+          {!spectator && (
+            <>
+              <Toggle checked={autoMana} onChange={setAutoMana} label="Auto-Mana" title="Mana automatisch bezahlen" />
+              <Toggle checked={autoPass} onChange={setAutoPass} label="Auto-Passen" title="Automatisch passen, wenn nichts spielbar ist" />
+            </>
           )}
-        </section>
-        <div className="text-[11px] text-ink-500">Esc schließt das Menü.</div>
+          <Toggle
+            checked={fxEnabled}
+            onChange={setFxEnabled}
+            label="Effekte"
+            title="Zonenwechsel, Schaden und Lebensänderungen einblenden (die Ereignisleiste bleibt)"
+          />
+          <Toggle checked={!muted} onChange={(on) => setMuted(!on)} label="Ton" />
+        </div>
+        <div className="flex flex-col gap-3">
+          {!spectator && (
+            <>
+              <span className="label">Bot-Tempo</span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Segmented
+                  variant="boxed"
+                  ariaLabel="Bot-Tempo"
+                  items={TEMPOS.map((t) => ({ id: t.key, label: t.label, title: `${t.desc} – ${t.title}` }))}
+                  value={tempo}
+                  onChange={setTempo}
+                  disabled={!isHost}
+                  itemStyle={{ padding: '8px 12px' }}
+                />
+                {!isHost && <span className="text-body-s text-fg-3">stellt der Gastgeber</span>}
+              </div>
+            </>
+          )}
+          <span className="label" style={spectator ? undefined : { marginTop: 8 }}>
+            Verlauf
+          </span>
+          <Segmented variant="inline" ariaLabel="Verlauf" items={LOG_ITEMS} value={logFilter} onChange={setLogFilter} itemStyle={{ fontSize: 14 }} className="self-start" />
+        </div>
       </div>
-    </Modal>
+      {!spectator && !out && confirm && (
+        <div
+          className="flex items-center gap-2.5 rounded-sm bg-danger-bg text-[13.5px] text-fg-1"
+          style={{ margin: '0 20px', padding: '12px 14px', boxShadow: 'inset 0 0 0 1px color-mix(in oklab, var(--color-attack) 40%, transparent)' }}
+          role="alert"
+        >
+          <Icon name="warning" size={16} style={{ color: 'var(--color-attack)' }} />
+          <span>
+            Wirklich aufgeben? Die Partie zählt als Platz {place}.{otherHumans ? ' Die anderen spielen ohne dich weiter.' : ''}
+          </span>
+        </div>
+      )}
+      {out && (
+        <div className="outline-panel text-[13.5px] text-fg-2" style={{ margin: '0 20px', padding: '12px 14px', borderRadius: 3 }}>
+          {gameOver
+            ? 'Das Spiel ist vorbei.'
+            : conceded
+              ? 'Du hast aufgegeben – die anderen spielen weiter. Dein Ergebnis landet in der Statistik.'
+              : 'Du bist ausgeschieden – die anderen spielen weiter.'}
+        </div>
+      )}
+    </BoardModal>
   )
 }

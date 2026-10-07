@@ -1,85 +1,153 @@
 import { memo } from 'react'
 import type { Card, PlayerState } from '../api/types'
+import { CardView } from '../components/CardView'
+import { Avatar, Button, Chip } from '../components/ui'
+import { Icon } from '../lib/icons'
 import { useGame } from '../store/game'
 import { Battlefield } from './Battlefield'
+import { podDecor } from './boardDecor'
+import { CommanderDamageInline } from './CommanderDamage'
+import { commandCard, commanderArt, commanderCard, seatColor } from './format'
 import type { Interaction } from './interaction'
-import { CommandZone, CommanderDamage, LifeBadge, ManaPool, ZoneCounters, commanderArt } from './PlayerInfo'
+import type { BoardLayoutState } from './layout'
+import { LifeTotal } from './LifeTotal'
+import { ManaPool } from './ManaPool'
+import { onCard, PlayerChips, playerRing } from './PlayerInfo'
+import { PlayerZones } from './ZoneCounter'
 
-export const OpponentPod = memo(function OpponentPod({
-  p,
-  inter,
-  onHover,
-  thinking,
-}: {
+export interface OpponentPodProps {
   p: PlayerState
   inter: Interaction
   onHover: (c: Card | null) => void
-  thinking: boolean
-}) {
-  const art = commanderArt(p)
-  const targetable = inter.playerTargetable(p.id)
-  const chosen = inter.prompt?.chosen?.includes(p.id)
-  const ring = targetable ? 'glow-target cursor-pointer' : chosen ? 'glow-chosen' : p.active ? 'ring-2 ring-gold-400/70' : 'ring-1 ring-white/10'
+  /** oppH, podPad, bfPad, avatar, lifeOpp, oppCardW, compact */
+  layout: BoardLayoutState
+}
+
+/**
+ * Gegner-Pod: Kopf (Avatar in Platzfarbe, Name, Deck, Chips, Leben), Zonenzeile, Feld (Nicht-Laender oben,
+ * Laender unten). Spielerziel: ganzer Pod gelb umrandet und anklickbar (data-player an der Wurzel).
+ * "Denkt" (store.thinking), Verbindung (store.seatConn) und Zonen-Ansicht (store.viewer) aus dem Store.
+ */
+export const OpponentPod = memo(function OpponentPod({ p, inter, onHover, layout }: OpponentPodProps) {
+  const thinking = useGame((s) => s.thinking === p.id)
+  const state = useGame((s) => s.state)
+  const stackFocus = useGame((s) => s.stackFocus)
+  const spectator = useGame((s) => s.spectator)
+  const decor = state ? podDecor(p.id, { state, inter, stackFocus, compact: layout.compact }) : null
+  const targetable = !spectator && !!decor?.targetable
+  const ring = decor ? playerRing({ ...decor, targetable }) : undefined
+  const cmd = commanderCard(p)
+  const commanders = p.command.filter((o) => (o.kind === 'commander' || o.kind === 'commander-away') && (o.tax ?? 0) > 0)
+  const others = p.command.filter((o) => o.kind !== 'commander' && o.kind !== 'commander-away')
   return (
-    <div data-player={p.id} className={`glass relative flex min-h-0 flex-col overflow-hidden rounded-2xl ${ring} ${p.lost ? 'opacity-40 grayscale' : ''}`}>
-      <div
-        className="relative flex shrink-0 items-center gap-2 border-b border-white/10 px-2 py-1.5"
-        onClick={() => targetable && inter.click(p.id)}
-      >
-        {art && <div className="pointer-events-none absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: `url(${art})` }} />}
-        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full ring-2 ring-white/20">
-          {art ? <img src={art} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-ink-600" />}
-          {thinking && <div className="absolute inset-0 animate-pulse bg-arcane-400/30" />}
+    <div
+      data-player={p.id}
+      data-testid="opp-pod"
+      className={`relative flex h-full min-h-0 min-w-0 flex-1 flex-col border-r border-line-2 last:border-r-0 ${targetable ? 'cursor-pointer' : ''}`}
+      style={p.lost ? { opacity: 0.5 } : undefined}
+      onClick={(e) => targetable && !onCard(e.target) && inter.click(p.id)}
+    >
+      {p.active && <span className="pointer-events-none absolute inset-x-0 top-0 z-[4] h-[3px] bg-ember" aria-hidden />}
+      {ring && <span className="pointer-events-none absolute inset-0 z-[3]" style={{ boxShadow: ring }} aria-hidden />}
+
+      {/* Kopf */}
+      <div className="flex shrink-0 items-center gap-2.5" style={{ padding: layout.podPad }}>
+        <span
+          className="flex shrink-0"
+          data-zone="command"
+          onMouseEnter={cmd ? () => onHover(cmd) : undefined}
+          onMouseLeave={cmd ? () => onHover(null) : undefined}
+        >
+          <Avatar src={commanderArt(p)} name={p.name} size={layout.avatar} seatColor={seatColor(p.id, state)} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="truncate font-display text-[17px] font-semibold leading-none tracking-[.03em] text-fg-1" title={p.name}>
+            {p.name}
+          </span>
+          {p.deckName && <span className="truncate text-[12px] leading-tight text-fg-3">{p.deckName}</span>}
         </div>
-        <div className="relative min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate font-semibold">{p.name}</span>
-            {p.active && <span className="rounded bg-gold-400/20 px-1 text-[10px] font-semibold text-gold-300">am Zug</span>}
-            {thinking && <span className="animate-pulse text-[10px] font-semibold text-arcane-400">denkt…</span>}
-            {p.lost && <span className="rounded bg-blood-500/30 px-1 text-[10px] text-blood-400">raus</span>}
-            {p.human && !p.lost && <ConnBadge playerId={p.id} />}
-          </div>
-          <div className="truncate text-[11px] text-ink-300">{p.deckName}</div>
+        <div className="flex min-w-0 shrink items-center justify-end gap-1.5">
+          {decor?.stackTarget && (
+            <Chip tone="target" size="sm" icon="target">
+              Ziel
+            </Chip>
+          )}
+          {thinking && (
+            <Chip tone="outline" size="sm" icon="thinking" title="Bot rechnet">
+              Denkt
+            </Chip>
+          )}
+          {p.human && !p.lost && <ConnBadge playerId={p.id} />}
+          {p.lost && (
+            <Chip tone="outline" size="sm">
+              Raus
+            </Chip>
+          )}
+          {p.active ? (
+            <Chip tone="turn" size="sm">
+              Am Zug
+            </Chip>
+          ) : decor && decor.attackersN > 0 ? (
+            <Chip tone="attack" fill size="sm">
+              {decor.attackersN} Angreifer
+            </Chip>
+          ) : null}
         </div>
-        <div className="relative">
-          <LifeBadge life={p.life} />
+        <LifeTotal life={p.life} lost={p.lost} size={layout.lifeOpp} />
+      </div>
+
+      {/* Zonenzeile */}
+      <div className="flex min-w-0 shrink-0 items-center gap-[13px] px-[14px] pb-2">
+        <PlayerZones p={p} inter={inter} onHover={onHover} variant="pod" />
+        <span className="flex-1" />
+        <div className="flex min-w-0 items-center justify-end gap-2.5 overflow-hidden font-display text-[14px] font-semibold leading-none tracking-[.04em]">
+          <ManaPool mana={p.mana} variant="pod" />
+          <PlayerChips p={p} inline />
+          <CommanderDamageInline dmg={p.commanderDamage} />
+          {others.map((o) => (
+            <span key={o.id ?? `${o.kind}:${o.name}`} className="flex shrink-0" title={o.name}>
+              <CardView card={commandCard(o)} width={22} anchor={false} onHover={onHover} />
+            </span>
+          ))}
+          {commanders.map((o) => (
+            <span key={o.id ?? `${o.kind}:${o.name}`} className="flex shrink-0 items-center gap-1 text-target" title={`Commander-Steuer ${o.name}: ${o.casts ?? 0}× gewirkt`}>
+              <Icon name="commander" size={13} />+{o.tax}
+            </span>
+          ))}
         </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-1 px-2 py-1">
-        <ZoneCounters p={p} onHover={onHover} inter={inter} />
-        <CommanderDamage dmg={p.commanderDamage} />
-        <ManaPool mana={p.mana} />
-      </div>
-      <div className="flex min-h-0 flex-1 gap-1.5 px-1.5 pb-1.5">
-        <div className="shrink-0 pt-1">
-          <CommandZone objects={p.command} inter={inter} onHover={onHover} size="xs" />
-        </div>
-        <div className="min-h-0 min-w-0 flex-1">
-          <Battlefield perms={p.battlefield} size="sm" inter={inter} onHover={onHover} landsFirst />
-        </div>
-      </div>
+
+      <Battlefield perms={p.battlefield} variant="opponent" inter={inter} onHover={onHover} layout={layout} />
     </div>
   )
 })
 
-/** "getrennt seit N s" fuer menschliche Mitspieler; nach 60 s "aufgeben lassen" (Engine wartet sonst ewig auf dessen Prompt). */
+/** "Getrennt N s" fuer menschliche Mitspieler; nach kickAfterMs "Aufgeben lassen" (Engine wartet sonst ewig auf dessen Prompt). */
 function ConnBadge({ playerId }: { playerId: string }) {
   const conn = useGame((s) => s.seatConn[playerId])
   const myConceded = useGame((s) => s.conceded)
+  const spectator = useGame((s) => s.spectator)
   const kick = useGame((s) => s.kick)
   // Grenze kommt von der Engine (Produktion 60 s, Dev-Engine 5 s)
-  const KICK_AFTER_MS = useGame((s) => s.kickAfterMs)
+  const kickAfterMs = useGame((s) => s.kickAfterMs)
   if (!conn || conn.connected || conn.conceded) return null
   const secs = Math.round(conn.disconnectedMs / 1000)
   return (
-    <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-      <span className="rounded bg-blood-500/20 px-1 text-[10px] font-semibold text-blood-300" title="Verbindung zum Mitspieler ist weg; das Spiel wartet auf ihn">
-        getrennt {secs} s
-      </span>
-      {conn.disconnectedMs >= KICK_AFTER_MS && !myConceded && (
-        <button className="rounded bg-white/10 px-1 text-[10px] text-ink-100 hover:bg-blood-500/30" title="Den getrennten Spieler aufgeben lassen, damit das Spiel weitergeht" onClick={() => kick(playerId)}>
-          aufgeben lassen
-        </button>
+    <span className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      <Chip tone="attack" size="sm" icon="disconnected" title="Verbindung zum Mitspieler ist weg; das Spiel wartet auf ihn">
+        Getrennt {secs} s
+      </Chip>
+      {conn.disconnectedMs >= kickAfterMs && !myConceded && !spectator && (
+        <Button
+          variant="danger"
+          size="xs"
+          icon="kick"
+          style={{ height: 22, padding: '0 6px', fontSize: 12 }}
+          title="Den getrennten Spieler aufgeben lassen, damit das Spiel weitergeht"
+          onClick={() => kick(playerId)}
+        >
+          Aufgeben lassen
+        </Button>
       )}
     </span>
   )

@@ -49,20 +49,47 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn
 }
 
+let onConnection: ((ok: boolean) => void) | null = null
+
+/**
+ * Verbindungs-Beobachter (store/conn.ts): false bei Netzfehler (fetch-TypeError) oder Proxy-Fehler (502/503/504,
+ * HTML-Fehlerseite ab 500), true bei jeder anderen Antwort. Als Listener statt Import, damit kein Import-Zyklus entsteht.
+ */
+export function setConnectionListener(fn: ((ok: boolean) => void) | null) {
+  onConnection = fn
+}
+
+function reportConnection(ok: boolean) {
+  try {
+    onConnection?.(ok)
+  } catch {
+    /* Beobachter darf Anfragen nie stoeren */
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(apiUrl(path), {
-    method,
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(apiUrl(path), {
+      method,
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch (e) {
+    // TypeError: Netz weg, Server nicht erreichbar (Abbruch per AbortError zaehlt nicht)
+    if (e instanceof TypeError) reportConnection(false)
+    throw new ApiError('Keine Verbindung zum Server', 0)
+  }
   const text = await res.text()
   let data: any = null
   try {
     data = text ? JSON.parse(text) : null
   } catch {
     // z.B. HTML-Fehlerseite des fly-Proxys waehrend eines Neustarts
+    reportConnection(!(res.status >= 500))
     throw new ApiError(res.ok ? 'Unerwartete Antwort vom Server' : `Server nicht erreichbar (${res.status}) – bitte gleich nochmal versuchen`, res.status)
   }
+  reportConnection(!(res.status === 502 || res.status === 503 || res.status === 504))
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
     throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status, data)

@@ -1,10 +1,15 @@
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useState } from 'react'
-import type { Card, PlayerState, TargetRef } from '../api/types'
+import { useEffect, useState, type CSSProperties } from 'react'
+import type { Card, TargetRef } from '../api/types'
 import { CardView } from '../components/CardView'
+import { Chip, Kbd } from '../components/ui'
+import { Icon } from '../lib/icons'
 import { RulesText } from '../lib/mana'
+import { enter } from '../lib/motion'
 import { useGame } from '../store/game'
+import { SEAT_COLORS, shortName, typeLabel } from './format'
 import type { Interaction } from './interaction'
+import { useBoardLayout } from './layout'
 
 const ZONES: Record<string, string> = {
   GRAVEYARD: 'Friedhof',
@@ -35,182 +40,221 @@ interface StackRow {
   pos: number
 }
 
-export function StackPanel({
-  stack,
-  players,
-  inter,
-  onHover,
-  focusId,
-  onFocus,
-}: {
-  stack: Card[]
-  players: PlayerState[]
+const NO_CARDS: Card[] = []
+
+/** Tönung des obersten Objekts */
+const TOP_TINT = 'rgba(255,122,61,.06)'
+
+export interface StackPanelProps {
   inter: Interaction
   onHover: (c: Card | null) => void
-  /** Eintrag, dessen Zielpfeile gezeigt werden (sonst oberstes Objekt) */
-  focusId?: string | null
-  onFocus?: (id: string | null) => void
-}) {
+}
+
+/**
+ * Stapel, schwebt oben rechts im eigenen Bereich (absolute right/top 14 – der Aufrufer haengt ihn direkt in den
+ * relativen eigenen Bereich, nie ueber einen Gegner-Pod). Liest state.stack/players aus dem Store; die Zeile unter der
+ * Maus wird store.stackFocus (ihre Ziele bekommen das Etikett "Ziel", siehe boardDecor) und erscheint im Zoom.
+ */
+export function StackPanel({ inter, onHover }: StackPanelProps) {
+  const stack = useGame((s) => s.state?.stack ?? NO_CARDS)
+  const players = useGame((s) => s.state?.players)
+  const spectator = useGame((s) => s.spectator)
+  const focusId = useGame((s) => s.stackFocus)
+  const onFocus = useGame((s) => s.setStackFocus)
+  const prompt = inter.prompt
+  const { stackW } = useBoardLayout()
   const [collapsed, setCollapsed] = useState(false)
   const top = stack[0]
   // neues oberstes Objekt -> wieder aufklappen
   useEffect(() => {
     if (top?.id) setCollapsed(false)
   }, [top?.id])
+  // Stapel leer -> kein Fokus mehr (Ziel-Etiketten wieder fuer alle)
+  useEffect(() => {
+    if (!top) onFocus(null)
+  }, [top, onFocus])
+
   const who = (id?: string) => {
-    const p = players.find((x) => x.id === id)
-    return p ? { name: p.me ? 'Du' : p.name, me: p.me } : null
+    const i = players?.findIndex((x) => x.id === id) ?? -1
+    if (i < 0 || !players) return null
+    const p = players[i]
+    return { name: p.me && !spectator ? 'Du' : shortName(p.name), color: SEAT_COLORS[i % SEAT_COLORS.length] }
   }
-  const activeId = stack.some((c) => c.id === focusId) ? focusId : top?.id
-  // gleiche Objekte direkt unter dem obersten zaehlen, den Rest zu Zeilen mit ×N zusammenfassen
-  let topCount = top ? 1 : 0
-  while (top && topCount < stack.length && sameAbility(top, stack[topCount])) topCount++
+
+  // gleiche Objekte direkt untereinander zu einer Zeile mit ×N zusammenfassen
   const rows: StackRow[] = []
-  for (let i = topCount; i < stack.length; i++) {
+  stack.forEach((c, i) => {
     const last = rows[rows.length - 1]
-    if (last && sameAbility(last.card, stack[i])) last.count++
-    else rows.push({ card: stack[i], count: 1, pos: i + 1 })
-  }
+    if (last && sameAbility(last.card, c)) last.count++
+    else rows.push({ card: c, count: 1, pos: i + 1 })
+  })
+
+  // Wird gerade gewirkt (Ziel waehlen / bezahlen fuer ein Stapelobjekt)?
+  const castingId =
+    !spectator && prompt && (prompt.kind === 'PICK_TARGET' || prompt.kind === 'PLAY_MANA' || prompt.kind === 'PLAY_X_MANA') && prompt.sourceId && stack.some((c) => c.id === prompt.sourceId)
+      ? prompt.sourceId
+      : null
+  const priority = !spectator && prompt?.kind === 'SELECT' && prompt.mode === 'priority'
 
   return (
     <AnimatePresence>
-      {top && collapsed && (
-        <motion.button
-          key="pill"
-          data-stack={top.id}
-          className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink-900/90 px-4 py-1.5 text-sm font-semibold text-gold-300 shadow-2xl ring-2 ring-gold-400/60 backdrop-blur"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0 }}
-          onClick={() => setCollapsed(false)}
-          title="Stapel aufklappen"
-        >
-          <span className="rounded-full bg-gold-400 px-1.5 text-xs text-ink-950">{stack.length}</span>
-          Stapel · <span className="max-w-[220px] truncate text-ink-100">{top.name}</span> ▸
-        </motion.button>
-      )}
-      {top && !collapsed && (
+      {top && (
         <motion.div
-          key="panel"
-          className="pointer-events-auto flex max-h-[48vh] w-[440px] flex-col overflow-hidden rounded-2xl bg-ink-900/90 shadow-[0_12px_48px_rgba(0,0,0,0.7),0_0_36px_rgba(245,184,74,0.2)] ring-2 ring-gold-400/55 backdrop-blur-md"
-          initial={{ opacity: 0, scale: 0.92, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          onMouseLeave={() => onFocus?.(null)}
+          key="stack"
+          {...enter}
+          className="pointer-events-auto absolute top-3.5 right-3.5 z-[6] flex flex-col rounded-md bg-bg-3 shadow-stack"
+          style={{ width: stackW, maxHeight: 'calc(100% - 28px)' }}
+          data-testid="stack-panel"
+          onMouseLeave={() => onFocus(null)}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gold-400/20 bg-gold-400/10 px-3 py-1.5">
-            <div className="flex items-baseline gap-2">
-              <span className="font-display text-sm font-bold uppercase tracking-widest text-gold-300">Stapel</span>
-              <span className="rounded-full bg-gold-400 px-1.5 text-xs font-bold text-ink-950">{stack.length}</span>
-              {stack.length > 1 && <span className="text-[11px] text-ink-300">oberstes löst zuerst auf</span>}
-            </div>
-            <button className="rounded px-1.5 text-ink-300 hover:bg-white/10 hover:text-white" onClick={() => setCollapsed(true)} title="Einklappen">
-              ▾
+          <div className="flex shrink-0 items-center gap-2 border-b border-line-2 px-3 py-2.5" data-stack={collapsed ? top.id : undefined}>
+            <Icon name="stack" size={15} className="text-fg-3" />
+            <span className="label" style={{ fontSize: 13 }}>
+              Stapel · {stack.length}
+            </span>
+            {collapsed && <span className="min-w-0 truncate text-[12.5px] text-fg-2">{top.name}</span>}
+            <span className="flex-1" />
+            <button
+              type="button"
+              className="flex text-fg-4 transition-colors duration-1 hover:text-fg-1"
+              title={collapsed ? 'Aufklappen' : 'Einklappen'}
+              aria-label={collapsed ? 'Stapel aufklappen' : 'Stapel einklappen'}
+              aria-expanded={!collapsed}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              <Icon name={collapsed ? 'chevronRight' : 'chevronDown'} size={16} />
             </button>
           </div>
-          <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2 scrollbar-thin">
-            {/* oberstes Objekt gross */}
-            <motion.div
-              key={top.id}
-              data-stack={top.id}
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1, boxShadow: ['0 0 0 0 rgba(245,184,74,0.7)', '0 0 0 10px rgba(245,184,74,0)'] }}
-              transition={{ duration: 0.6 }}
-              className={`flex gap-3 rounded-xl bg-gold-400/10 p-2 ring-1 ${activeId === top.id ? 'ring-gold-400/60' : 'ring-gold-400/30'}`}
-              onMouseEnter={() => onFocus?.(top.id)}
-            >
-              <CardView card={top} size="lg" anchor={false} highlight={inter.highlight(top.id)} onHover={onHover} onClick={() => inter.click(top.id)} />
-              <div className="min-w-0 flex-1 text-[12px] leading-snug">
-                <div className="font-display text-base font-bold leading-tight text-ink-100">{top.name}</div>
-                <Origin c={top} who={who(top.controllerId)} />
-                {top.typeLine && top.kind !== 'ability' && <div className="mt-0.5 text-ink-300">{top.typeLine}</div>}
-                {top.targetRefs && top.targetRefs.length > 0 && <TargetChips refs={top.targetRefs} onHover={onHover} />}
-                {top.kind === 'ability' && top.rules?.[0] && (
-                  <div className="mt-1 line-clamp-6 text-ink-200">
-                    <RulesText text={top.rules[0]} />
-                  </div>
-                )}
-                {topCount > 1 && (
-                  <div className="mt-1 inline-block rounded bg-gold-400/20 px-1.5 text-[11px] font-semibold text-gold-300">+{topCount - 1} gleiche darunter</div>
+          {!collapsed && (
+            <>
+              <div className="scrollbar-thin flex min-h-0 flex-col overflow-y-auto">
+                {rows.map((r) => (
+                  <Row
+                    key={r.card.id}
+                    row={r}
+                    top={r.pos === 1}
+                    focused={r.card.id === focusId}
+                    casting={r.card.id === castingId}
+                    who={who(r.card.controllerId)}
+                    inter={inter}
+                    onHover={onHover}
+                    onFocus={onFocus}
+                  />
+                ))}
+              </div>
+              <div className="shrink-0 px-3 py-2 text-[12px] leading-[1.4] text-fg-3">
+                {castingId ? (
+                  prompt?.kind === 'PICK_TARGET' ? (
+                    'Ziel auf dem Brett wählen. Mögliche Ziele sind markiert.'
+                  ) : (
+                    <>
+                      <Kbd tone="dim">Esc</Kbd> bricht das Wirken ab
+                    </>
+                  )
+                ) : (
+                  <>
+                    Oberstes Objekt löst als Nächstes auf
+                    {priority && (
+                      <>
+                        {' · '}
+                        <Kbd tone="dim">Space</Kbd> gibt Priorität ab
+                      </>
+                    )}
+                  </>
                 )}
               </div>
-            </motion.div>
-            {/* darunter liegende Objekte kompakt */}
-            {rows.map(({ card: c, count, pos }) => (
-              <motion.div
-                key={c.id}
-                data-stack={c.id}
-                layout
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={`flex items-start gap-2 rounded-xl bg-ink-950/50 p-1.5 ${c.id === activeId ? 'ring-1 ring-gold-400/40' : ''}`}
-                onMouseEnter={() => onFocus?.(c.id)}
-              >
-                <span className="w-4 shrink-0 pt-0.5 text-center text-[11px] font-bold tabular-nums text-ink-400">{pos}</span>
-                <CardView card={c} size="sm" anchor={false} highlight={inter.highlight(c.id)} onHover={onHover} onClick={() => inter.click(c.id)} />
-                <div className="min-w-0 flex-1 text-[11px] leading-snug">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate font-semibold text-ink-100">{c.name}</span>
-                    {count > 1 && <span className="shrink-0 rounded bg-gold-400/20 px-1 font-bold text-gold-300">×{count}</span>}
-                  </div>
-                  <Origin c={c} who={who(c.controllerId)} />
-                  {c.targetRefs && c.targetRefs.length > 0 && <TargetChips refs={c.targetRefs} onHover={onHover} />}
-                  {c.kind === 'ability' && c.rules?.[0] && (
-                    <div className="mt-0.5 line-clamp-2 text-ink-300">
-                      <RulesText text={c.rules[0]} />
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </div>
+            </>
+          )}
         </motion.div>
       )}
     </AnimatePresence>
   )
 }
 
-function Origin({ c, who }: { c: Card; who: { name: string; me: boolean } | null }) {
+interface RowProps {
+  row: StackRow
+  top: boolean
+  focused: boolean
+  casting: boolean
+  who: { name: string; color: string } | null
+  inter: Interaction
+  onHover: (c: Card | null) => void
+  onFocus: (id: string | null) => void
+}
+
+function Row({ row, top, focused, casting, who, inter, onHover, onFocus }: RowProps) {
+  const { card: c, count } = row
+  const hl = inter.highlight(c.id)
+  const clickable = inter.canClick(c.id)
+  const kind = [casting ? 'Wird gewirkt' : '', typeLabel(c) || (c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'), count > 1 ? `×${count} gleiche` : ''].filter(Boolean).join(' · ')
+  const rules = (c.rules ?? []).join('\n')
+  const ring = hl === 'target' ? 'var(--color-target)' : hl === 'chosen' ? 'var(--color-chosen)' : null
+  const style: CSSProperties = {
+    background: top ? TOP_TINT : focused ? 'var(--color-bg-4)' : undefined,
+    boxShadow: ring ? `inset 2px 0 0 ${ring}` : undefined,
+  }
   return (
-    <div className="flex items-center gap-1.5 text-[11px]">
-      <span className="text-ink-300">{c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'}</span>
-      {who && (
-        <span className={`rounded px-1 font-semibold ${who.me ? 'bg-arcane-500/15 text-arcane-400' : 'bg-white/5 text-ink-200'}`}>{who.name}</span>
-      )}
-      {c.x != null && (
-        <span className="rounded bg-gold-400 px-1.5 font-bold text-ink-950" title="Angesagter Wert für X">
-          X = {c.x}
-        </span>
-      )}
+    <div
+      data-stack={c.id}
+      className={`flex shrink-0 gap-2.5 border-b border-line-1 px-3 py-2.5 ${clickable ? 'cursor-pointer' : ''}`}
+      style={style}
+      onMouseEnter={() => {
+        onFocus(c.id)
+        onHover(c)
+      }}
+      onClick={clickable ? (e) => inter.click(c.id, e) : undefined}
+    >
+      <div className="relative shrink-0">
+        <CardView card={c} width={40} anchor={false} highlight={hl} count={count} upright />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex items-center gap-1.5">
+          <span className="min-w-0 truncate text-[13.5px] font-semibold text-fg-1">{c.name}</span>
+          <span className="flex-1" />
+          {who && (
+            <span className="font-display text-[11px] leading-none font-semibold tracking-[.08em] whitespace-nowrap uppercase" style={{ color: who.color }}>
+              {who.name}
+            </span>
+          )}
+        </div>
+        <span className="font-display text-[11px] leading-none font-semibold tracking-[.1em] text-fg-3 uppercase">{kind}</span>
+        {rules && (
+          <span className={`text-[12px] leading-[1.35] text-fg-2 ${top ? 'line-clamp-5' : 'line-clamp-2'}`}>
+            <RulesText text={rules} />
+          </span>
+        )}
+        {(c.targetRefs?.length || c.x != null) && (
+          <div className="flex flex-wrap items-center gap-1">
+            {c.targetRefs?.map((t) => <TargetChip key={t.id} t={t} onHover={onHover} />)}
+            {c.x != null && (
+              <Chip tone="neutral" size="xs" title="Angesagter Wert für X">
+                X = {c.x}
+              </Chip>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function TargetChips({ refs, onHover }: { refs: TargetRef[]; onHover: (c: Card | null) => void }) {
-  const objects = useGame((s) => s.objects)
+function TargetChip({ t, onHover }: { t: TargetRef; onHover: (c: Card | null) => void }) {
+  const obj = useGame((s) => s.objects.get(t.id))
+  const where = t.kind === 'card' && t.zone ? (ZONES[t.zone] ?? t.zone.toLowerCase()) : null
+  const title = [t.owner && t.kind !== 'player' ? `von ${t.owner}` : null, where].filter(Boolean).join(' · ')
   return (
-    <div className="mt-0.5 flex flex-wrap items-center gap-1">
-      <span className="text-gold-300">→ Ziel:</span>
-      {refs.map((t) => {
-        const obj = objects.get(t.id)
-        const where = t.kind === 'card' && t.zone ? ZONES[t.zone] ?? t.zone.toLowerCase() : null
-        const title = [t.owner && t.kind !== 'player' ? `von ${t.owner}` : null, where].filter(Boolean).join(' · ')
-        return (
-          <span
-            key={t.id}
-            className={`max-w-full truncate rounded px-1 font-semibold ring-1 ${
-              t.kind === 'player' ? 'bg-arcane-500/15 text-arcane-400 ring-arcane-400/40' : 'bg-gold-400/15 text-gold-300 ring-gold-400/40'
-            }`}
-            title={title || undefined}
-            onMouseEnter={() => obj && onHover(obj)}
-            onMouseLeave={() => obj && onHover(null)}
-          >
-            {t.kind === 'player' ? '👤 ' : ''}
-            {t.name}
-            {where ? <span className="font-normal text-ink-300"> ({where})</span> : null}
-          </span>
-        )
-      })}
-    </div>
+    <span
+      className="inline-flex max-w-full items-center gap-1 rounded-xs px-[5px] py-[3px] font-display text-[12px] leading-none font-semibold tracking-[.04em] text-target shadow-[inset_0_0_0_1px_rgba(255,210,63,.5)]"
+      title={title || undefined}
+      onMouseEnter={() => {
+        if (obj) onHover(obj)
+      }}
+    >
+      <Icon name="target" size={12} />
+      <span className="min-w-0 truncate">
+        {t.name}
+        {where && <span className="text-fg-3"> ({where})</span>}
+      </span>
+    </span>
   )
 }

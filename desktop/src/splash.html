@@ -4,22 +4,33 @@
     <meta charset="UTF-8" />
     <title>MageLite</title>
     <style>
+      /* Lokale Schriften (file://, ohne Bundler) - Kopien aus ui/node_modules/@fontsource */
+      @font-face { font-family: "Barlow Condensed"; font-weight: 600; font-style: normal; src: url("fonts/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
+      @font-face { font-family: "Barlow Condensed"; font-weight: 700; font-style: normal; src: url("fonts/barlow-condensed-latin-700-normal.woff2") format("woff2"); }
+      @font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-style: normal; src: url("fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2"); }
+
       html, body { height: 100%; margin: 0; }
       body {
         display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-        background: radial-gradient(circle at 50% 50%, #121827 0%, #07090f 70%);
-        color: #c3c9da; font-family: "Segoe UI", system-ui, sans-serif;
+        background: #121110; color: #ece7de;
+        font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
       }
-      h1 { margin: 0; font-family: Georgia, serif; letter-spacing: 0.3em; color: #ffd98a; font-size: 44px; font-weight: 700; }
-      .spin { width: 26px; height: 26px; border: 3px solid #f5b84a; border-top-color: transparent; border-radius: 50%; animation: s 0.9s linear infinite; }
-      @keyframes s { to { transform: rotate(360deg); } }
-      p { margin: 0; font-size: 14px; }
+      .mark, .label { font-family: "Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif; text-transform: uppercase; line-height: 1; }
+      .mark { font-weight: 700; font-size: 34px; letter-spacing: .08em; color: #ff7a3d; }
+      .track { width: 240px; height: 2px; background: #2a2824; overflow: hidden; }
+      /* Pseudo-Fortschritt: einmalig 0 -> 90 % ueber 90 s (keine Endlosschleife) */
+      .fill { width: 0; height: 100%; background: #ff7a3d; animation: fill 90s cubic-bezier(.2,.8,.2,1) forwards; }
+      @keyframes fill { from { width: 0; } to { width: 90%; } }
+      .label { font-weight: 600; font-size: 13px; letter-spacing: .12em; color: #9b958a; }
+      .hint { margin: 0; font-size: 12.5px; line-height: 1.4; color: #6f6a62; }
+      @media (prefers-reduced-motion: reduce) { .fill { animation: none; width: 30%; } }
     </style>
   </head>
   <body>
-    <h1>MAGELITE</h1>
-    <div class="spin"></div>
-    <p>Engine startet – Kartendatenbank wird geladen …</p>
-    <p style="opacity:.6;font-size:12px">Beim allerersten Start wird die Datenbank aufgebaut (ca. 1–2 Minuten).</p>
+    <span class="mark">MageLite</span>
+    <div class="track"><div class="fill"></div></div>
+    <span class="label">Engine startet – Kartendatenbank wird geladen …</span>
+    <p class="hint">Beim allerersten Start wird die Datenbank aufgebaut (ca. 1–2 Minuten).</p>
   </body>
 </html>

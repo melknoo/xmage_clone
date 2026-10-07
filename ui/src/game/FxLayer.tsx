@@ -1,23 +1,20 @@
 import { AnimatePresence, motion } from 'motion/react'
-import type { Card } from '../api/types'
+import { useState } from 'react'
+import type { Card, Tempo } from '../api/types'
 import { CardView } from '../components/CardView'
+import { fxIcon, Icon } from '../lib/icons'
+import { cardFlight, DUR, EASE_OUT, enter } from '../lib/motion'
 import { useGame, type FxItem } from '../store/game'
+import { lifeAnchor } from './overlayGeometry'
 
-/** Farbe/Icon je Ereignisart (Ereignisleiste + Rand der fliegenden Karte) */
-const STYLE: Record<string, { icon: string; ring: string; text: string }> = {
-  died: { icon: '💀', ring: 'ring-blood-400', text: 'text-blood-400' },
-  tokenDied: { icon: '💀', ring: 'ring-blood-400', text: 'text-blood-400' },
-  exiled: { icon: '🌀', ring: 'ring-purple-400', text: 'text-purple-300' },
-  bounced: { icon: '↩', ring: 'ring-sky-400', text: 'text-sky-300' },
-  tucked: { icon: '📚', ring: 'ring-sky-400', text: 'text-sky-300' },
-  discarded: { icon: '🗑', ring: 'ring-ink-400', text: 'text-ink-300' },
-  milled: { icon: '🪦', ring: 'ring-ink-400', text: 'text-ink-300' },
-  resolved: { icon: '✓', ring: 'ring-ink-400', text: 'text-ink-300' },
-  command: { icon: '👑', ring: 'ring-gold-400', text: 'text-gold-300' },
-  countered: { icon: '✖', ring: 'ring-blood-400', text: 'text-blood-400' },
-  damage: { icon: '♥', ring: 'ring-blood-400', text: 'text-blood-400' },
-  life: { icon: '♥', ring: 'ring-emerald-400', text: 'text-emerald-300' },
-  counter: { icon: '●', ring: 'ring-gold-400', text: 'text-gold-300' },
+/** Icon-Farbe je Ereignisart (Karmin = Schaden/Tod, Gruen = Leben, Gelb = Zaehler, sonst fg-3) */
+const TONE: Partial<Record<FxItem['kind'], string>> = {
+  died: 'text-attack',
+  tokenDied: 'text-attack',
+  countered: 'text-attack',
+  damage: 'text-attack',
+  life: 'text-chosen',
+  counter: 'text-target',
 }
 
 const ZONE_KINDS = new Set(['died', 'tokenDied', 'exiled', 'bounced', 'tucked', 'discarded', 'milled', 'resolved', 'command', 'countered'])
@@ -57,42 +54,39 @@ export function describeFx(e: FxItem, playerName: (id?: string) => string): stri
 }
 
 /**
- * Mini-Animationen zu Spielereignissen (fliegende Geisterkarte beim Zonenwechsel, schwebende Zahlen bei Schaden/Leben)
- * und eine kurze Ereignisleiste - damit beim Auto-Passen klar bleibt, was gerade passiert ist.
+ * Mini-Animationen zu Spielereignissen (fliegende Geisterkarte beim Zonenwechsel, Lebens-Delta oben rechts an der
+ * Lebensanzeige, Zahlen an Objekten) und die Ereignisleiste unten links ueber der Aktionsleiste - damit beim
+ * Auto-Passen klar bleibt, was gerade passiert ist. Bei reduzierter Bewegung erzeugt der Store keine Animationen.
  */
 export function FxLayer() {
   const fx = useGame((s) => s.fx)
   const recent = useGame((s) => s.recent)
   const fxEnabled = useGame((s) => s.fxEnabled)
-  const players = useGame((s) => s.state?.players ?? [])
-  const playerName = (id?: string) => players.find((p) => p.id === id)?.name ?? '?'
+  const tempo = useGame((s) => s.tempo)
+  const players = useGame((s) => s.state?.players)
+  const spectator = useGame((s) => s.spectator)
+  const playerName = (id?: string) => {
+    const p = players?.find((x) => x.id === id)
+    return p ? (p.me && !spectator ? 'Du' : p.name) : '?'
+  }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[45]">
+    <div className="pointer-events-none fixed inset-0 z-[10]">
       {fxEnabled &&
         fx.map((e) => {
           if (!e.src) return null
-          if (ZONE_KINDS.has(e.kind)) return <GhostCard key={e.key} e={e} />
+          if (ZONE_KINDS.has(e.kind)) return <GhostCard key={e.key} e={e} tempo={tempo} />
           if (e.kind === 'damage' || e.kind === 'life' || e.kind === 'counter') return <Floater key={e.key} e={e} />
           return null
         })}
-      <div className="absolute bottom-[76px] left-3 flex max-w-[360px] flex-col gap-1">
+      <div className="absolute left-3.5 flex max-w-[360px] flex-col items-start gap-1" style={{ bottom: 'calc(var(--prompt-h, 62px) + 8px)' }} data-testid="fx-strip">
         <AnimatePresence>
-          {recent.map((e) => {
-            const st = STYLE[e.kind] ?? STYLE.resolved
-            return (
-              <motion.div
-                key={e.key}
-                initial={{ opacity: 0, x: -16 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -16 }}
-                className="glass flex items-center gap-2 rounded-lg px-2 py-1 text-xs text-ink-100 ring-1 ring-white/10"
-              >
-                <span className={`w-4 text-center ${st.text}`}>{st.icon}</span>
-                <span className="truncate">{describeFx(e, playerName)}</span>
-              </motion.div>
-            )
-          })}
+          {recent.map((e) => (
+            <motion.div key={e.key} {...enter} className="flex max-w-full items-center gap-2 rounded-sm bg-bg-4 px-2 py-[5px] text-[12.5px] text-fg-1 shadow-toast">
+              <Icon name={fxIcon(e.kind)} size={14} className={TONE[e.kind] ?? 'text-fg-3'} />
+              <span className="truncate">{describeFx(e, playerName)}</span>
+            </motion.div>
+          ))}
         </AnimatePresence>
       </div>
     </div>
@@ -100,41 +94,45 @@ export function FxLayer() {
 }
 
 const GHOST_W = 62
-const GHOST_H = 86
+const GHOST_H = Math.round((GHOST_W * 88) / 63)
 
-function GhostCard({ e }: { e: FxItem }) {
+function GhostCard({ e, tempo }: { e: FxItem; tempo: Tempo }) {
   const from = e.src!
   const to = e.dst ?? { x: from.x, y: from.y - 40 }
   const card: Card = e.card ?? { id: e.objectId ?? e.key.toString(), name: e.name ?? '' }
-  const st = STYLE[e.kind] ?? STYLE.resolved
   const fade = e.kind === 'tokenDied'
+  // 420 ms, bei Blitz 210 ms; ausgeblendet wird erst gegen Ende
+  const flight = cardFlight(tempo)
   return (
     <motion.div
-      className={`absolute rounded-md ring-2 ${st.ring} shadow-2xl`}
+      className="absolute"
       style={{ left: from.x - GHOST_W / 2, top: from.y - GHOST_H / 2, width: GHOST_W }}
       initial={{ x: 0, y: 0, scale: 1, opacity: 0.95 }}
-      animate={{ x: to.x - from.x, y: to.y - from.y, scale: fade ? 0.6 : 0.45, opacity: 0 }}
-      transition={{ duration: fade ? 0.7 : 0.55, ease: 'easeIn' }}
+      animate={{ x: to.x - from.x, y: to.y - from.y, scale: fade ? 0.8 : 0.5, opacity: [0.95, 0.95, 0] }}
+      transition={{ ...flight, opacity: { ...flight, times: [0, 0.7, 1] } }}
     >
-      <CardView card={card} size="sm" anchor={false} upright />
+      <CardView card={card} width={GHOST_W} anchor={false} upright />
     </motion.div>
   )
 }
 
 function Floater({ e }: { e: FxItem }) {
-  const from = e.src!
-  const text = e.kind === 'damage' ? `−${e.amount}` : e.kind === 'life' ? `${(e.amount ?? 0) > 0 ? '+' : ''}${e.amount}` : `+${e.amount}`
-  const color = e.kind === 'damage' ? (e.objectId ? 'text-orange-400' : 'text-blood-400') : e.kind === 'life' ? ((e.amount ?? 0) > 0 ? 'text-emerald-400' : 'text-blood-400') : 'text-gold-300'
+  // Spieler-Leben/-Schaden: oben rechts an der Lebensanzeige (Position beim Erscheinen, die Anzeige bewegt sich nicht)
+  const [pos] = useState(() => (!e.objectId && e.playerId && (e.kind === 'damage' || e.kind === 'life') ? lifeAnchor(e.playerId) : null))
+  const at = pos ?? e.src!
+  const amount = e.amount ?? 0
+  const text = e.kind === 'damage' ? `−${amount}` : e.kind === 'life' ? (amount > 0 ? `+${amount}` : `−${Math.abs(amount)}`) : `+${amount}`
+  const color = e.kind === 'counter' ? 'text-target' : e.kind === 'life' && amount > 0 ? 'text-chosen' : 'text-attack'
   return (
     <motion.div
-      className={`font-display absolute -translate-x-1/2 text-2xl font-bold drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${color}`}
-      style={{ left: from.x, top: from.y - 14 }}
-      initial={{ y: 0, opacity: 1, scale: 0.8 }}
-      animate={{ y: -40, opacity: 0, scale: 1.1 }}
-      transition={{ duration: 1.0, ease: 'easeOut' }}
+      className={`absolute font-display text-[22px] leading-none font-semibold whitespace-nowrap tabular-nums ${color} ${pos ? '' : '-translate-x-1/2'}`}
+      style={pos ? { left: at.x + 2, top: at.y - 18 } : { left: at.x, top: at.y - 14 }}
+      initial={{ y: 0, opacity: 1 }}
+      animate={{ y: -20, opacity: [1, 1, 0] }}
+      transition={{ duration: DUR.xp, ease: EASE_OUT, opacity: { duration: DUR.xp, times: [0, 0.6, 1] } }}
     >
       {text}
-      {e.kind === 'counter' && <span className="ml-1 text-xs font-semibold text-gold-200">{e.name}</span>}
+      {e.kind === 'counter' && e.name && <span className="ml-1 font-sans text-[12px] font-semibold">{e.name}</span>}
     </motion.div>
   )
 }

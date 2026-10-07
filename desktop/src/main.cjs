@@ -36,7 +36,7 @@ async function boot() {
     height: 1000,
     minWidth: 1280,
     minHeight: 760,
-    backgroundColor: '#07090f',
+    backgroundColor: '#121110',
     title: 'MageLite',
     show: false,
     autoHideMenuBar: true,

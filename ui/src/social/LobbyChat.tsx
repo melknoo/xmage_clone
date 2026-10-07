@@ -1,15 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
-import type { LobbyMsg } from '../api/social'
+import { useMemo, useState } from 'react'
+import type { LobbyMember } from '../api/social'
+import { Button, Popover } from '../components/ui'
+import { Icon } from '../lib/icons'
 import { useAuth } from '../store/auth'
+import { useConn } from '../store/conn'
 import { useSocial } from '../store/social'
+import { pushToast } from '../store/ui'
+import { ChatInput } from './ChatInput'
+import { ChatMessages, type ChatMessage } from './ChatMessages'
 
-const NAME_COLORS = ['#ffd98a', '#38e1c6', '#5cb8ff', '#f59ec8', '#b9a3ff', '#9be08a', '#ffad73']
+type Relation = 'friend' | 'incoming' | 'outgoing' | 'none'
 
-function colorOf(userId: number): string {
-  return NAME_COLORS[userId % NAME_COLORS.length]
+const REL_SUB: Record<Relation, string> = {
+  friend: 'Dein Freund',
+  incoming: 'Hat dir eine Anfrage geschickt',
+  outgoing: 'Anfrage gesendet',
+  none: 'Im Lobby-Chat',
+}
+const REL_ACTION: Record<Relation, string> = {
+  friend: 'Schon befreundet',
+  incoming: 'Anfrage annehmen',
+  outgoing: 'Anfrage gesendet',
+  none: 'Als Freund hinzufügen',
 }
 
-/** Globaler Chat aller Angemeldeten (Server-Modus). Standardmäßig drin, "Verlassen" macht unsichtbar. */
+/**
+ * Lobby-Chat (Tab der Seitenleiste): Kopf "N im Chat" + Verlassen, Mitglieder-Chips mit Menue (Freund hinzufuegen/annehmen),
+ * Nachrichten mit Systemzeilen, Eingabe. Wer den Chat verlassen hat, sieht "Du bist unsichtbar" + Beitreten.
+ */
 export function LobbyChat() {
   const me = useAuth((s) => s.me)
   const chatIn = useSocial((s) => s.chatIn)
@@ -22,154 +40,213 @@ export function LobbyChat() {
   const away = useSocial((s) => s.away)
   const say = useSocial((s) => s.say)
   const setIn = useSocial((s) => s.setIn)
-  const request = useSocial((s) => s.request)
-  const markRead = useSocial((s) => s.markRead)
-  const [text, setText] = useState('')
+  const offline = useConn((s) => s.offline)
   const [error, setError] = useState<string | null>(null)
-  const [showMembers, setShowMembers] = useState(false)
-  const [pick, setPick] = useState<{ userId: number; name: string } | null>(null)
-  const [stick, setStick] = useState(true)
-  const ref = useRef<HTMLDivElement>(null)
-
-  // sichtbar = gelesen
-  useEffect(() => {
-    markRead()
-  }, [msgs, markRead])
-
-  useEffect(() => {
-    if (stick && ref.current) ref.current.scrollTop = ref.current.scrollHeight
-  }, [msgs, stick, chatIn])
+  const [menu, setMenu] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
 
   const flash = (e: string | null) => {
     setError(e)
-    if (e) window.setTimeout(() => setError(null), 4000)
+    if (e) window.setTimeout(() => setError((cur) => (cur === e ? null : cur)), 4000)
   }
 
-  const submit = async () => {
-    const t = text.trim()
-    if (!t) return
-    setText('')
-    const err = await say(t)
-    if (err) {
-      setText(t)
-      flash(err)
-    }
+  const toggleIn = async (v: boolean) => {
+    if (busy) return
+    setBusy(true)
+    setMenu(null)
+    const err = await setIn(v)
+    setBusy(false)
+    if (err) pushToast({ kind: 'error', text: err })
   }
 
-  const relation = (userId: number): 'me' | 'friend' | 'pending' | 'none' => {
-    if (userId === me?.id) return 'me'
+  const chatMsgs = useMemo<ChatMessage[]>(
+    () => msgs.map((m) => ({ id: m.seq, ts: m.ts, authorId: m.userId, name: m.name, text: m.text, sys: m.sys })),
+    [msgs],
+  )
+
+  // eigener Chip zuerst
+  const sorted = useMemo(() => {
+    const own = members.filter((m) => m.id === me?.id)
+    return [...own, ...members.filter((m) => m.id !== me?.id)]
+  }, [members, me?.id])
+
+  const relation = (userId: number): Relation => {
     if (friends.some((f) => f.id === userId)) return 'friend'
-    if (outgoing.some((r) => r.userId === userId) || incoming.some((r) => r.userId === userId)) return 'pending'
+    if (incoming.some((r) => r.userId === userId)) return 'incoming'
+    if (outgoing.some((r) => r.userId === userId)) return 'outgoing'
     return 'none'
   }
 
   if (loaded && !chatIn) {
     return (
-      <div className="glass flex items-center gap-3 rounded-2xl px-4 py-3">
-        <div className="text-xl">💬</div>
-        <div className="min-w-0 flex-1 text-sm text-ink-300">
-          Du bist nicht im <b className="text-ink-100">Lobby-Chat</b>.
-        </div>
-        <button className="btn-ghost !py-1 !text-xs" onClick={async () => flash(await setIn(true))}>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3.5 p-6 text-center" data-testid="chat-hidden">
+        <Icon name="invisible" size={34} className="text-fg-4" />
+        <span className="font-display text-[22px] font-semibold uppercase leading-none tracking-[.04em] text-fg-1">Du bist unsichtbar</span>
+        <span className="text-[13.5px] leading-[1.5] text-fg-3">
+          Du stehst nicht in der Mitgliederliste und bekommst keine Nachrichten. Gilt für dein Konto, auch nach dem nächsten Anmelden.
+        </span>
+        <Button
+          variant="primary"
+          icon="toTable"
+          testId="chat-join"
+          className="mt-1"
+          style={{ height: 42, padding: '0 16px', fontSize: 17 }}
+          disabled={busy}
+          onClick={() => void toggleIn(true)}
+        >
           Beitreten
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="glass relative flex h-[420px] flex-col overflow-hidden rounded-2xl">
-      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
-        <div className="text-sm font-semibold uppercase tracking-wider text-ink-300">Lobby-Chat</div>
-        <button className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-500/25" onClick={() => setShowMembers((v) => !v)} title="Wer ist im Chat?">
-          {members.length} im Chat
-        </button>
-        <button className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-ink-400 hover:bg-white/10 hover:text-ink-200" onClick={async () => flash(await setIn(false))} title="Chat verlassen – du bist dann für andere unsichtbar">
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="lobby-chat">
+      <div className="flex items-center gap-2.5 border-b border-line-1 px-[18px] py-2.5">
+        <span className="font-display text-[13px] font-semibold uppercase leading-none tracking-[.1em] text-fg-3">{members.length} im Chat</span>
+        <span className="flex-1" />
+        <Button
+          variant="ghost"
+          icon="logout"
+          testId="chat-leave"
+          title="Chat verlassen – du bist dann für andere unsichtbar"
+          style={{ height: 28, padding: '0 8px', fontSize: 13, gap: 6 }}
+          disabled={busy}
+          onClick={() => void toggleIn(false)}
+        >
           Verlassen
-        </button>
+        </Button>
       </div>
 
-      {showMembers && (
-        <div className="flex flex-wrap gap-1 border-b border-white/10 bg-ink-950/40 px-3 py-2">
-          {members.map((m) => (
-            <button key={m.id} className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] hover:bg-white/10" style={{ color: colorOf(m.id) }} onClick={() => setPick({ userId: m.id, name: m.name })}>
-              {m.id === me?.id ? `${m.name} (du)` : m.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div
-        ref={ref}
-        className="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-[13px] leading-snug scrollbar-thin"
-        onScroll={(e) => {
-          const el = e.currentTarget
-          setStick(el.scrollHeight - el.scrollTop - el.clientHeight < 40)
-        }}
-      >
-        {msgs.length === 0 && <div className="py-2 text-xs italic text-ink-400">{loaded ? 'Noch keine Nachrichten. Sag hallo!' : 'Lade …'}</div>}
-        {msgs.map((m: LobbyMsg) => (
-          <div key={m.seq} className="py-0.5 [overflow-wrap:anywhere]">
-            <span className="mr-1.5 tabular-nums text-[10px] text-ink-500">{new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <button className="font-semibold hover:underline" style={{ color: colorOf(m.userId) }} onClick={() => setPick({ userId: m.userId, name: m.name })}>
-              {m.userId === me?.id ? 'Du' : m.name}
-            </button>
-            <span className="text-ink-400">: </span>
-            <span className="text-ink-100">{m.text}</span>
-          </div>
+      <div className="flex flex-wrap gap-1.5 border-b border-line-1 px-[18px] py-2.5">
+        {sorted.map((m) => (
+          <MemberChip
+            key={m.id}
+            m={m}
+            own={m.id === me?.id}
+            friend={friends.some((f) => f.id === m.id)}
+            relation={relation(m.id)}
+            open={menu === m.id}
+            onToggle={() => setMenu((cur) => (cur === m.id ? null : m.id))}
+            onClose={() => setMenu(null)}
+          />
         ))}
+        {loaded && sorted.length === 0 && <span className="py-[5px] text-[12.5px] text-fg-4">Gerade ist niemand sonst da.</span>}
       </div>
 
-      {pick && (
-        <div className="absolute inset-x-3 top-12 z-10 rounded-xl bg-ink-900/95 p-3 shadow-xl ring-1 ring-white/15">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold" style={{ color: colorOf(pick.userId) }}>
-              {pick.name}
-            </span>
-            <button className="ml-auto text-xs text-ink-400 hover:text-ink-100" onClick={() => setPick(null)}>
-              ✕
-            </button>
-          </div>
-          <div className="mt-2 text-xs text-ink-300">
-            {(() => {
-              const r = relation(pick.userId)
-              if (r === 'me') return 'Das bist du.'
-              if (r === 'friend') return 'Ihr seid befreundet.'
-              if (r === 'pending') return 'Freundschaftsanfrage läuft.'
-              return (
-                <button
-                  className="btn-primary !py-1 !text-xs"
-                  onClick={async () => {
-                    const err = await request({ userId: pick.userId })
-                    setPick(null)
-                    flash(err)
-                  }}
-                >
-                  Als Freund hinzufügen
-                </button>
-              )
-            })()}
-          </div>
-        </div>
-      )}
+      <ChatMessages
+        className="flex-1 px-[18px] py-3"
+        msgs={chatMsgs}
+        meId={me?.id}
+        head={<span className="self-center text-center text-[11.5px] leading-[1.4] text-fg-4">Verlauf: letzte 100 Nachrichten · wird bei Server-Neustart geleert</span>}
+        empty={<span className="self-center text-[13px] text-fg-4">{loaded ? 'Noch keine Nachrichten. Sag hallo!' : 'Lade …'}</span>}
+        onName={(cm) => {
+          const id = Number(cm.authorId)
+          if (members.some((x) => x.id === id)) setMenu(id)
+        }}
+      />
 
-      <div className="shrink-0 border-t border-white/10 p-2">
-        {away && <div className="mb-1.5 text-[11px] text-amber-300">Abwesend – Chat pausiert. Bewege die Maus, um weiterzulesen.</div>}
-        {error && <div className="mb-1.5 text-[11px] text-blood-400">{error}</div>}
-        <input
-          className="w-full rounded-lg bg-ink-950/70 px-3 py-1.5 text-sm ring-1 ring-white/15 outline-none placeholder:text-ink-500 focus:ring-gold-400/60"
-          placeholder="Nachricht an alle … (Enter)"
-          maxLength={300}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              void submit()
-            }
+      <div className="flex flex-none flex-col gap-2 border-t border-line-1 px-[18px] pb-4 pt-3">
+        {away && <span className="text-[12px] leading-[1.4] text-fg-3">Abwesend – Chat pausiert. Bewege die Maus, um weiterzulesen.</span>}
+        {error && (
+          <span className="field-error" role="alert">
+            <Icon name="error" size={14} />
+            {error}
+          </span>
+        )}
+        <ChatInput
+          placeholder={offline ? 'Keine Verbindung' : 'Nachricht an alle in der Lobby'}
+          disabled={offline}
+          onSend={async (t) => {
+            const err = await say(t)
+            flash(err)
+            return err
           }}
         />
       </div>
+    </div>
+  )
+}
+
+function MemberChip({
+  m,
+  own,
+  friend,
+  relation,
+  open,
+  onToggle,
+  onClose,
+}: {
+  m: LobbyMember
+  own: boolean
+  friend: boolean
+  relation: Relation
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const request = useSocial((s) => s.request)
+  const accept = useSocial((s) => s.accept)
+  const [busy, setBusy] = useState(false)
+  const inert = relation === 'friend' || relation === 'outgoing'
+
+  const act = async () => {
+    if (inert) {
+      onClose()
+      return
+    }
+    if (busy) return
+    setBusy(true)
+    let err: string | null
+    if (relation === 'incoming') err = await accept(m.id)
+    else err = (await request({ userId: m.id })).error
+    setBusy(false)
+    onClose()
+    if (err) pushToast({ kind: 'error', text: err })
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className={`flex items-center gap-1.5 rounded-xs px-2 py-[5px] text-[12.5px] font-semibold leading-[1.2] transition-colors duration-1 ${own ? 'cursor-default text-ember' : 'text-fg-1 hover:bg-line-3'} ${open ? 'bg-line-3' : 'bg-bg-4'}`}
+        data-testid="chat-member"
+        data-name={m.name}
+        data-own={own ? 'true' : undefined}
+        aria-expanded={own ? undefined : open}
+        onClick={own ? undefined : onToggle}
+      >
+        <span className="h-1.5 w-1.5 flex-none bg-chosen" style={{ borderRadius: '50%' }} aria-hidden />
+        {own ? `${m.name} (du)` : m.name}
+        {friend && !own && <Icon name="friends" size={11} className="text-fg-3" title="Freund" />}
+      </button>
+      {!own && (
+        <Popover
+          open={open}
+          onClose={onClose}
+          width={220}
+          testId="member-menu"
+          variant="menu"
+          offset={6}
+          style={{ zIndex: 12 }}
+        >
+          <div className="mb-1 flex flex-col gap-[3px] border-b border-line-3 px-2.5 py-2">
+            <span className="truncate text-[14px] font-semibold leading-[1.25] text-fg-1">{m.name}</span>
+            <span className="text-[12px] leading-[1.3] text-fg-3">{REL_SUB[relation]}</span>
+          </div>
+          <button
+            type="button"
+            className={`flex w-full items-center gap-2 rounded-xs px-2.5 py-[9px] text-left text-[13.5px] leading-[1.2] transition-colors duration-1 ${inert ? 'cursor-default text-fg-3' : 'text-fg-1 hover:bg-line-3'}`}
+            data-testid="member-action"
+            aria-disabled={inert || undefined}
+            disabled={busy}
+            onClick={() => void act()}
+          >
+            <Icon name={inert ? 'friend' : 'addFriend'} size={16} />
+            {REL_ACTION[relation]}
+          </button>
+        </Popover>
+      )}
     </div>
   )
 }

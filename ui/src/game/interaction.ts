@@ -51,6 +51,7 @@ export function useInteraction(): Interaction {
   const toggleMarks = useGame((s) => s.toggleMarks)
   const combatMany = useGame((s) => s.combatMany)
   const specialPay = useGame((s) => s.specialPay)
+  const autoMana = useGame((s) => s.autoMana)
 
   return useMemo(() => {
     const active = prompt && answered !== prompt.id ? prompt : null
@@ -131,17 +132,19 @@ export function useInteraction(): Interaction {
       }
     }
 
+    // Rahmen nach Designsystem (CardView rangiert): Markierte tragen den Rahmen ihres Modus (Etikett "Markiert" kommt aus
+    // boardDecor); Mana-Quellen nur bei offenen Kosten oder wenn Auto-Mana aus ist.
     const highlight = (id: UUID): Highlight => {
-      if (marks.has(id)) return 'chosen'
+      if (marks.has(id)) return mode === 'attack' ? 'attacking' : 'blocking'
       if (markTargets.has(id)) return 'target'
       if (attacking.has(id) && mode !== 'target') return 'attacking'
       if (blocking.has(id) && mode !== 'target') return 'blocking'
       if (!clickable.has(id)) return chosen.has(id) ? 'chosen' : 'none'
       switch (mode) {
         case 'priority':
-          return actions.has(id) ? 'playable' : 'mana'
+          return actions.has(id) ? 'playable' : autoMana ? 'none' : 'mana'
         case 'mana':
-          return special.has(id) ? 'special' : 'playable'
+          return special.has(id) ? 'special' : 'mana'
         case 'target':
           return chosen.has(id) ? 'chosen' : 'target'
         case 'attack':
@@ -178,5 +181,5 @@ export function useInteraction(): Interaction {
       modalCards,
       marked: marks,
     }
-  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay])
+  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay, autoMana])
 }

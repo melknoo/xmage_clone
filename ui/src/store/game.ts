@@ -2,14 +2,24 @@ import { create } from 'zustand'
 import { wsUrl } from '../api/client'
 import { useAuth } from './auth'
 import { anchorOf, objCenter, stackAnchor, zoneAnchor, zoneKey, type Point } from '../game/overlayGeometry'
-import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, RichSeg, SeatConn, ServerMessage, Tempo, UUID, FxEvent, ChatEntry } from '../api/types'
+import { isSpectateClose, SPECTATE_CLOSE_TEXT } from '../api/types'
+import type { Activity, Answer, Card, GameOver, GameState, Hello, LogEntry, Prompt, ReplacementMode, RichSeg, SeatConn, ServerMessage, Tempo, UUID, FxEvent, ChatEntry } from '../api/types'
 import { sounds } from '../lib/sounds'
 import { useNav } from './nav'
+import { pushToast as pushUiToast } from './ui'
 
-export interface Toast {
-  id: number
-  level: string
-  rich: RichSeg[]
+/** Spielverlauf-Filter: Routine ausblenden ('important') oder alles zeigen */
+export type LogFilter = 'important' | 'all'
+
+/** Zonen-Ansicht (Friedhof / Exil / oberste Bibliothekskarte) eines Spielers */
+export interface ZoneView {
+  playerId: UUID
+  tab: 'gy' | 'ex' | 'lib'
+}
+
+export interface ConnectOptions {
+  /** als Zuschauer verbinden (?spectate=1); bleibt ueber Reconnects erhalten */
+  spectate?: boolean
 }
 
 /** Aufgedeckte / angesehene Karten. XMage leert sie nach jedem Update, darum haelt der Store sie kurz fest. */
@@ -33,7 +43,6 @@ interface GameStore {
   activity: Activity | null
   activityAt: number
   waitingFor: string | null
-  toasts: Toast[]
   gameOver: GameOver | null
   hover: Card | null
   tempo: Tempo
@@ -66,9 +75,27 @@ interface GameStore {
   chatOpen: boolean
   setChatOpen: (open: boolean) => void
   sendChat: (text: string) => void
+  /** Zuschauernamen (WS "seats") */
+  spectators: string[]
+  /** Zonen-Ansicht offen (ZoneViewer) */
+  viewer: ZoneView | null
+  setViewer: (v: ZoneView | null) => void
+  /** Stapelobjekt unter der Maus (Ziel-Etiketten); null = alle */
+  stackFocus: UUID | null
+  setStackFocus: (id: UUID | null) => void
+  /** Spielverlauf-Filter (localStorage 'magelite.logFilter') */
+  logFilter: LogFilter
+  setLogFilter: (f: LogFilter) => void
+  /** Ton aus (lib/sounds, localStorage 'magelite.mute') */
+  muted: boolean
+  setMuted: (m: boolean) => void
+  /** Zuschauer-Verbindung: keine Eingaben, keine Toene, kein Ungelesen-Zaehler */
+  spectator: boolean
 
-  connect: (gameId: UUID) => void
+  connect: (gameId: UUID, opts?: ConnectOptions) => void
   disconnect: () => void
+  /** Zuschauen beenden: Verbindung trennen, zurueck zur Lobby */
+  stopSpectating: () => void
   answer: (a: Answer) => void
   action: (name: string, data?: string) => void
   setTempo: (t: Tempo) => void
@@ -79,7 +106,6 @@ interface GameStore {
   setAutoPass: (on: boolean) => void
   leave: () => void
   setHover: (c: Card | null) => void
-  dismissToast: (id: number) => void
   dismissReveal: (key: string) => void
   /** markiert alle ids bzw. hebt die Markierung auf, wenn schon alle markiert sind */
   toggleMarks: (ids: UUID[]) => void
@@ -92,8 +118,11 @@ interface GameStore {
   repeat: (abilityId: UUID, times: number) => void
   /** PLAY_MANA: Kreatur einberufen (Convoke); Aktionswahl, Ziel und Farbe beantwortet die Engine */
   specialPay: (permId: UUID) => void
-  /** Ersatzeffekt-Wahl: accept = Effekt key anwenden (Folge-Frage beantwortet die Engine), decline = alle optionalen ablehnen */
-  replacement: (mode: 'accept' | 'decline', key?: string, always?: boolean) => void
+  /**
+   * Ersatzeffekt-Wahl: accept = Effekt key anwenden (Folge-Frage beantwortet die Engine), decline = alle optionalen
+   * ablehnen, acceptGroup = alle Quellen der Gruppe key (= ReplGroup.rule, nur bei uniform) anwenden
+   */
+  replacement: (mode: ReplacementMode, key?: string, always?: boolean) => void
   /** "Fuer dieses Spiel merken" der abgelehnten Ersatzeffekte zuruecknehmen */
   resetReplDeclines: () => void
   reset: () => void
@@ -127,7 +156,6 @@ function reducedMotion(): boolean {
 let socket: WebSocket | null = null
 let pingTimer: number | undefined
 let reconnectTimer: number | undefined
-let toastSeq = 0
 /** Ankunft des aktuellen Prompts: ein "Weiter" in den ersten ms gilt als doppelter Tastendruck (Main 2 ueberspringen) */
 let promptAt = 0
 const PASS_GUARD_MS = 250
@@ -169,10 +197,17 @@ function newReveals(s: GameState): Reveal[] {
 }
 
 export const useGame = create<GameStore>((set, get) => {
-  function send(msg: unknown) {
+  function send(msg: { t: string; [k: string]: unknown }) {
+    // Zuschauer senden nur Pings; alle Eingaben sind wirkungslos
+    if (get().spectator && msg.t !== 'ping') return
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(msg))
     }
+  }
+
+  /** Toene nur fuer Spieler, nie fuer Zuschauer */
+  function play(name: Parameters<typeof sounds.play>[0]) {
+    if (!get().spectator) sounds.play(name)
   }
 
   function handle(msg: ServerMessage) {
@@ -185,7 +220,7 @@ export const useGame = create<GameStore>((set, get) => {
         const prev = get().state
         // veraltete States (Reconnect-Rennen) verwerfen
         if (prev && msg.seq < prev.seq) break
-        if (prev && msg.turn !== prev.turn && msg.activePlayerId === msg.myPlayerId) sounds.play('turn')
+        if (prev && msg.turn !== prev.turn && msg.myPlayerId && msg.activePlayerId === msg.myPlayerId) play('turn')
         const fresh = newReveals(msg)
         set({ state: msg, objects: indexObjects(msg), ...(fresh.length ? { reveals: [...get().reveals, ...fresh].slice(-4) } : {}) })
         for (const r of fresh) window.setTimeout(() => get().dismissReveal(r.key), REVEAL_MS)
@@ -198,7 +233,7 @@ export const useGame = create<GameStore>((set, get) => {
         const nextMarked = marked.size && keep ? new Set([...marked].filter((id) => keep.includes(id))) : marked.size ? new Set<UUID>() : marked
         promptAt = Date.now()
         set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null, marked: nextMarked })
-        if (msg.kind !== 'SELECT' || msg.mode !== 'priority') sounds.play('prompt')
+        if (msg.kind !== 'SELECT' || msg.mode !== 'priority') play('prompt')
         break
       }
       case 'promptClosed':
@@ -215,12 +250,12 @@ export const useGame = create<GameStore>((set, get) => {
       case 'chat': {
         const chat = get().chat.concat(msg.entries).slice(-CHAT_MAX)
         const live = msg.entries.length === 1 && msg.entries[0].playerId !== get().hello?.myPlayerId
-        const unseen = live && !get().chatOpen
+        const unseen = live && !get().chatOpen && !get().spectator
         set({ chat, ...(unseen ? { unreadChat: get().unreadChat + 1 } : {}) })
         if (unseen) {
           const e = msg.entries[0]
           pushToast('chat', [{ text: `${e.name}: ${e.text}` }])
-          sounds.play('prompt')
+          play('prompt')
         }
         break
       }
@@ -236,7 +271,7 @@ export const useGame = create<GameStore>((set, get) => {
       case 'seats': {
         const seatConn: Record<UUID, SeatConn> = {}
         for (const s of msg.seats) seatConn[s.playerId] = s
-        set({ seatConn, kickAfterMs: msg.kickAfterMs || 60000 })
+        set({ seatConn, kickAfterMs: msg.kickAfterMs || 60000, spectators: msg.spectators ?? [] })
         break
       }
       case 'toast':
@@ -244,7 +279,7 @@ export const useGame = create<GameStore>((set, get) => {
         break
       case 'gameOver':
         set({ gameOver: msg, prompt: null, thinking: null, activity: null })
-        sounds.play(msg.placements.find((p) => p.playerId === get().hello?.myPlayerId)?.place === 1 ? 'win' : 'lose')
+        play(msg.placements.find((p) => p.playerId === get().hello?.myPlayerId)?.place === 1 ? 'win' : 'lose')
         break
       case 'error':
         pushToast('error', [{ text: msg.message }])
@@ -291,24 +326,27 @@ export const useGame = create<GameStore>((set, get) => {
     }
   }
 
+  /** Spiel-Toasts laufen ueber das gemeinsame Toast-System (store/ui.ts): Engine-Level info/error, Chat als info mit Icon */
   function pushToast(level: string, rich: RichSeg[]) {
-    const id = ++toastSeq
-    set({ toasts: [...get().toasts.slice(-3), { id, level, rich }] })
-    window.setTimeout(() => get().dismissToast(id), level === 'error' ? 9000 : 5000)
+    if (level === 'chat') pushUiToast({ kind: 'info', icon: 'chat', rich })
+    else pushUiToast({ kind: level === 'error' ? 'error' : level === 'success' ? 'success' : 'info', rich })
   }
 
   function open(gameId: UUID) {
     window.clearTimeout(reconnectTimer)
     set({ conn: 'connecting' })
-    const ws = new WebSocket(wsUrl(`/ws/game/${gameId}`))
+    const ws = new WebSocket(wsUrl(`/ws/game/${gameId}${get().spectator ? '?spectate=1' : ''}`))
     socket = ws
     ws.onopen = () => {
+      if (socket !== ws) return
       set({ conn: 'open' })
       send({ t: 'settings', autoPay: get().autoMana, autoPass: get().autoPass })
       window.clearInterval(pingTimer)
       pingTimer = window.setInterval(() => send({ t: 'ping' }), 20000)
     }
     ws.onmessage = (ev) => {
+      // Nachzuegler einer geschlossenen Verbindung (altes Spiel) ignorieren
+      if (socket !== ws) return
       try {
         handle(JSON.parse(ev.data) as ServerMessage)
       } catch (e) {
@@ -319,10 +357,18 @@ export const useGame = create<GameStore>((set, get) => {
       if (socket !== ws) return
       set({ conn: 'closed' })
       window.clearInterval(pingTimer)
+      if (get().spectator && isSpectateClose(ev.code)) {
+        // Zuschauen: diese Codes sind endgueltig (kein Reconnect) -> Toast, zurueck zur Lobby
+        socket = null
+        get().reset()
+        useNav.getState().go('play')
+        pushUiToast({ kind: 'info', icon: 'spectate', text: SPECTATE_CLOSE_TEXT[ev.code] })
+        return
+      }
       if (ev.code === 4404 || ev.code === 4401 || ev.code === 4403) {
         // 4404: Spiel existiert nicht mehr (Engine neu gestartet); 4401: Anmeldung ungueltig; 4403: fremdes Spiel
         socket = null
-        set({ gameId: null, hello: null, state: null, prompt: null, gameOver: null, thinking: null })
+        set({ gameId: null, hello: null, state: null, prompt: null, gameOver: null, thinking: null, spectator: false, viewer: null })
         useNav.getState().go('home')
         if (ev.code === 4401) {
           useAuth.getState().markLoggedOut()
@@ -349,7 +395,6 @@ export const useGame = create<GameStore>((set, get) => {
     activity: null,
     activityAt: 0,
     waitingFor: null,
-    toasts: [],
     gameOver: null,
     hover: null,
     tempo: 'NORMAL',
@@ -370,6 +415,28 @@ export const useGame = create<GameStore>((set, get) => {
       const t = text.trim()
       if (t) send({ t: 'chat', text: t.slice(0, 300) })
     },
+    spectators: [],
+    viewer: null,
+    setViewer: (v) => set({ viewer: v }),
+    stackFocus: null,
+    setStackFocus: (id) => {
+      if (get().stackFocus !== id) set({ stackFocus: id })
+    },
+    logFilter: loadLogFilter(),
+    setLogFilter: (f) => {
+      try {
+        localStorage.setItem('magelite.logFilter', f)
+      } catch {
+        /* egal */
+      }
+      set({ logFilter: f })
+    },
+    muted: sounds.isMuted(),
+    setMuted: (m) => {
+      sounds.setMuted(m)
+      set({ muted: m })
+    },
+    spectator: false,
     fx: [],
     recent: [],
     fxEnabled: loadBool('magelite.fx', true),
@@ -378,11 +445,15 @@ export const useGame = create<GameStore>((set, get) => {
       set({ fxEnabled: on, ...(on ? {} : { fx: [] }) })
     },
 
-    connect: (gameId) => {
+    connect: (gameId, opts) => {
       get().disconnect()
       seenReveals = new Set()
-      set({ gameId, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, fx: [], recent: [], chat: [], unreadChat: 0 })
+      set({ gameId, spectator: !!opts?.spectate, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], chat: [], unreadChat: 0 })
       open(gameId)
+    },
+    stopSpectating: () => {
+      get().reset()
+      useNav.getState().go('play')
     },
     disconnect: () => {
       window.clearTimeout(reconnectTimer)
@@ -428,7 +499,6 @@ export const useGame = create<GameStore>((set, get) => {
       send({ t: 'leave' })
     },
     setHover: (c) => set({ hover: c }),
-    dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
     dismissReveal: (key) => set({ reveals: get().reveals.filter((r) => r.key !== key) }),
     toggleMarks: (ids) => {
       const marked = new Set(get().marked)
@@ -480,10 +550,18 @@ export const useGame = create<GameStore>((set, get) => {
     },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, toasts: [], thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, fx: [], recent: [], chat: [], unreadChat: 0 })
+      set({ gameId: null, spectator: false, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], chat: [], unreadChat: 0 })
     },
   }
 })
+
+function loadLogFilter(): LogFilter {
+  try {
+    return localStorage.getItem('magelite.logFilter') === 'all' ? 'all' : 'important'
+  } catch {
+    return 'important'
+  }
+}
 
 function loadBool(key: string, def: boolean): boolean {
   try {

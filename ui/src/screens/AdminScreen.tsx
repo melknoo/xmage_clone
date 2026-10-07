@@ -1,69 +1,67 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../api/client'
+import { adminApi, type Account, type CreatedAccount as Created } from '../api/admin'
+import { Button, StatusDot, TextField } from '../components/ui'
 import { useAuth } from '../store/auth'
+import { pushToast } from '../store/ui'
 
-interface Account {
-  id: number
-  name: string
-  admin: boolean
-  createdAt: number
-  lastSeen: number | null
-  email: string | null
-  hasPassword: boolean
-}
+/** Spalten: Name · Status · Erstellt · Aktionen */
+const COLUMNS = 'minmax(140px,1fr) minmax(160px,1fr) minmax(120px,.8fr) 130px'
+const MONTHS = ['Jan.', 'Feb.', 'März', 'Apr.', 'Mai', 'Juni', 'Juli', 'Aug.', 'Sep.', 'Okt.', 'Nov.', 'Dez.']
 
-interface Created {
-  id: number
-  name: string
-  code: string
-}
-
-function ago(ts: number | null): string {
-  if (!ts) return 'noch nie'
-  const d = Date.now() - ts
-  const min = Math.floor(d / 60000)
-  if (min < 1) return 'gerade eben'
-  if (min < 60) return `vor ${min} min`
-  const h = Math.floor(min / 60)
-  if (h < 48) return `vor ${h} h`
-  return `vor ${Math.floor(h / 24)} Tagen`
-}
+/**
+ * Klartext-Codes dieser Sitzung (erzeugt oder rotiert). Der Server speichert nur den Hash, deshalb laesst sich
+ * spaeter nur kopieren, was in dieser Sitzung erzeugt wurde. Lebt bis zum Neuladen.
+ */
+const sessionCodes = new Map<number, string>()
 
 function inviteLink(code: string): string {
   return `${window.location.origin}${window.location.pathname}#invite=${code}`
 }
 
+/** "heute" | "gestern" | "12. Sep." (Vorjahr mit Jahreszahl) */
+function created(ts: number, now = Date.now()): string {
+  const d = new Date(ts)
+  const n = new Date(now)
+  const start = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((start(n) - start(d)) / 86_400_000)
+  if (days <= 0) return 'heute'
+  if (days === 1) return 'gestern'
+  return `${d.getDate()}. ${MONTHS[d.getMonth()]}${d.getFullYear() !== n.getFullYear() ? ` ${d.getFullYear()}` : ''}`
+}
+
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
+/** Einladungen (Admin): Code erzeugen, Liste mit Status, Kopieren (nur Codes dieser Sitzung), Rotieren, Loeschen. */
 export function AdminScreen() {
   const me = useAuth((s) => s.me)
   const [list, setList] = useState<Account[]>([])
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   /** zuletzt erzeugter Code (wird nur einmal angezeigt) */
   const [fresh, setFresh] = useState<Created | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     try {
-      setList(await api.get<Account[]>('/api/admin/invites'))
+      setList(await adminApi.list())
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      pushToast({ kind: 'error', text: errText(e) })
     }
   }, [])
 
   useEffect(() => {
-    reload()
+    void reload()
   }, [reload])
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true)
-    setError(null)
     try {
       await fn()
       await reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      pushToast({ kind: 'error', text: errText(e) })
     } finally {
       setBusy(false)
     }
@@ -71,143 +69,133 @@ export function AdminScreen() {
 
   const create = () =>
     run(async () => {
-      const c = await api.post<Created>('/api/admin/invites', { name: name.trim() })
+      const c = await adminApi.create(name.trim())
+      sessionCodes.set(c.id, c.code)
       setFresh(c)
       setName('')
     })
 
   const rotate = (a: Account) =>
     run(async () => {
-      const r = await api.post<{ id: number; code: string }>(`/api/admin/invites/${a.id}/rotate`)
+      const r = await adminApi.rotate(a.id)
+      sessionCodes.set(a.id, r.code)
       setFresh({ id: a.id, name: a.name, code: r.code })
+      pushToast({ kind: 'success', text: `Neuer Code für ${a.name} – der alte gilt nicht mehr` })
     })
 
   const remove = (a: Account) =>
     run(async () => {
-      await api.del(`/api/admin/invites/${a.id}`)
+      await adminApi.remove(a.id)
+      sessionCodes.delete(a.id)
       setConfirmDelete(null)
       if (fresh?.id === a.id) setFresh(null)
+      pushToast({ kind: 'success', text: `${a.name} gelöscht` })
     })
 
-  const copy = async (text: string, key: string) => {
+  const copyLink = async (code: string) => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopied(key)
-      window.setTimeout(() => setCopied(null), 1500)
+      await navigator.clipboard.writeText(inviteLink(code))
+      pushToast({ kind: 'success', text: 'Link kopiert' })
     } catch {
-      setError('Kopieren nicht möglich – bitte markieren und kopieren.')
+      pushToast({ kind: 'error', text: 'Kopieren nicht möglich – bitte markieren und kopieren.' })
     }
   }
 
   return (
-    <div className="h-full overflow-y-auto p-10 scrollbar-thin">
-      <div className="mx-auto flex max-w-4xl flex-col gap-6">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-gold-300">Einladungen</h1>
-          <p className="mt-1 text-sm text-ink-300">
-            Jeder Freund bekommt einen eigenen Code und damit eigene Decks, eigenen Helden und eigene Statistik. Codes werden nur einmal angezeigt.
-          </p>
-        </div>
+    <div className="flex h-full flex-col gap-4 overflow-y-auto px-8 py-[26px] scrollbar-thin board:gap-[26px] board:px-14 board:py-11">
+      <div className="flex items-baseline gap-4">
+        <h1 className="m-0 font-display text-[36px] font-semibold uppercase leading-none tracking-[.03em] text-fg-1">Einladungen</h1>
+        <span className="text-[14px] text-fg-3">Nur für dich als Admin sichtbar</span>
+      </div>
 
-        <div className="glass rounded-2xl p-5">
-          <div className="text-sm font-semibold text-ink-200">Neue Einladung</div>
-          <div className="mt-2 flex gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && name.trim() && create()}
-              maxLength={24}
-              placeholder="Name des Freundes"
-              className="flex-1 rounded-xl border border-white/10 bg-ink-950/60 px-3 py-2 text-ink-100 outline-none focus:border-gold-400/60"
-            />
-            <button
-              onClick={create}
-              disabled={busy || !name.trim()}
-              className="rounded-xl bg-gold-400/15 px-4 py-2 font-semibold text-gold-300 ring-1 ring-gold-400/40 transition hover:bg-gold-400/25 disabled:opacity-40"
-            >
-              Anlegen
-            </button>
-          </div>
-        </div>
+      <form
+        className="flex max-w-[720px] items-end gap-2.5"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (name.trim() && !busy) void create()
+        }}
+      >
+        <TextField className="flex-1" fieldHeight={42} label="Name des Freundes" value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="z. B. Jonas" data-testid="admin-name" />
+        <Button type="submit" variant="primary" icon="code" disabled={busy || !name.trim()} testId="admin-create-code" style={{ height: 40, padding: '0 16px', fontSize: 17 }}>
+          Code erzeugen
+        </Button>
+      </form>
 
-        {fresh && (
-          <div className="rounded-2xl border border-gold-400/40 bg-gold-400/10 p-5">
-            <div className="text-sm font-semibold text-gold-200">Code für {fresh.name} – jetzt weitergeben, er wird nicht noch einmal angezeigt</div>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <code className="rounded-lg bg-ink-950/70 px-3 py-2 font-mono text-lg tracking-[0.15em] text-gold-200">{fresh.code}</code>
-              <button onClick={() => copy(fresh.code, 'code')} className="rounded-lg bg-white/5 px-3 py-2 text-sm text-ink-100 hover:bg-white/10">
-                {copied === 'code' ? 'Kopiert ✓' : 'Code kopieren'}
-              </button>
-              <button onClick={() => copy(inviteLink(fresh.code), 'link')} className="rounded-lg bg-white/5 px-3 py-2 text-sm text-ink-100 hover:bg-white/10">
-                {copied === 'link' ? 'Kopiert ✓' : 'Link kopieren'}
-              </button>
-              <button onClick={() => setFresh(null)} className="ml-auto text-sm text-ink-400 hover:text-ink-200">
-                Ausblenden
-              </button>
+      {fresh && (
+        <div className="flex max-w-[980px] items-center gap-[18px] rounded-md bg-bg-3 px-[18px] py-4" style={{ boxShadow: 'inset 0 0 0 1px var(--color-target)' }} data-testid="admin-fresh-code">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <span className="label" style={{ color: 'var(--color-target)' }}>
+              Neuer Code für {fresh.name} · nur jetzt sichtbar
+            </span>
+            <div className="flex min-w-0 flex-wrap items-baseline gap-4">
+              <span className="font-mono text-[24px] font-medium leading-none tracking-[.12em] text-fg-1 select-all">{fresh.code}</span>
+              <span className="min-w-0 truncate font-mono text-[12.5px] font-medium text-fg-3 select-all">{inviteLink(fresh.code).replace(/^https?:\/\//, '')}</span>
             </div>
-            <div className="mt-2 break-all font-mono text-xs text-ink-400">{inviteLink(fresh.code)}</div>
           </div>
-        )}
-
-        {error && <div className="rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{error}</div>}
-
-        <div className="glass overflow-hidden rounded-2xl">
-          <table className="w-full text-sm">
-            <thead className="bg-white/5 text-left text-xs uppercase tracking-wider text-ink-400">
-              <tr>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">Anmeldung</th>
-                <th className="px-4 py-2">Zuletzt gesehen</th>
-                <th className="px-4 py-2 text-right">Aktionen</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-ink-400">
-                    Noch keine Einladungen.
-                  </td>
-                </tr>
-              )}
-              {list.map((a) => (
-                <tr key={a.id} className="border-t border-white/5">
-                  <td className="px-4 py-2 text-ink-100">
-                    {a.name}
-                    {a.admin && <span className="ml-2 rounded bg-gold-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-gold-300">Admin</span>}
-                    {a.id === me?.id && <span className="ml-2 text-xs text-ink-400">(du)</span>}
-                  </td>
-                  <td className="px-4 py-2 text-ink-300">{a.hasPassword ? <span title="Konto mit E-Mail + Passwort gesichert">{a.email}</span> : <span className="text-ink-400">Gast (nur Code)</span>}</td>
-                  <td className="px-4 py-2 text-ink-300">{ago(a.lastSeen)}</td>
-                  <td className="px-4 py-2 text-right">
-                    {confirmDelete === a.id ? (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="text-xs text-blood-300">Konto und Decks löschen?</span>
-                        <button onClick={() => remove(a)} disabled={busy} className="rounded bg-blood-500/20 px-2 py-1 text-xs font-semibold text-blood-300 hover:bg-blood-500/30">
-                          Ja, löschen
-                        </button>
-                        <button onClick={() => setConfirmDelete(null)} className="rounded bg-white/5 px-2 py-1 text-xs text-ink-200 hover:bg-white/10">
-                          Abbrechen
-                        </button>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <button onClick={() => rotate(a)} disabled={busy} className="rounded bg-white/5 px-2 py-1 text-xs text-ink-200 hover:bg-white/10" title="Neuer Code, der alte wird sofort ungültig">
-                          Neuer Code
-                        </button>
-                        {a.id !== me?.id && (
-                          <button onClick={() => setConfirmDelete(a.id)} disabled={busy} className="rounded bg-white/5 px-2 py-1 text-xs text-ink-200 hover:bg-blood-500/20 hover:text-blood-300">
-                            Entfernen
-                          </button>
-                        )}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Button variant="secondary" icon="copy" onClick={() => void copyLink(fresh.code)} testId="admin-copy-fresh">
+            Link kopieren
+          </Button>
         </div>
+      )}
+
+      <div className="flex max-w-[1100px] flex-col" role="table" aria-label="Einladungen">
+        <div role="row" className="tbl-head" style={{ gridTemplateColumns: COLUMNS }}>
+          <span>Name</span>
+          <span>Status</span>
+          <span>Erstellt</span>
+          <span />
+        </div>
+        {list.length === 0 && <div className="px-3 py-4 text-[13px] text-fg-3">Noch keine Einladungen.</div>}
+        {list.map((a) => {
+          const own = a.id === me?.id
+          const used = a.lastSeen !== null
+          const code = sessionCodes.get(a.id)
+          return (
+            <div key={a.id} role="row" className="tbl-row" style={{ gridTemplateColumns: COLUMNS }} data-testid="admin-row">
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="truncate text-[14px] font-semibold text-fg-1">{a.name}</span>
+                {own && <span className="text-[12px] text-fg-3">(du)</span>}
+              </span>
+              <span className={`flex min-w-0 items-center gap-[7px] text-[13px] ${used ? 'text-fg-2' : 'text-fg-3'}`}>
+                <StatusDot status={used ? 'used' : 'unused'} className="!h-[7px] !w-[7px]" />
+                <span className="truncate" title={a.hasPassword && a.email ? a.email : undefined}>
+                  {used ? `Angemeldet · ${a.hasPassword ? 'Konto gesichert' : 'Gast'}` : 'Code noch nicht benutzt'}
+                </span>
+              </span>
+              <span className="text-[13px] text-fg-3">{created(a.createdAt)}</span>
+              <span className="flex justify-end gap-1">
+                {confirmDelete === a.id ? (
+                  <Button variant="dangerConfirm" size="xs" autoFocus disabled={busy} onBlur={() => setConfirmDelete(null)} onClick={() => void remove(a)} testId="admin-delete-confirm">
+                    Wirklich löschen?
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="icon"
+                      icon="copy"
+                      className={ICON_CLASS} style={iconStyle}
+                      disabled={!code}
+                      title={code ? 'Link kopieren' : 'Code nur direkt nach dem Erzeugen sichtbar – Code rotieren erzeugt einen neuen'}
+                      aria-label="Link kopieren"
+                      onClick={() => code && void copyLink(code)}
+                    />
+                    {!own && (
+                      <>
+                        <Button variant="icon" icon="rotate" className={ICON_CLASS} style={iconStyle} disabled={busy} title="Code rotieren" aria-label="Code rotieren" onClick={() => void rotate(a)} testId="admin-rotate" />
+                        <Button variant="icon" icon="delete" className={ICON_CLASS} style={iconStyle} disabled={busy} title="Löschen" aria-label="Löschen" onClick={() => setConfirmDelete(a.id)} testId="admin-delete" />
+                      </>
+                    )}
+                  </>
+                )}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
+
+/** Icon-Knoepfe der Liste: Kontur line-3, fg-2 (Prototyp) */
+const ICON_CLASS = '!text-fg-2 hover:!text-fg-1'
+const iconStyle = { boxShadow: 'inset 0 0 0 1px var(--color-line-3)' }

@@ -8,13 +8,28 @@ export interface Me {
   /** gesichertes Konto: E-Mail + Passwort gesetzt; sonst "Gast" (nur Einladungscode) */
   email: string | null
   hasPassword: boolean
+  /**
+   * Aktuelle Session ("angemeldet seit"). Die Engine sendet sie NICHT im user-Objekt, sondern als MeResponse.session;
+   * der Store muss sie beim Uebernehmen hineinkopieren (noch offen). null/fehlt: lokal oder altes Code-Cookie.
+   */
+  session?: SessionInfo | null
+}
+
+/** Session-Info aus /api/me, /api/auth/login, /api/auth/register, PUT /api/auth/account */
+export interface SessionInfo {
+  /** Anmeldezeitpunkt (ms) */
+  since: number
+  /** Anmeldeweg */
+  via: 'code' | 'password'
 }
 
 export type ServerMode = 'local' | 'server'
 
-interface MeResponse {
+export interface MeResponse {
   mode: ServerMode
   user: Me
+  /** nur Server-Modus mit Session-Cookie; sonst null */
+  session?: SessionInfo | null
 }
 
 interface AuthStore {
@@ -58,7 +73,7 @@ export const useAuth = create<AuthStore>((set, get) => {
   setUnauthorizedHandler(() => {
     if (get().mode === 'server') set({ status: 'login', me: null })
   })
-  const apply = (r: MeResponse) => set({ mode: r.mode, me: r.user, status: 'ok', error: null, secureDismissed: loadDismissed(r.user.id) })
+  const apply = (r: MeResponse) => set({ mode: r.mode, me: { ...r.user, session: r.session ?? null }, status: 'ok', error: null, secureDismissed: loadDismissed(r.user.id) })
   return {
     mode: null,
     me: null,

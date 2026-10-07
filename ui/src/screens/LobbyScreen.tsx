@@ -1,137 +1,211 @@
-import { useCallback, useEffect, useState } from 'react'
-import { tablesApi, type Table } from '../api/tables'
+import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { tablesApi, type Table, type TableSeat } from '../api/tables'
+import { Button, EmptyState } from '../components/ui'
+import { Icon, type IconName } from '../lib/icons'
+import { tempoLabel } from '../lib/tempo'
 import { useAuth } from '../store/auth'
+import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
+import { useSocial } from '../store/social'
 import { useTable } from '../store/table'
+import { pushToast } from '../store/ui'
 
 const POLL_MS = 3000
 
-function ago(ts: number): string {
-  const min = Math.floor((Date.now() - ts) / 60000)
-  if (min < 1) return 'gerade eben'
-  if (min < 60) return `vor ${min} min`
-  return `vor ${Math.floor(min / 60)} h`
+/** Spalten: Tisch · Plaetze · Tempo · Status · Aktion */
+const COLUMNS = 'minmax(200px,1.6fr) minmax(200px,1.4fr) 100px 120px 150px'
+
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }
 
-/** Online: offene Tische, Tisch eröffnen, Solo-Spiel gegen Bots. */
+/** Sichtbare Online-Mitglieder aus dem Social-Snapshot (Feld von O1; undefined = unbekannt) */
+function selectOnline(s: unknown): number | undefined {
+  const v = (s as { online?: number }).online
+  return typeof v === 'number' ? v : undefined
+}
+
+/** Online: Lobby mit offenen und laufenden Tischen, Tisch eroeffnen, allein ueben, zuschauen. */
 export function LobbyScreen() {
   const go = useNav((s) => s.go)
   const me = useAuth((s) => s.me)
   const tableId = useTable((s) => s.tableId)
   const setTableId = useTable((s) => s.setTableId)
+  const online = useSocial(selectOnline)
   const [tables, setTables] = useState<Table[] | null>(null)
-  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    const stamp = useTable.getState().stamp
     try {
       const list = await tablesApi.list()
       setTables(list)
-      const mine = list.find((t) => t.mySeat !== null)
-      setTableId(mine ? mine.id : null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      useTable.getState().observeList(list, stamp)
+    } catch {
+      // Netz/Neustart: die Verbindungsleiste zeigt es, weiter pollen
     }
-  }, [setTableId])
+  }, [])
 
   useEffect(() => {
-    load()
-    const iv = window.setInterval(load, POLL_MS)
+    void load()
+    const iv = window.setInterval(() => {
+      if (!document.hidden) void load()
+    }, POLL_MS)
     return () => window.clearInterval(iv)
   }, [load])
 
-  const run = async (fn: () => Promise<Table | void>) => {
+  const run = async (fn: () => Promise<Table>) => {
     setBusy(true)
-    setError(null)
     try {
       const t = await fn()
-      if (t) {
-        setTableId(t.id)
-        go('table')
-      }
+      setTableId(t.id)
+      go('table')
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      pushToast({ kind: 'error', text: errText(e) })
     } finally {
       setBusy(false)
     }
   }
 
+  const openTable = () => {
+    if (tableId) go('table')
+    else void run(() => tablesApi.create())
+  }
+
+  const spectate = (t: Table) => {
+    if (!t.gameId) return
+    useGame.getState().connect(t.gameId, { spectate: true })
+    go('game')
+  }
+
+  const count = tables?.length ?? 0
+  const sub = [count === 1 ? '1 Tisch' : `${count} Tische`, online !== undefined ? `${online} Spieler online` : null].filter(Boolean).join(' · ')
+
   return (
-    <div className="h-full overflow-y-auto p-8 scrollbar-thin">
-      <h1 className="font-display text-3xl font-bold tracking-wide text-gold-300">Lobby</h1>
-      <p className="mt-1 text-ink-300">Mit Freunden an einem Tisch – oder schnell allein gegen drei Bots.</p>
+    <div className="flex h-full flex-col gap-4 overflow-y-auto px-8 py-[26px] scrollbar-thin board:gap-[26px] board:px-14 board:py-11">
+      <div className="flex items-center gap-4">
+        <h1 className="m-0 font-display text-[36px] font-semibold uppercase leading-none tracking-[.03em] text-fg-1">Lobby</h1>
+        {tables !== null && <span className="text-[14px] text-fg-3">{count === 0 ? 'Kein offener Tisch' : sub}</span>}
+        <span className="flex-1" />
+        <Button variant="secondary" icon="autoMana" onClick={() => go('solo')} testId="lobby-solo">
+          Allein üben
+        </Button>
+        <Button variant="primary" icon="plus" disabled={busy} onClick={openTable} testId="lobby-open-table">
+          Tisch eröffnen
+        </Button>
+      </div>
 
-      <div className="mt-8 grid max-w-5xl gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-ink-300">Tische</h2>
-          <div className="flex flex-col gap-2">
-            {tables === null && <div className="text-ink-400">Lade …</div>}
-            {tables?.length === 0 && <div className="rounded-2xl bg-ink-900/60 p-6 text-center text-ink-400 ring-1 ring-white/10">Noch kein Tisch offen – eröffne einen und schick den Link herum.</div>}
-            {tables?.map((t) => {
-              const seated = t.mySeat !== null
-              const free = t.seats.filter((s) => s.kind === 'OPEN').length
-              return (
-                <div key={t.id} className={`flex items-center gap-4 rounded-2xl px-5 py-3 ring-1 ${seated ? 'bg-gold-400/10 ring-gold-400/40' : 'bg-ink-900/60 ring-white/10'}`}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-display text-lg font-semibold text-ink-100">{t.name}</span>
-                      {t.state === 'RUNNING' ? (
-                        <span className="rounded bg-arcane-500/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-arcane-400">spielt</span>
-                      ) : (
-                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-ink-300">offen</span>
-                      )}
-                    </div>
-                    <div className="truncate text-xs text-ink-400">
-                      Gastgeber {t.hostName} · {t.seats.filter((s) => s.kind === 'HUMAN').map((s) => s.name).join(', ')} · {free} frei · {ago(t.updatedAt)}
-                    </div>
-                  </div>
-                  {seated ? (
-                    <button className="btn-primary !px-3 !py-1.5 !text-xs" onClick={() => go('table')}>
-                      Zum Tisch
-                    </button>
-                  ) : t.state === 'LOBBY' && free > 0 ? (
-                    <button className="btn-ghost !px-3 !py-1.5 !text-xs" disabled={busy} onClick={() => run(() => tablesApi.join(t.id))}>
-                      Beitreten
-                    </button>
-                  ) : (
-                    <span className="text-xs text-ink-500">{t.state === 'RUNNING' ? 'läuft' : 'voll'}</span>
-                  )}
-                </div>
-              )
-            })}
+      {tables !== null && tables.length === 0 ? (
+        <EmptyState
+          className="flex-1"
+          icon="lobby"
+          title="Gerade kein offener Tisch"
+          text="Eröffne einen Tisch und lade Freunde ein. Freie Plätze bleiben leer – setze Bots oder lade Freunde ein."
+          primary={
+            <Button variant="primary" icon="plus" disabled={busy} onClick={openTable}>
+              Tisch eröffnen
+            </Button>
+          }
+        />
+      ) : (
+        <div className="flex flex-col" role="table" aria-label="Tische">
+          <div role="row" className="tbl-head" style={{ gridTemplateColumns: COLUMNS, padding: '0 14px 10px' }}>
+            <span>Tisch</span>
+            <span>Plätze</span>
+            <span>Tempo</span>
+            <span>Status</span>
+            <span />
           </div>
-          {error && <div className="mt-3 rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{error}</div>}
-        </section>
+          {tables?.map((t) => (
+            <LobbyRow key={t.id} t={t} meName={me?.name} busy={busy} onOpen={() => {
+              setTableId(t.id)
+              go('table')
+            }} onJoin={() => void run(() => tablesApi.join(t.id))} onSpectate={() => spectate(t)} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
-        <section className="flex flex-col gap-6">
-          <div className="glass rounded-2xl p-5">
-            <div className="text-sm font-semibold text-ink-200">Tisch eröffnen</div>
-            <div className="mt-1 text-xs text-ink-400">Du bist Gastgeber: Freunde treten über die Lobby oder deinen Link bei, freie Plätze füllst du mit Bots.</div>
-            <div className="mt-3 flex gap-2">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !busy && run(() => tablesApi.create(name.trim() || undefined))}
-                maxLength={40}
-                placeholder={me ? `Tisch von ${me.name}` : 'Name des Tisches'}
-                className="flex-1 rounded-xl border border-white/10 bg-ink-950/60 px-3 py-2 text-ink-100 outline-none focus:border-gold-400/60"
-              />
-              <button className="btn-primary !px-4 !py-2 !text-sm" disabled={busy || !!tableId} onClick={() => run(() => tablesApi.create(name.trim() || undefined))}>
-                Eröffnen
-              </button>
-            </div>
-            {tableId && <div className="mt-2 text-xs text-ink-400">Du sitzt schon an einem Tisch.</div>}
-          </div>
-          <div className="glass rounded-2xl p-5">
-            <div className="text-sm font-semibold text-ink-200">Allein üben</div>
-            <div className="mt-1 text-xs text-ink-400">Dein Deck gegen drei Bots, sofort los.</div>
-            <button className="btn-ghost mt-3 !text-sm" onClick={() => go('solo')}>
-              Schnellspiel gegen Bots ›
-            </button>
-          </div>
-        </section>
+/** wie GameHost.MAX_SPECTATORS */
+const MAX_SPECTATORS = 8
+
+function LobbyRow({ t, meName, busy, onOpen, onJoin, onSpectate }: { t: Table; meName?: string; busy: boolean; onOpen: () => void; onJoin: () => void; onSpectate: () => void }) {
+  const seated = t.mySeat !== null
+  const running = t.state === 'RUNNING'
+  const free = t.seats.filter((s) => s.kind === 'OPEN').length
+  const hostLabel = t.host ? `${meName ?? t.hostName} (du)` : t.hostName
+
+  let status: { text: string; color: string }
+  if (seated) status = { text: 'Du sitzt hier', color: 'var(--color-ember)' }
+  else if (running) status = { text: t.turn ? `Läuft · Zug ${t.turn}` : 'Läuft', color: 'var(--color-fg-3)' }
+  else if (free > 0) status = { text: `Offen · ${t.humans}/4`, color: 'var(--color-chosen)' }
+  else status = { text: 'Voll', color: 'var(--color-fg-3)' }
+
+  const rowStyle: CSSProperties = { gridTemplateColumns: COLUMNS, padding: 14 }
+  if (seated) {
+    rowStyle.background = 'color-mix(in oklab, var(--color-ember) 5%, transparent)'
+    rowStyle.boxShadow = 'inset 2px 0 0 var(--color-ember)'
+  }
+  const btnStyle: CSSProperties = { height: 36, padding: '0 14px', fontSize: 15 }
+
+  return (
+    <div role="row" className="tbl-row" style={rowStyle} data-testid="lobby-row" data-table={t.id}>
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="truncate font-display text-[20px] font-semibold leading-none text-fg-1">{t.name}</span>
+        <span className="truncate text-[12.5px] text-fg-3">Gastgeber {hostLabel}</span>
+      </div>
+      <div className="flex min-w-0 flex-wrap gap-1.5">
+        {t.seats.map((s, i) => (
+          <SeatChip key={i} seat={s} />
+        ))}
+      </div>
+      <span className="font-display text-[15px] font-semibold uppercase leading-none tracking-[.06em] text-fg-2">{tempoLabel(t.tempo)}</span>
+      <span className="font-display text-[13px] font-semibold uppercase leading-none tracking-[.08em]" style={{ color: status.color }}>
+        {status.text}
+      </span>
+      <div className="flex justify-end">
+        {seated ? (
+          <Button variant="primary" style={btnStyle} onClick={onOpen} testId="lobby-open">
+            Öffnen
+          </Button>
+        ) : !running && free > 0 ? (
+          <Button variant="secondary" style={btnStyle} disabled={busy} onClick={onJoin} testId="lobby-join">
+            Setzen
+          </Button>
+        ) : running && t.canSpectate && t.gameId ? (
+          <Button variant="ghost" style={btnStyle} onClick={onSpectate} testId="spectate-btn" title={t.spectators ? `${t.spectators} schauen zu` : undefined}>
+            Zuschauen
+          </Button>
+        ) : running && t.gameId ? (
+          <Button
+            variant="ghost"
+            style={btnStyle}
+            disabled
+            testId="spectate-btn"
+            title={(t.spectators ?? 0) >= MAX_SPECTATORS ? `Alle ${MAX_SPECTATORS} Zuschauerplätze sind belegt` : 'Zuschauen geht nur, solange du an keinem Tisch sitzt'}
+          >
+            Zuschauen
+          </Button>
+        ) : null}
       </div>
     </div>
+  )
+}
+
+function SeatChip({ seat }: { seat: TableSeat }) {
+  const open = seat.kind === 'OPEN'
+  const icon: IconName = seat.kind === 'BOT' ? 'bot' : open ? 'addFriend' : 'human'
+  const label = seat.kind === 'BOT' ? 'Bot' : open ? 'frei' : (seat.name ?? '?')
+  return (
+    <span
+      className={`inline-flex h-7 items-center gap-[5px] rounded-xs px-2 text-[12.5px] font-semibold ${open ? 'text-fg-4' : 'bg-bg-4 text-fg-1'}`}
+      style={open ? { boxShadow: 'inset 0 0 0 1px var(--color-line-3)' } : undefined}
+      title={open ? 'Freier Platz' : seat.kind === 'BOT' ? 'Bot' : seat.name}
+    >
+      <Icon name={icon} size={12} />
+      <span className="max-w-[110px] truncate">{label}</span>
+    </span>
   )
 }

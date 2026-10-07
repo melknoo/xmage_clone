@@ -1,59 +1,161 @@
+/* MageLite · Graphit & Glut — Tailwind CSS 4 theme
+   Ersetzt current-theme.css. Reihenfolge der Imports beibehalten. */
 @import "tailwindcss";
 @import "mana-font/css/mana.min.css";
-@import "@fontsource-variable/inter";
-@import "@fontsource/cinzel/600.css";
-@import "@fontsource/cinzel/700.css";
+@import "@fontsource/barlow-condensed/500.css";
+@import "@fontsource/barlow-condensed/600.css";
+@import "@fontsource/barlow-condensed/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+/* MageLite: echte Kursive fuer Rich-Segmente (Erinnerungstext der Engine) */
+@import "@fontsource/ibm-plex-sans/400-italic.css";
 
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Cinzel", ui-serif, Georgia, serif;
+  /* Schriften */
+  --font-display: "Barlow Condensed", ui-sans-serif, sans-serif;   /* Zahlen, Labels, Überschriften */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif; /* UI- und Engine-Text */
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;           /* Tastenhinweise */
 
-  --color-ink-950: #07090f;
-  --color-ink-900: #0b0f18;
-  --color-ink-850: #0f1420;
-  --color-ink-800: #141a28;
-  --color-ink-700: #1c2436;
-  --color-ink-600: #273049;
-  --color-ink-500: #3a4563;
-  --color-ink-400: #5b6788;
-  --color-ink-300: #8d97b3;
-  --color-ink-200: #c3c9da;
-  --color-ink-100: #e7eaf2;
+  /* Flächen (dunkel → hell) */
+  --color-bg-0: #0d0c0b;  /* Fenster, Eingabefelder, Kartenreihen */
+  --color-bg-1: #121110;  /* Brett, Screens */
+  --color-bg-2: #161513;  /* Seitenleiste */
+  --color-bg-3: #1a1917;  /* Fläche, Modal, Aktionsleiste */
+  --color-bg-4: #23211e;  /* erhöht, Hover, Toast */
+  /* Linien */
+  --color-line-1: #22201d; /* Listenzeilen */
+  --color-line-2: #2a2824; /* Bereichstrenner */
+  --color-line-3: #34312c; /* Konturen, Modal-Kante */
+  --color-line-4: #4a463f; /* Sekundär-Button, Input-Hover */
+  /* Text */
+  --color-fg-1: #ece7de;  /* primär */
+  --color-fg-2: #c9c3b8;  /* sekundär, Regeltext */
+  --color-fg-3: #9b958a;  /* Labels, Meta */
+  --color-fg-4: #6f6a62;  /* Icons inaktiv */
+  --color-fg-5: #5a564f;  /* erledigt (nur ≥ 13 px, nie für Pflichtinfo) */
+  /* Signal: „jetzt du“ */
+  --color-ember: #ff7a3d;
+  --color-ember-hover: #ff8f5a;
+  --color-ember-press: #e8662b;
+  --color-ember-ink: #121110;
+  /* Zustände */
+  --color-target: #ffd23f;  /* Ziel, XP, Belohnung */
+  --color-chosen: #7ee08a;  /* gewählt, Erfolg, legal */
+  --color-attack: #ef3e56;  /* Angreifer, Fehler, Gefahr, tödlich */
+  --color-block: #5aa9ff;   /* Blocker, Info */
+  /* Plätze (nur Avatar-Kante, Verlauf) */
+  --color-seat-1: #ff7a3d;
+  --color-seat-2: #8fb3c9;
+  --color-seat-3: #a99bc4;
+  --color-seat-4: #c9a38f;
 
-  --color-arcane-400: #38e1c6;
-  --color-arcane-500: #1fc4aa;
-  --color-gold-300: #ffd98a;
-  --color-gold-400: #f5b84a;
-  --color-gold-500: #e09a1f;
-  --color-blood-400: #ff6b6b;
-  --color-blood-500: #e5484d;
-  --color-sky-400: #5cb8ff;
+  /* Typo-Skala (px / Zeilenhöhe) */
+  --text-life-xl: 84px;   --text-life-xl--line-height: .8;   /* eigenes Leben */
+  --text-life-l: 46px;    --text-life-l--line-height: .8;    /* Gegner-Leben */
+  --text-display: 40px;   --text-display--line-height: 1;
+  --text-h1: 32px;        --text-h1--line-height: 1.05;
+  --text-h2: 22px;        --text-h2--line-height: 1.15;
+  --text-label: 13px;     --text-label--line-height: 1;      /* Barlow 600, Versalien, .12em */
+  --text-body-l: 16px;    --text-body-l--line-height: 1.45;
+  --text-body: 14px;      --text-body--line-height: 1.45;
+  --text-body-s: 12.5px;  --text-body-s--line-height: 1.4;
+  --text-kbd: 10.5px;     --text-kbd--line-height: 1;
 
-  --animate-pulse-ring: pulse-ring 1.4s ease-in-out infinite;
+  /* Abstände: Tailwind-Basis 4 px (p-1 = 4 px) bleibt. Benutzte Stufen:
+     0.5 (2) · 1 (4) · 1.5 (6) · 2 (8) · 3 (12) · 4 (16) · 5 (20) · 6 (24) · 8 (32) · 10 (40) · 14 (56) */
+  --spacing: 4px;
+
+  /* Radien */
+  --radius-xs: 2px;   /* Chips, Badges, Tastenhinweise */
+  --radius-sm: 3px;   /* Buttons, Inputs, Kartenrahmen klein */
+  --radius-md: 4px;   /* Panels, Modal, Kacheln */
+  --radius-card: 4.5%; /* Kartenbild (Scryfall-Ecken) */
+
+  /* Schatten: nur für schwebende Ebenen */
+  --shadow-float: 0 24px 64px rgba(0,0,0,.6), 0 0 0 1px var(--color-line-3);
+  --shadow-card: 0 0 0 1px rgba(0,0,0,.8), 0 1px 3px rgba(0,0,0,.6);
+
+  /* Motion */
+  --ease-out: cubic-bezier(.2,.8,.2,1);
+  --ease-in-out: cubic-bezier(.6,0,.2,1);
+  --duration-1: 90ms;   /* Hover, Press */
+  --duration-2: 160ms;  /* Kartenzustand, Tabs, Toggles */
+  --duration-3: 240ms;  /* Modal, Toast, Minimieren */
+  --duration-4: 420ms;  /* Karte fliegt zwischen Zonen */
+  --duration-xp: 1200ms;
+
+  --animate-target: target-dash 1.6s linear infinite;
+  --animate-think: think 1.2s var(--ease-in-out) infinite;
 }
 
-@keyframes pulse-ring {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 184, 74, 0.9), 0 0 14px 2px rgba(245, 184, 74, 0.45); }
-  50% { box-shadow: 0 0 0 2px rgba(245, 184, 74, 0.5), 0 0 22px 6px rgba(245, 184, 74, 0.25); }
-}
+@keyframes target-dash { to { stroke-dashoffset: -24; } }
+@keyframes think { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
 
-:root {
-  color-scheme: dark;
-}
-
-html, body, #root {
-  height: 100%;
-}
-
+:root { color-scheme: dark; }
+html, body, #root { height: 100%; }
 body {
-  margin: 0;
-  background: var(--color-ink-950);
-  color: var(--color-ink-100);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-  user-select: none;
+  margin: 0; background: var(--color-bg-1); color: var(--color-fg-1);
+  font-family: var(--font-sans); font-size: 14px; -webkit-font-smoothing: antialiased;
+  overflow: hidden; user-select: none; font-variant-numeric: tabular-nums;
 }
+input, textarea, select { user-select: text; }
+a { color: var(--color-ember); } a:hover { color: var(--color-ember-hover); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
+}
+
+/* ---------- Typo ---------- */
+@utility label { font-family: var(--font-display); font-weight: 600; font-size: var(--text-label); letter-spacing: .12em; text-transform: uppercase; color: var(--color-fg-3); }
+@utility num { font-family: var(--font-display); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Buttons ---------- */
+@utility btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 14px; border-radius: var(--radius-sm);
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
+  transition: background-color var(--duration-1), color var(--duration-1), box-shadow var(--duration-1), transform var(--duration-1);
+  &:active { transform: translateY(1px); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  &:disabled { opacity: .4; pointer-events: none; }
+}
+@utility btn-primary { @apply btn; background: var(--color-ember); color: var(--color-ember-ink); height: 44px; padding: 0 18px; font-size: 18px; &:hover { background: var(--color-ember-hover); } &:active { background: var(--color-ember-press); } }
+@utility btn-secondary { @apply btn; box-shadow: inset 0 0 0 1px var(--color-line-4); color: var(--color-fg-1); &:hover { background: var(--color-bg-4); } }
+@utility btn-ghost { @apply btn; color: var(--color-fg-2); &:hover { color: var(--color-fg-1); background: var(--color-bg-4); } }
+@utility btn-danger { @apply btn; color: var(--color-attack); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-attack) 50%, transparent); &:hover { background: color-mix(in oklab, var(--color-attack) 12%, transparent); } }
+@utility btn-danger-confirm { @apply btn; background: var(--color-attack); color: var(--color-ember-ink); }
+@utility btn-icon { @apply btn; width: 32px; height: 32px; padding: 0; color: var(--color-fg-3); &:hover { color: var(--color-fg-1); background: var(--color-bg-4); } }
+@utility kbd { font-family: var(--font-mono); font-weight: 500; font-size: var(--text-kbd); letter-spacing: 0; text-transform: none; padding: 3px 5px; border-radius: var(--radius-xs); background: color-mix(in oklab, currentColor 14%, transparent); }
+
+/* ---------- Flächen ---------- */
+@utility surface { background: var(--color-bg-3); border-radius: var(--radius-md); }
+@utility outline-panel { border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--color-line-3); }
+@utility section-rule { border-top: 1px solid var(--color-line-2); }
+@utility floating { background: var(--color-bg-3); border-radius: var(--radius-md); box-shadow: var(--shadow-float); }
+@utility scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-4) transparent; }
+
+/* ---------- Chips ---------- */
+@utility chip { display: inline-flex; align-items: center; gap: 5px; padding: 5px 8px; border-radius: var(--radius-xs); font-family: var(--font-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+@utility chip-turn { @apply chip; background: var(--color-ember); color: var(--color-ember-ink); }
+@utility chip-outline { @apply chip; box-shadow: inset 0 0 0 1px var(--color-line-4); color: var(--color-fg-2); }
+
+/* ---------- Kartenzustände (CardView) ----------
+   Priorität bei mehreren Zuständen: gewählt > Ziel > Angreifer/Blocker > spielbar > Mana-Quelle.
+   Getappt (rotate 90°) und Overlays (P/T, Zähler, Schaden, krank) kombinieren sich frei. */
+@utility card-base { border-radius: var(--radius-card); box-shadow: var(--shadow-card); transition: box-shadow var(--duration-2) var(--ease-out), transform var(--duration-2) var(--ease-out); }
+@utility card-playable { box-shadow: 0 0 0 2px var(--color-ember), 0 0 0 4px var(--color-bg-1); }
+@utility card-mana { box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-ember) 55%, transparent); }
+@utility card-target { box-shadow: 0 0 0 2px var(--color-target), 0 0 0 4px var(--color-bg-1); } /* + umlaufende Strichkontur (SVG, --animate-target) */
+@utility card-chosen { box-shadow: 0 0 0 2px var(--color-chosen), 0 0 0 4px var(--color-bg-1); }
+@utility card-attacking { box-shadow: 0 0 0 2px var(--color-attack), 0 0 0 4px var(--color-bg-1); }
+@utility card-blocking { box-shadow: 0 0 0 2px var(--color-block), 0 0 0 4px var(--color-bg-1); }
+@utility card-tapped { transform: rotate(90deg); }
+
+
+/* =====================================================================================
+   MageLite-Ergaenzungen (F-A). Alles unterhalb gehoert nicht zum Handoff-Theme.
+   ===================================================================================== */
 
 /* Edge zeigt sonst ein eigenes Auge neben dem von PasswordInput */
 input::-ms-reveal,
@@ -61,81 +163,195 @@ input::-ms-clear {
   display: none;
 }
 
-input, textarea, select {
-  user-select: text;
+@theme {
+  /* Tailwind 4.3 sucht duration-N unter --transition-duration-N, sonst wird es N ms */
+  --transition-duration-1: 90ms;
+  --transition-duration-2: 160ms;
+  --transition-duration-3: 240ms;
+  --transition-duration-4: 420ms;
+  --transition-duration-xp: 1200ms;
+  --default-transition-duration: 90ms;
+  --default-transition-timing-function: cubic-bezier(.2,.8,.2,1);
+
+  /* Farben aus den Prototypen, die im Theme fehlen */
+  --color-fg-tab: #7d786f;          /* inaktive Tabs, Nav, Segmented inline */
+  --color-bg-board: #0f0e0d;        /* Pod-Spielfeld, Handreihe */
+  --color-line-board: #24221f;      /* Haarlinie in Brett-Reihen, Letzte Partien */
+  --color-chip-line: #3a362f;       /* Kontur der Karten-Chips (×N, P/T) */
+  --color-danger-bg: #2a1619;       /* Fehler-Toast, Verbindungsleiste, Aufgeben-Box */
+  --color-phase-next: #d8d2c7;      /* kommende Phasenschritte */
+  --color-phase-combat: #b3ada3;    /* kommende Kampfschritte */
+  --color-phase-combat-bg: #171614; /* Tönung der Kampfschritte */
+  --color-badge-ink: #0b0b0b;       /* Icon auf Karten-Abzeichen */
+  --color-scrim: rgba(13,12,11,.72);
+
+  /* Schatten je schwebender Ebene (pixelgenau nach Prototyp) */
+  --shadow-toast: 0 12px 32px rgba(0,0,0,.5);
+  --shadow-popover: 0 18px 48px rgba(0,0,0,.6), 0 0 0 1px #34312c;
+  --shadow-menu: 0 14px 36px rgba(0,0,0,.6), 0 0 0 1px #34312c;
+  --shadow-stack: 0 16px 40px rgba(0,0,0,.5), 0 0 0 1px #34312c;
+  --shadow-invite: 0 24px 56px rgba(0,0,0,.6), 0 0 0 1px #ff7a3d;
+  --shadow-pill: 0 12px 32px rgba(0,0,0,.5), 0 0 0 1px #ff7a3d;
+  --shadow-badge: 0 1px 4px rgba(0,0,0,.6);
+
+  /* Brett: ab hier volles Layout (zusaetzlich Hoehe >= 900, siehe game/layout.ts) */
+  --breakpoint-board: 1440px;
 }
 
-.bg-table {
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 110%, rgba(56, 225, 198, 0.10), transparent 60%),
-    radial-gradient(ellipse 70% 50% at 50% -10%, rgba(120, 90, 255, 0.10), transparent 60%),
-    radial-gradient(circle at 50% 50%, #121827 0%, #0a0d15 70%);
+/* ---------- Tastenhinweise: komplette Varianten, nie mit .kbd kombinieren ---------- */
+@utility kbd-dim { @apply kbd; background: var(--color-line-2); color: var(--color-fg-3); }      /* in Sekundär-/Ghost-Buttons */
+@utility kbd-soft { @apply kbd; background: var(--color-line-2); color: var(--color-fg-2); }     /* freistehend, Pille, Optionszeilen */
+@utility kbd-primary { @apply kbd; background: rgba(18,17,16,.16); color: var(--color-ember-ink); } /* auf Ember- oder Karmin-Fläche */
+@utility kbd-mini { @apply kbd; font-size: 10px; padding: 2px 4px; background: var(--color-line-2); } /* Modal-Kopf „Minimieren“ */
+
+/* ---------- Weitere Buttons ---------- */
+@utility btn-wait { @apply btn; height: 44px; padding: 0 18px; font-size: 18px; letter-spacing: .08em; background: var(--color-bg-4); color: var(--color-fg-3); cursor: default; &:active { transform: none; } }
+@utility btn-tile { @apply btn; width: 34px; height: 34px; padding: 0; color: var(--color-fg-2); box-shadow: inset 0 0 0 1px var(--color-line-4); &:hover { color: var(--color-fg-1); background: var(--color-bg-4); } }
+
+/* ---------- Chips: Zustandsfarben (komplett, nie mit .chip kombinieren) ---------- */
+@utility chip-attack { @apply chip; color: var(--color-attack); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-attack) 50%, transparent); }
+@utility chip-block { @apply chip; color: var(--color-block); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-block) 45%, transparent); }
+@utility chip-target { @apply chip; color: var(--color-target); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-target) 45%, transparent); }
+@utility chip-chosen { @apply chip; color: var(--color-chosen); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-chosen) 45%, transparent); }
+@utility chip-ember { @apply chip; color: var(--color-ember); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-ember) 50%, transparent); }
+@utility chip-fill-attack { @apply chip; background: var(--color-attack); color: var(--color-ember-ink); }
+@utility chip-fill-block { @apply chip; background: var(--color-block); color: var(--color-ember-ink); }
+@utility chip-fill-target { @apply chip; background: var(--color-target); color: var(--color-ember-ink); }
+@utility chip-fill-chosen { @apply chip; background: var(--color-chosen); color: var(--color-ember-ink); }
+@utility chip-neutral { @apply chip; background: var(--color-bg-4); color: var(--color-fg-2); }
+@utility chip-count { @apply chip; padding: 3px 5px; font-size: 12px; letter-spacing: .02em; background: var(--color-bg-1); color: var(--color-fg-1); box-shadow: inset 0 0 0 1px var(--color-chip-line); }
+@utility chip-on-art { @apply chip; gap: 4px; padding: 4px 6px; letter-spacing: .04em; background: rgba(18,17,16,.85); color: var(--color-target); }
+@utility chip-filter { @apply chip; gap: 6px; padding: 3px 4px 3px 8px; background: var(--color-bg-4); color: var(--color-fg-2); }
+
+/* ---------- Zähl-Badges ---------- */
+@utility badge {
+  display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+  min-width: 18px; height: 18px; padding: 0 4px; border-radius: var(--radius-xs);
+  background: var(--color-ember); color: var(--color-ember-ink);
+  font-family: var(--font-display); font-weight: 700; font-size: 12px; line-height: 18px; letter-spacing: 0;
+  font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--color-bg-1);
+}
+@utility badge-tab { @apply badge; min-width: 16px; height: 16px; font-size: 11px; line-height: 16px; box-shadow: none; }
+
+/* ---------- Tabs und Segmented (Zustand per aria-selected / aria-pressed / data-active) ---------- */
+@utility tab-list { display: flex; align-items: flex-end; gap: 24px; border-bottom: 1px solid var(--color-line-2); }
+@utility tab {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 0 10px; white-space: nowrap; cursor: pointer;
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--color-fg-tab); transition: color var(--duration-2) var(--ease-out), box-shadow var(--duration-2) var(--ease-out);
+  &:hover { color: var(--color-fg-2); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  &[aria-selected="true"], &[data-active="true"] { color: var(--color-fg-1); box-shadow: inset 0 -2px 0 var(--color-ember); }
+}
+@utility seg-inline {
+  display: inline-flex; align-items: center; gap: 14px;
+  font-family: var(--font-display); font-weight: 600; font-size: 13px; line-height: 1; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--color-fg-tab);
+}
+@utility seg-inline-item {
+  padding: 0 0 3px; color: inherit; white-space: nowrap; cursor: pointer; text-transform: inherit; letter-spacing: inherit;
+  transition: color var(--duration-2) var(--ease-out), box-shadow var(--duration-2) var(--ease-out);
+  &:hover { color: var(--color-fg-2); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  &:disabled { cursor: default; color: inherit; }
+  &[aria-pressed="true"], &[aria-checked="true"], &[data-active="true"] { color: var(--color-fg-1); box-shadow: inset 0 -2px 0 var(--color-ember); }
+}
+@utility seg-boxed {
+  display: inline-flex; padding: 3px; border-radius: var(--radius-sm); background: var(--color-bg-0); box-shadow: inset 0 0 0 1px var(--color-line-3);
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; line-height: 1; letter-spacing: .06em; text-transform: uppercase;
+}
+@utility seg-boxed-item {
+  padding: 8px 14px; border-radius: var(--radius-xs); color: var(--color-fg-3); white-space: nowrap; cursor: pointer; text-align: center;
+  text-transform: inherit; letter-spacing: inherit; transition: background-color var(--duration-2) var(--ease-out), color var(--duration-2) var(--ease-out);
+  &:hover { color: var(--color-fg-1); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 1px; }
+  &:disabled { opacity: .4; cursor: default; }
+  &[aria-pressed="true"], &[aria-checked="true"], &[data-active="true"] { background: var(--color-line-3); color: var(--color-fg-1); }
 }
 
-.glass {
-  background: linear-gradient(180deg, rgba(28, 36, 54, 0.72), rgba(15, 20, 32, 0.72));
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(141, 151, 179, 0.14);
+/* ---------- Eingabefelder: .field auf dem Wrapper oder direkt auf <input> ---------- */
+@utility field {
+  display: flex; align-items: center; gap: 8px; min-width: 0; height: 40px; padding: 0 12px;
+  border-radius: var(--radius-sm); background: var(--color-bg-0); box-shadow: inset 0 0 0 1px var(--color-line-3);
+  font-family: var(--font-sans); font-size: 14px; color: var(--color-fg-1); outline: none;
+  transition: box-shadow var(--duration-1) var(--ease-out);
+  &::placeholder { color: var(--color-fg-4); }
+  & input, & textarea { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; outline: none; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; }
+  & input::placeholder, & textarea::placeholder { color: var(--color-fg-4); }
+  &:hover { box-shadow: inset 0 0 0 1px var(--color-line-4); }
+  &:focus-within { box-shadow: inset 0 0 0 1px var(--color-ember); }
+  &[data-error="true"], &[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--color-attack); }
+  &[data-disabled="true"], &:disabled { opacity: .5; }
+}
+@utility field-mono { font-family: var(--font-mono); font-weight: 500; letter-spacing: .1em; }
+@utility field-error { display: flex; align-items: center; gap: 6px; font-size: 12.5px; line-height: 1.4; color: var(--color-attack); }
+
+/* ---------- Schwebende Ebenen ---------- */
+@utility scrim { background: var(--color-scrim); }
+@utility popover { background: var(--color-bg-3); border-radius: var(--radius-md); padding: 8px; box-shadow: var(--shadow-popover); }
+@utility menu-popover { background: var(--color-bg-4); border-radius: var(--radius-sm); padding: 6px; box-shadow: var(--shadow-menu); }
+@utility toast {
+  display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; border-radius: var(--radius-sm);
+  background: var(--color-bg-4); color: var(--color-fg-1); box-shadow: var(--shadow-toast); font-size: 13.5px; line-height: 1.4;
+}
+@utility toast-error { @apply toast; background: var(--color-danger-bg); box-shadow: var(--shadow-toast), inset 0 0 0 1px color-mix(in oklab, var(--color-attack) 40%, transparent); }
+@utility pill {
+  display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px 0 14px; border-radius: var(--radius-sm);
+  background: var(--color-bg-4); color: var(--color-fg-1); box-shadow: var(--shadow-pill); white-space: nowrap; cursor: pointer;
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; line-height: 1; letter-spacing: .06em; text-transform: uppercase;
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
 }
 
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(141, 151, 179, 0.3) transparent;
+/* ---------- Optionszeile in Dialogen (Zustand per aria-selected / data-active) ---------- */
+@utility option-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 12px; border-radius: var(--radius-sm);
+  font-size: 14px; line-height: 1.4; color: var(--color-fg-2); text-align: left; cursor: pointer;
+  transition: background-color var(--duration-1), box-shadow var(--duration-1), color var(--duration-1);
+  &:hover { background: var(--color-bg-4); color: var(--color-fg-1); }
+  &:focus-visible { outline: 2px solid var(--color-fg-1); outline-offset: 1px; }
+  &:disabled, &[aria-disabled="true"] { opacity: .4; cursor: default; }
+  &[aria-selected="true"], &[data-active="true"] { background: color-mix(in oklab, var(--color-ember) 8%, transparent); box-shadow: inset 0 0 0 1px var(--color-ember); color: var(--color-fg-1); }
 }
 
-.card-shadow {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.6);
+/* ---------- Tabellen aus Grid-Zeilen (Spalten per grid-template-columns am Element) ---------- */
+@utility tbl-head {
+  display: grid; gap: 16px; align-items: end; padding: 0 12px 10px; border-bottom: 1px solid var(--color-line-3);
+  font-family: var(--font-display); font-weight: 600; font-size: 13px; line-height: 1; letter-spacing: .12em; text-transform: uppercase; color: var(--color-fg-3);
+}
+@utility tbl-row {
+  display: grid; gap: 16px; align-items: center; padding: 11px 12px; border-bottom: 1px solid var(--color-line-1);
+  transition: background-color var(--duration-1);
+  &:hover { background: var(--color-bg-4); }
+  &[data-open="true"] { background: var(--color-bg-3); box-shadow: inset 2px 0 0 var(--color-ember); }
+}
+@utility tbl-num { text-align: right; font-family: var(--font-display); font-weight: 600; font-size: 17px; line-height: 1; font-variant-numeric: tabular-nums; }
+@utility tbl-zero { color: var(--color-fg-4); }
+
+/* ---------- Balken ---------- */
+@utility bar-track { position: relative; overflow: hidden; background: var(--color-line-2); }
+@utility bar-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width var(--duration-3) var(--ease-out); }
+
+/* ---------- Schalter und Haken (natives <input> davor, visuell versteckt, Klasse "peer") ---------- */
+@utility toggle-track {
+  position: relative; flex: none; width: 34px; height: 20px; border-radius: var(--radius-xs); background: var(--color-line-3);
+  transition: background-color var(--duration-2) var(--ease-out);
+  &::after {
+    content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 1px; background: var(--color-fg-3);
+    transition: left var(--duration-2) var(--ease-out), background-color var(--duration-2) var(--ease-out);
+  }
+  :checked + & { background: var(--color-ember); }
+  :checked + &::after { left: 17px; background: var(--color-ember-ink); }
+  :focus-visible + & { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  :disabled + & { opacity: .4; }
+}
+@utility check-box {
+  display: flex; flex: none; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px var(--color-line-4); color: transparent;
+  transition: background-color var(--duration-1), box-shadow var(--duration-1), color var(--duration-1);
+  :checked + & { background: var(--color-ember); box-shadow: none; color: var(--color-ember-ink); }
+  :focus-visible + & { outline: 2px solid var(--color-fg-1); outline-offset: 2px; }
+  :disabled + & { opacity: .4; }
 }
 
-.glow-playable {
-  box-shadow: 0 0 0 2px rgba(56, 225, 198, 0.95), 0 0 16px 3px rgba(56, 225, 198, 0.45);
-}
-
-.glow-mana {
-  box-shadow: 0 0 0 2px rgba(56, 225, 198, 0.55), 0 0 8px 1px rgba(56, 225, 198, 0.25);
-}
-
-.glow-target {
-  animation: var(--animate-pulse-ring);
-}
-
-.glow-chosen {
-  box-shadow: 0 0 0 3px rgba(120, 255, 160, 0.95), 0 0 18px 4px rgba(120, 255, 160, 0.4);
-}
-
-.glow-special {
-  /* Einberufen (Convoke): Kreatur per Klick tappen */
-  box-shadow: 0 0 0 2px rgba(178, 132, 255, 0.95), 0 0 16px 3px rgba(178, 132, 255, 0.45);
-}
-
-.glow-attacking {
-  box-shadow: 0 0 0 2px rgba(255, 107, 107, 0.95), 0 0 16px 3px rgba(255, 107, 107, 0.45);
-}
-
-.glow-blocking {
-  box-shadow: 0 0 0 2px rgba(92, 184, 255, 0.95), 0 0 16px 3px rgba(92, 184, 255, 0.45);
-}
-
-@utility btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition-all disabled:opacity-40 disabled:pointer-events-none;
-}
-
-@utility btn-primary {
-  @apply btn bg-linear-to-b from-gold-400 to-gold-500 text-ink-950 shadow-lg shadow-gold-500/20 hover:brightness-110 active:scale-[0.98];
-}
-
-@utility btn-arcane {
-  @apply btn bg-linear-to-b from-arcane-400 to-arcane-500 text-ink-950 shadow-lg shadow-arcane-500/20 hover:brightness-110 active:scale-[0.98];
-}
-
-@utility btn-ghost {
-  @apply btn border border-ink-500/50 bg-ink-800/60 text-ink-100 hover:bg-ink-700/80 hover:border-ink-400/60 active:scale-[0.98];
-}
-
-@utility btn-danger {
-  @apply btn bg-blood-500/90 text-white hover:bg-blood-400;
-}
-
-@utility kbd {
-  @apply ml-1 rounded border border-current/30 px-1 text-[10px] font-medium opacity-70;
-}
+/* ---------- Wortmarke ---------- */
+@utility wordmark { font-family: var(--font-display); font-weight: 700; line-height: 1; letter-spacing: .08em; text-transform: uppercase; color: var(--color-ember); }

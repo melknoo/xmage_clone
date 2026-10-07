@@ -11,13 +11,6 @@ export function center(sel: string): Point | null {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
 }
 
-/** Gebogener Pfad von a nach b (leicht nach oben gewoelbt). */
-export function curve(a: Point, b: Point): string {
-  const mx = (a.x + b.x) / 2
-  const my = (a.y + b.y) / 2 - Math.abs(b.x - a.x) * 0.15
-  return `M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}`
-}
-
 /** Mittelpunkt eines Objekts auf dem Feld; zusammengefasste Karten (×N) ueber den Stapel, der sie enthaelt. */
 export function objCenter(id: string): Point | null {
   return center(`[data-obj="${id}"]`) ?? center(`[data-objs~="${id}"]`)
@@ -66,4 +59,12 @@ export function anchorOf(id: string): Point | null {
     objCenter(id) ??
     center(`[data-stack="${id}"]`)
   )
+}
+
+/** Obere rechte Ecke der Lebensanzeige eines Spielers (Lebens-Delta der FX-Ebene), sonst null. */
+export function lifeAnchor(playerId: string): Point | null {
+  const el = document.querySelector(`[data-player="${playerId}"] [data-life]`)
+  if (!el) return null
+  const r = el.getBoundingClientRect()
+  return { x: r.right, y: r.top }
 }

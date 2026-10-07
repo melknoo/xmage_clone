@@ -11,8 +11,19 @@ export interface TableSeat {
   me?: boolean
   /** eigene Deck-Angabe (nur fuer den eigenen Platz bzw. Bots des Gastgebers) */
   deck?: DeckSpec
+  /** bisheriges Anzeigeformat "Name (Commander)"; null = noch kein Deck gewaehlt */
   deckName?: string | null
   ready?: boolean
+  // Deck-Infos fuer jeden besetzten Platz (auch fremde); fehlen, solange kein Deck gewaehlt ist
+  /** Deckname ohne Commander (Zufall: "Zufälliges Deck") */
+  deckTitle?: string
+  /** Commander-Namen, mehrere mit " & " verbunden */
+  commander?: string
+  /** Farbidentitaet wie SampleDeck.colors (z.B. "WUB") */
+  colors?: string
+  /** Druck des (ersten) Commanders fuer die Kunst (cardImageUrl {set, num}) */
+  commanderSet?: string
+  commanderNum?: string
 }
 
 export interface TableChat {
@@ -37,7 +48,14 @@ export interface Table {
   mySeat: number | null
   host: boolean
   humans: number
+  /** nur fuer Sitzende gefuellt, sonst [] */
   chat: TableChat[]
+  /** nur bei state=RUNNING: Zug des laufenden Spiels (0 = noch kein State) */
+  turn?: number
+  /** Zuschauen moeglich: RUNNING, ich sitze nicht selbst am Tisch, weniger als 8 Zuschauer (immer gesetzt) */
+  canSpectate?: boolean
+  /** nur bei state=RUNNING: Anzahl Zuschauer (0-8) */
+  spectators?: number
 }
 
 export const tablesApi = {

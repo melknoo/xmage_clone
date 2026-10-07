@@ -5,11 +5,16 @@ import type { Interaction } from './interaction'
 export interface PromptButton {
   label: string
   run: () => void
-  kind: 'primary' | 'ghost' | 'danger' | 'arcane'
+  /** Button-Variante (components/ui Button); hoechstens ein primary je Prompt */
+  kind: 'primary' | 'secondary' | 'ghost' | 'danger'
   hotkey?: string
   /** Zwei-Klick-Bestaetigung: Beschriftung nach dem ersten Klick (z.B. "Wirklich alle?") */
   confirm?: string
   title?: string
+  /** data-testid (Steps: attack-all, attack-reset, defender-cancel) */
+  testId?: string
+  /** ausgegraut; Space/Enter/F2 loesen ihn dann nicht aus */
+  disabled?: boolean
 }
 
 /** Pregame-Frage zu einer Starthand-Aktion (Gemstone Caverns, Leylines, Chancellors): eigener Dialog, keine Leisten-Knoepfe */
@@ -83,8 +88,8 @@ export function usePromptButtons(inter: Interaction): PromptButton[] {
       case 'SELECT':
         if (inter.mode === 'attack') {
           out.push({ label: 'Angriff bestätigen', run: () => answer({ bool: true }), kind: 'primary', hotkey: 'Space' })
-          if (p.specialBtn) out.push({ label: 'Alle angreifen', run: () => answer({ str: 'special' }), kind: 'danger', confirm: 'Wirklich alle?' })
-          if (attacking > 0) out.push({ label: 'Angriff zurücksetzen', run: combatReset, kind: 'ghost', title: 'Alle Angreifer wieder zurücknehmen' })
+          if (p.specialBtn) out.push({ label: 'Alle angreifen', run: () => answer({ str: 'special' }), kind: 'danger', confirm: 'Wirklich alle?', testId: 'attack-all' })
+          if (attacking > 0) out.push({ label: 'Angriff zurücksetzen', run: combatReset, kind: 'secondary', title: 'Alle Angreifer wieder zurücknehmen', testId: 'attack-reset' })
         } else if (inter.mode === 'block') {
           out.push({ label: 'Blocker bestätigen', run: () => answer({ bool: true }), kind: 'primary', hotkey: 'Space' })
         } else {
@@ -94,25 +99,27 @@ export function usePromptButtons(inter: Interaction): PromptButton[] {
             kind: 'primary',
             hotkey: 'Space',
           })
-          if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'arcane' })
+          if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'secondary' })
         }
         break
       case 'PICK_TARGET':
         if (p.defenderPick) {
           // Verteidiger-Wahl nach "Alle angreifen": Abbrechen = Angriff komplett zuruecknehmen (nicht bool:false -
           // bei Pflicht-Zielen fragt XMage sonst endlos neu)
-          out.push({ label: 'Abbrechen – kein Angriff', run: combatReset, kind: 'ghost', hotkey: 'Esc' })
+          out.push({ label: 'Abbrechen – kein Angriff', run: combatReset, kind: 'ghost', hotkey: 'Esc', testId: 'defender-cancel' })
         } else if (p.rightBtn || !p.required) {
-          out.push({ label: translate(p.rightBtn) ?? (p.chosen?.length ? 'Fertig' : 'Abbrechen'), run: () => answer({ bool: false }), kind: p.chosen?.length ? 'primary' : 'ghost', hotkey: 'Space' })
+          // Fertig (Space) sobald gewaehlt ist, sonst Abbrechen (Esc; Space bleibt als Rueckfall wie bisher)
+          const done = !!p.chosen?.length
+          out.push({ label: translate(p.rightBtn) ?? (done ? 'Fertig' : 'Abbrechen'), run: () => answer({ bool: false }), kind: done ? 'primary' : 'ghost', hotkey: done ? 'Space' : 'Esc' })
         }
         break
       case 'PLAY_MANA':
         out.push(
           p.specialBtn
-            ? { label: 'Länder automatisch', run: autoPay, kind: 'arcane', hotkey: 'Space', title: `Nur Manaquellen automatisch tappen – Rest per ${p.specialBtn}` }
-            : { label: 'Automatisch bezahlen', run: autoPay, kind: 'arcane', hotkey: 'Space' },
+            ? { label: 'Länder automatisch', run: autoPay, kind: 'primary', hotkey: 'Space', title: `Nur Manaquellen automatisch tappen – Rest per ${p.specialBtn}` }
+            : { label: 'Automatisch bezahlen', run: autoPay, kind: 'primary', hotkey: 'Space' },
         )
-        if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'arcane' })
+        if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'secondary' })
         out.push({ label: 'Abbrechen', run: () => answer({ bool: false }), kind: 'ghost', hotkey: 'Esc' })
         break
       case 'PLAY_X_MANA':

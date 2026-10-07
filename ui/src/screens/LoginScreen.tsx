@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react'
+import { Button, Segmented, TextField, Wordmark } from '../components/ui'
 import { PasswordInput } from '../components/PasswordInput'
 import { useAuth } from '../store/auth'
+import { useConn } from '../store/conn'
+
+/** Commander-Art rechts: direkt von Scryfall (kein Binary im Repo, /img ist vor dem Login gesperrt) */
+const LOGIN_ART = 'https://api.scryfall.com/cards/named?exact=Kaalia%20of%20the%20Vast&format=image&version=art_crop'
 
 /** Code zur Anzeige gruppieren: XXXX-XXXX-XXXX-XXXX (Eingabe bleibt tolerant, der Server normalisiert). */
 function prettify(raw: string): string {
@@ -18,17 +23,19 @@ function loadTab(): Tab {
   }
 }
 
-const INPUT = 'w-full rounded-xl border border-white/10 bg-ink-950/60 px-4 py-3 text-ink-100 outline-none placeholder:text-ink-500 focus:border-gold-400/60'
-
+/** Login (Server-Modus): links Formular 400 breit, rechts Commander-Art mit Verlauf. */
 export function LoginScreen() {
   const login = useAuth((s) => s.login)
   const loginEmail = useAuth((s) => s.loginEmail)
   const busy = useAuth((s) => s.busy)
   const error = useAuth((s) => s.error)
+  const version = useConn((s) => s.version)
   const [tab, setTabState] = useState<Tab>(loadTab)
   const [code, setCode] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [artOk, setArtOk] = useState(true)
+  const [artLoaded, setArtLoaded] = useState(false)
 
   const setTab = (t: Tab) => {
     setTabState(t)
@@ -41,6 +48,7 @@ export function LoginScreen() {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (busy) return
     if (tab === 'code') {
       if (code.trim()) await login(code)
     } else if (email.trim() && password) {
@@ -51,56 +59,88 @@ export function LoginScreen() {
   const canSubmit = tab === 'code' ? code.replace(/-/g, '').length >= 4 : email.includes('@') && password.length > 0
 
   return (
-    <div className="bg-table flex h-full flex-col items-center justify-center gap-6 p-6">
-      <div className="font-display text-5xl font-bold tracking-[0.2em] text-gold-300">MAGELITE</div>
-      <form onSubmit={submit} className="glass flex w-full max-w-md flex-col gap-4 rounded-3xl p-8">
-        <div className="flex rounded-xl bg-ink-950/60 p-1 ring-1 ring-white/10">
-          {(['code', 'email'] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${tab === t ? 'bg-gold-400/15 text-gold-300 ring-1 ring-gold-400/40' : 'text-ink-300 hover:text-ink-100'}`}
-              onClick={() => setTab(t)}
-            >
-              {t === 'code' ? 'Einladungscode' : 'E-Mail & Passwort'}
-            </button>
-          ))}
-        </div>
-        {tab === 'code' ? (
-          <>
-            <div>
-              <div className="text-lg font-semibold text-ink-100">Einladungscode</div>
-              <div className="mt-1 text-sm text-ink-300">Du brauchst einen Code vom Gastgeber. Groß-/Kleinschreibung und Bindestriche sind egal.</div>
+    <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-bg-1">
+      <div className="flex items-center justify-center overflow-y-auto p-10 scrollbar-thin">
+        <form onSubmit={submit} className="flex w-[400px] max-w-full flex-col gap-[22px]">
+          <div className="flex flex-col gap-2.5">
+            <Wordmark size={46} />
+            <span className="text-[15px] leading-normal text-fg-3">Commander gegen Bots oder mit Freunden an einem Tisch.</span>
+          </div>
+
+          <Segmented<Tab>
+            variant="boxed"
+            ariaLabel="Anmeldeweg"
+            className="w-full"
+            itemStyle={{ flex: 1, padding: '9px 0' }}
+            value={tab}
+            onChange={setTab}
+            items={[
+              { id: 'code', label: 'Einladungscode', testId: 'login-tab-code' },
+              { id: 'email', label: 'E-Mail & Passwort', testId: 'login-tab-mail' },
+            ]}
+          />
+
+          {tab === 'code' ? (
+            <div className="flex flex-col gap-[7px]">
+              <TextField
+                key="code"
+                label="Einladungscode"
+                mono
+                fieldHeight={44}
+                autoFocus
+                value={code}
+                onChange={(e) => setCode(prettify(e.target.value))}
+                placeholder="XXXX-XXXX-XXXX-XXXX"
+                spellCheck={false}
+                autoComplete="off"
+                style={{ fontSize: 16, letterSpacing: '.12em' }}
+                error={error ?? undefined}
+              />
+              <span className="text-[12.5px] leading-[1.45] text-fg-3">
+                Den Code bekommst du vom Gastgeber deiner Runde. Danach spielst du als Gast und kannst später ein Konto sichern.
+              </span>
             </div>
-            <input
-              autoFocus
-              value={code}
-              onChange={(e) => setCode(prettify(e.target.value))}
-              placeholder="XXXX-XXXX-XXXX-XXXX"
-              spellCheck={false}
-              autoComplete="off"
-              className={`${INPUT} text-center font-mono text-lg tracking-[0.2em] !text-gold-200`}
-            />
-          </>
-        ) : (
-          <>
-            <div>
-              <div className="text-lg font-semibold text-ink-100">Mit Konto anmelden</div>
-              <div className="mt-1 text-sm text-ink-300">Für Konten, die mit E-Mail und Passwort gesichert wurden. Passwort vergessen? Bitte den Gastgeber um einen neuen Code.</div>
-            </div>
-            <input autoFocus type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-Mail" className={INPUT} />
-            <PasswordInput autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Passwort" className={INPUT} />
-          </>
+          ) : (
+            <>
+              <TextField key="email" label="E-Mail" type="email" fieldHeight={44} autoFocus autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@beispiel.de" />
+              <div className="flex flex-col gap-[7px]">
+                <PasswordInput
+                  label="Passwort"
+                  fieldHeight={44}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  error={error ?? undefined}
+                />
+                <span className="text-[12.5px] leading-[1.45] text-fg-3">Passwort vergessen? Melde dich mit deinem Einladungscode an und setze im Konto ein neues.</span>
+              </div>
+            </>
+          )}
+
+          <Button type="submit" variant="primary" kbd="Enter" disabled={busy || !canSubmit} testId="login-submit" style={{ width: '100%', height: 48, fontSize: 19 }}>
+            {busy ? 'Anmelden …' : 'Anmelden'}
+          </Button>
+
+          <span className="text-[12.5px] text-fg-4">
+            Server: {window.location.host}
+            {version ? ` · v${version}` : ''}
+          </span>
+        </form>
+      </div>
+
+      <div className="relative overflow-hidden bg-bg-3" aria-hidden>
+        {artOk && (
+          <img
+            src={LOGIN_ART}
+            alt=""
+            draggable={false}
+            className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-3 ${artLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={() => setArtLoaded(true)}
+            onError={() => setArtOk(false)}
+          />
         )}
-        {error && <div className="rounded-lg bg-blood-500/15 px-3 py-2 text-sm text-blood-300">{error}</div>}
-        <button
-          type="submit"
-          disabled={busy || !canSubmit}
-          className="rounded-xl bg-linear-to-br from-gold-300 to-gold-500 px-4 py-3 font-semibold text-ink-950 shadow-lg shadow-gold-500/20 transition hover:brightness-110 disabled:opacity-40"
-        >
-          {busy ? 'Anmelden …' : 'Anmelden'}
-        </button>
-      </form>
+        <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, var(--color-bg-1), rgba(18,17,16,.35) 40%, rgba(18,17,16,.2))' }} />
+      </div>
     </div>
   )
 }

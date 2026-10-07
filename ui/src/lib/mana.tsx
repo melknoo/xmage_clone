@@ -28,11 +28,12 @@ function symbolClass(sym: string): string {
   return `ms-${s.toLowerCase()}`
 }
 
-export function ManaSymbol({ sym, size = 'md' }: { sym: string; size?: 'sm' | 'md' | 'lg' }) {
+/** flat (Standard): ohne ms-shadow – im Design sind Manasymbole flach, Abstand 2 px. flat={false} = alter Schatten */
+export function ManaSymbol({ sym, size = 'md', flat = true }: { sym: string; size?: 'sm' | 'md' | 'lg'; flat?: boolean }) {
   const cls = symbolClass(sym)
   const sz = size === 'sm' ? 'text-[0.8em]' : size === 'lg' ? 'text-[1.3em]' : 'text-[0.95em]'
   const cost = cls === 'ms-tap' || cls === 'ms-untap' ? '' : 'ms-cost'
-  return <i className={`ms ${cls} ${cost} ms-shadow ${sz} mx-[1px] align-[-0.1em]`} title={`{${sym}}`} />
+  return <i className={`ms ${cls} ${cost} ${flat ? '' : 'ms-shadow'} ${sz} mx-[1px] align-[-0.1em]`} title={`{${sym}}`} />
 }
 
 /** Ersetzt {X}-Symbole in Text durch Mana-Icons. */
@@ -51,13 +52,13 @@ export function withSymbols(text: string, keyPrefix = ''): ReactNode[] {
   return out
 }
 
-export function ManaCost({ cost, size }: { cost?: string; size?: 'sm' | 'md' | 'lg' }) {
+export function ManaCost({ cost, size, flat = true }: { cost?: string; size?: 'sm' | 'md' | 'lg'; flat?: boolean }) {
   if (!cost) return null
   const syms = [...cost.matchAll(/\{([^}]+)\}/g)].map((m) => m[1])
   return (
     <span className="inline-flex items-center whitespace-nowrap">
       {syms.map((s, i) => (
-        <ManaSymbol key={i} sym={s} size={size} />
+        <ManaSymbol key={i} sym={s} size={size} flat={flat} />
       ))}
     </span>
   )
@@ -101,9 +102,9 @@ export function Rich({ segs, onObject }: { segs?: RichSeg[]; onObject?: (id: str
           return (
             <span
               key={i}
-              // nicht data-obj: das ist der Anker fuer Pfeile auf dem Tisch
+              // nicht data-obj: das ist der Anker der Karten auf dem Tisch (FX, Skripte)
               data-ref={s.obj}
-              className="font-semibold text-amber-200 underline decoration-amber-200/30 underline-offset-2 hover:decoration-amber-200 cursor-help"
+              className="cursor-help font-semibold text-fg-1 underline decoration-transparent underline-offset-2 transition-colors duration-1 hover:text-ember hover:decoration-ember"
               onMouseEnter={() => onObject?.(s.obj!)}
             >
               {content}
@@ -123,12 +124,13 @@ export function Rich({ segs, onObject }: { segs?: RichSeg[]; onObject?: (id: str
 
 export const COLOR_NAMES: Record<string, string> = { W: 'Weiß', U: 'Blau', B: 'Schwarz', R: 'Rot', G: 'Grün' }
 
-export function ColorPips({ colors, size = 'md' }: { colors?: string; size?: 'sm' | 'md' | 'lg' }) {
-  if (!colors) return <ManaSymbol sym="C" size={size} />
+/** Farbidentitaet als Manasymbole; flach (ohne Schatten) wie im Design, flat={false} = alter Schatten */
+export function ColorPips({ colors, size = 'md', flat = true }: { colors?: string; size?: 'sm' | 'md' | 'lg'; flat?: boolean }) {
+  if (!colors) return <ManaSymbol sym="C" size={size} flat={flat} />
   return (
     <span className="inline-flex">
       {colors.split('').map((c) => (
-        <ManaSymbol key={c} sym={c} size={size} />
+        <ManaSymbol key={c} sym={c} size={size} flat={flat} />
       ))}
     </span>
   )

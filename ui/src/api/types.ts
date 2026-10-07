@@ -44,11 +44,19 @@ export interface Card {
   /** Ziele mit Namen (nur Stapelobjekte) */
   targetRefs?: TargetRef[]
   kind?: 'spell' | 'ability'
+  /**
+   * nur Stapel-Faehigkeiten (kind=ability): vereinfachter XMage-AbilityType. Engine sendet heute
+   * triggered | activated | static | special | spell | land (Fallback: Enum-Name klein). Fehlt bei Zaubern/alten Engines.
+   */
+  abilityType?: AbilityType
   sourceId?: UUID
   controllerId?: UUID
   /** angesagtes X (nur Stapelobjekte) */
   x?: number
 }
+
+/** Siehe Card.abilityType; offene Liste (string), damit neue Engine-Werte nicht brechen. */
+export type AbilityType = 'triggered' | 'activated' | 'static' | 'mana' | 'special' | 'spell' | 'land' | (string & {})
 
 export interface Permanent extends Card {
   tapped?: boolean
@@ -65,6 +73,8 @@ export interface Permanent extends Card {
   blocking?: boolean
   canAttack?: boolean
   canBlock?: boolean
+  /** P/T weicht vom Grundwert ab (Zaehler, Boni, "wird zu X/X"); bei verdeckten Permanents nie gesetzt. Fehlt = false. */
+  ptModified?: boolean
 }
 
 export interface CommandObject {
@@ -132,7 +142,13 @@ export interface GameState {
   step?: string
   activePlayerId?: UUID
   priorityPlayerId?: UUID
-  myPlayerId: UUID
+  /**
+   * Eigener Spieler. ACHTUNG Zuschauer (spectator=true): fehlt zur Laufzeit; der Blickwinkel-Spieler ist dann
+   * players[0] (einziger mit me=true). Typ bewusst optional.
+   */
+  myPlayerId?: UUID
+  /** Zuschauer-Sicht (?spectate=1): hand=[], kein playable/actions/lookedAt/replDeclines, kein myPlayerId */
+  spectator?: boolean
   players: PlayerState[]
   hand: Card[]
   stack: Card[]
@@ -210,7 +226,14 @@ export interface ReplGroup {
   /** Effekt fragt selbst nach ("you may") -> 1-Klick und "Keinen anwenden" moeglich */
   optional?: boolean
   sources: { key: string; name: string; objectId?: UUID }[]
+  /** ersetztes Ereignis aus dem Regeltext, deutsch (z.B. "Karte ziehen", "Abwerfen"); fehlt, wenn nicht ableitbar */
+  cause?: string
+  /** alle Quellen heissen gleich -> nur dann ist "Gruppe annehmen" (ReplacementMode 'acceptGroup') erlaubt */
+  uniform?: boolean
 }
+
+/** Antwort-Modus der Ersatzeffekt-Wahl (WS replacement): 'acceptGroup' braucht key = ReplGroup.rule und uniform=true */
+export type ReplacementMode = 'accept' | 'decline' | 'acceptGroup'
 
 export interface Prompt {
   t: 'prompt'
@@ -233,13 +256,21 @@ export interface Prompt {
   possibleAttackers?: UUID[]
   possibleBlockers?: UUID[]
   mulligan?: boolean
+  /** nur Mulligan-Frage: bisher genommene Mulligans (0 wird weggelassen -> fehlt = 0) */
+  mulligans?: number
+  /** nur Mulligan-Frage: der naechste Mulligan ist gratis (erster im Commander-Mehrspieler) */
+  freeMulligan?: boolean
   autoAnswer?: string
   targets?: UUID[]
   chosen?: UUID[]
   cards?: Card[]
   defenderPick?: boolean
   choices?: PromptItem[]
-  /** CHOOSE_ABILITY: Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren") */
+  /**
+   * CHOOSE_ABILITY: Objekt, dessen Faehigkeiten zur Wahl stehen (fuer "N-mal aktivieren").
+   * PICK_TARGET / PLAY_MANA / PLAY_X_MANA: Stapelobjekt (id wie state.stack[].id), fuer das gewaehlt bzw. bezahlt wird;
+   * nur wenn ableitbar, sonst fehlt es.
+   */
   sourceId?: UUID
   choice?: {
     message?: string
@@ -282,11 +313,61 @@ export interface Hello {
   t: 'hello'
   protocol: number
   gameId: UUID
-  myPlayerId: UUID
+  /** fehlt bei Zuschauern (spectator=true) zur Laufzeit - Typ bewusst optional */
+  myPlayerId?: UUID
   seats: Seat[]
   tempo: string
-  /** Gastgeber (erster Mensch): darf das Tempo stellen; fehlt bei alten Engines */
+  /** Gastgeber (erster Mensch): darf das Tempo stellen; fehlt bei alten Engines; Zuschauer: false */
   host?: boolean
+  /** Zuschauer-Verbindung (?spectate=1) */
+  spectator?: boolean
+  /** Zuschauer: Spieler, aus dessen Blickwinkel gezeigt wird (= state.players[0]) */
+  viewpointId?: UUID
+  /** Zuschauer: Name des Tisches ("Du schaust {tableName} zu") */
+  tableName?: string
+}
+
+/** WS "seats": Verbindungszustand der Menschen (+ Zuschauernamen) */
+export interface SeatsStatus {
+  t: 'seats'
+  seats: SeatConn[]
+  kickAfterMs: number
+  /** Namen der Zuschauer (fuer "N schauen zu"); fehlt = keine / alte Engine */
+  spectators?: string[]
+}
+
+/**
+ * WS-Close-Codes beim Zuschauen (/ws/game/{id}?spectate=1). Alle sind endgueltig: kein Reconnect,
+ * deutscher Toast (SPECTATE_CLOSE_TEXT), zurueck zur Lobby.
+ */
+export const SPECTATE_CLOSE = {
+  /** lokaler Modus bzw. ohne ?spectate kein eigener Sitz */
+  notAllowed: 4403,
+  /** Tisch laeuft nicht (mehr) / Spiel beendet / Solo-Spiel */
+  notRunning: 4404,
+  /** Nutzer sitzt selbst an diesem Tisch */
+  seated: 4409,
+  /** mehr als 8 Zuschauer */
+  full: 4429,
+  /** Zuschauer liest zu langsam (Queue uebergelaufen) */
+  tooSlow: 4408,
+  /** neue Zuschauer-Verbindung desselben Nutzers hat diese ersetzt */
+  replaced: 4000,
+} as const
+
+export type SpectateCloseCode = (typeof SPECTATE_CLOSE)[keyof typeof SPECTATE_CLOSE]
+
+export const SPECTATE_CLOSE_TEXT: Record<SpectateCloseCode, string> = {
+  4403: 'Zuschauen ist hier nicht möglich.',
+  4404: 'Dieses Spiel läuft nicht mehr.',
+  4409: 'Du sitzt selbst an diesem Tisch.',
+  4429: 'Es schauen schon zu viele zu.',
+  4408: 'Die Verbindung war zu langsam. Zuschauen beendet.',
+  4000: 'Du schaust in einem anderen Fenster zu.',
+}
+
+export function isSpectateClose(code: number): code is SpectateCloseCode {
+  return code in SPECTATE_CLOSE_TEXT
 }
 
 export interface LogEntry {
@@ -325,6 +406,11 @@ export interface Reward {
   masteryLevelBefore?: number
   masteryXp?: number
   masteryNext?: number
+  /** XP-Ring vor dem Spiel (fuer die Animation ueber den Level-Aufstieg) */
+  xpIntoLevelBefore?: number
+  xpForNextBefore?: number
+  /** naechster Titel nach dem aktuellen Level; null = hoechster Titel erreicht */
+  nextTitle?: { level: number; title: string } | null
 }
 
 export interface GameOver {
@@ -357,7 +443,7 @@ export type ServerMessage =
   | { t: 'log'; entries: LogEntry[] }
   | { t: 'status'; thinking?: UUID; autoPassed?: boolean; waitingFor?: string }
   | { t: 'seat'; conceded: boolean }
-  | { t: 'seats'; seats: SeatConn[]; kickAfterMs: number }
+  | SeatsStatus
   | Activity
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }
@@ -383,22 +469,8 @@ export interface SampleDeck {
   cards: number
 }
 
-export interface StoredDeck {
-  id: number
-  name: string
-  commanders: string[]
-  colors: string
-  commanderSet?: string
-  commanderNum?: string
-  source: string
-  sourceUrl?: string
-  cardCount: number
-  valid: boolean
-  validation?: string
-  masteryXp: number
-  createdAt: number
-  updatedAt: number
-}
+/** verschoben nach api/decks.ts (Re-Export fuer bestehende Importe) */
+export type { StoredDeck } from './decks'
 
 export type Tempo = 'BLITZ' | 'NORMAL' | 'BEDACHT' | 'MAX'
 
