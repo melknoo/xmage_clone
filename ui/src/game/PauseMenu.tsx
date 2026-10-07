@@ -6,7 +6,14 @@ import { TEMPOS } from '../lib/tempo'
 import { me as meOf, useGame, type LogFilter } from '../store/game'
 import { useNav } from '../store/nav'
 import { useTable } from '../store/table'
+import { useUi, type CardSize } from '../store/ui'
 import { useBoardLayout } from './layout'
+
+const CARD_SIZE_ITEMS: { id: CardSize; label: string; title: string }[] = [
+  { id: 'small', label: 'Klein', title: 'Kleine Hand- und Mulligan-Karten' },
+  { id: 'medium', label: 'Mittel', title: 'Mittlere Hand- und Mulligan-Karten' },
+  { id: 'large', label: 'Groß', title: 'Große Hand- und Mulligan-Karten' },
+]
 
 const LOG_ITEMS: { id: LogFilter; label: string; title: string }[] = [
   { id: 'important', label: 'Wichtiges', title: 'Nur Wichtiges im Spielverlauf' },
@@ -37,6 +44,8 @@ export function PauseMenu() {
   const setFxEnabled = useGame((s) => s.setFxEnabled)
   const muted = useGame((s) => s.muted)
   const setMuted = useGame((s) => s.setMuted)
+  const cardSize = useUi((s) => s.cardSize)
+  const setCardSize = useUi((s) => s.setCardSize)
   const logFilter = useGame((s) => s.logFilter)
   const setLogFilter = useGame((s) => s.setLogFilter)
   const leave = useGame((s) => s.leave)
@@ -139,6 +148,14 @@ export function PauseMenu() {
             title="Zonenwechsel, Schaden und Lebensänderungen einblenden (die Ereignisleiste bleibt)"
           />
           <Toggle checked={!muted} onChange={(on) => setMuted(!on)} label="Ton" />
+          {!spectator && (
+            <>
+              <span className="label" style={{ marginTop: 8 }}>
+                Kartengröße (Hand)
+              </span>
+              <Segmented variant="boxed" ariaLabel="Kartengröße" items={CARD_SIZE_ITEMS} value={cardSize} onChange={setCardSize} className="self-start" itemStyle={{ padding: '8px 12px' }} />
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-3">
           {!spectator && (

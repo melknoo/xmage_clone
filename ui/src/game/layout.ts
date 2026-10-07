@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { CARD_SIZE_SCALE, useUi, type CardSize } from '../store/ui'
 
 /**
  * Masse des Spielbretts nach dem Prototyp (MageLite Spielbrett.dc.html, Objekt L).
@@ -133,8 +134,22 @@ function measure(): { w: number; h: number } {
   return { w: window.innerWidth, h: window.innerHeight }
 }
 
-function compute(compact: boolean, showInlineTempo: boolean): BoardLayoutState {
-  return { ...(compact ? COMPACT : FULL), compact, showInlineTempo }
+/** Hand- und Mulligan-Karten nach Einstellung skalieren; die Handzeile waechst um die Mehrhoehe der Karte mit */
+function compute(compact: boolean, showInlineTempo: boolean, cardSize: CardSize): BoardLayoutState {
+  const base = compact ? COMPACT : FULL
+  const k = CARD_SIZE_SCALE[cardSize]
+  if (k === 1) return { ...base, compact, showInlineTempo }
+  const handW = Math.round(base.handW * k)
+  const cardH = (w: number) => Math.round((w * 88) / 63)
+  return {
+    ...base,
+    compact,
+    showInlineTempo,
+    handW,
+    handH: base.handH + cardH(handW) - cardH(base.handW),
+    mullW: Math.round(base.mullW * k),
+    modal: { ...base.modal, mulligan: Math.round(base.modal.mulligan * k) },
+  }
 }
 
 /** Aktuelles Brett-Layout; reagiert auf Fenstergroesse. */
@@ -150,8 +165,9 @@ export function useBoardLayout(): BoardLayoutState {
   }, [])
   const compact = size.w < COMPACT_MAX_W || size.h < COMPACT_MAX_H
   const inline = size.w >= INLINE_TEMPO_MIN_W
+  const cardSize = useUi((s) => s.cardSize)
   // nur bei Wechsel der Stufe ein neues Objekt (memo-freundlich)
-  return useMemo(() => compute(compact, inline), [compact, inline])
+  return useMemo(() => compute(compact, inline, cardSize), [compact, inline, cardSize])
 }
 
 /** CSS-Variablen fuer das GameScreen-Wurzelelement (BoardModal-Pille, Scope der Dialoge). */

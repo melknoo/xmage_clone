@@ -27,7 +27,23 @@ export const MAX_TOASTS = 3
 /** Info/Erfolg verschwinden nach 4 s; Fehler bleiben bis zum Klick */
 export const TOAST_MS = 4000
 
+/** Groesse der Handkarten und Mulligan-Karten (localStorage 'magelite.cardSize') */
+export type CardSize = 'small' | 'medium' | 'large'
+export const CARD_SIZE_SCALE: Record<CardSize, number> = { small: 0.85, medium: 1, large: 1.25 }
+const CARD_SIZE_KEY = 'magelite.cardSize'
+
+function loadCardSize(): CardSize {
+  try {
+    const v = localStorage.getItem(CARD_SIZE_KEY)
+    return v === 'small' || v === 'large' ? v : 'medium'
+  } catch {
+    return 'medium'
+  }
+}
+
 interface UiState {
+  cardSize: CardSize
+  setCardSize: (s: CardSize) => void
   toasts: UiToast[]
   /** liefert die id */
   pushToast: (t: ToastInput) => number
@@ -49,6 +65,15 @@ function clearTimer(id: number) {
 }
 
 export const useUi = create<UiState>((set, get) => ({
+  cardSize: loadCardSize(),
+  setCardSize: (s) => {
+    try {
+      localStorage.setItem(CARD_SIZE_KEY, s)
+    } catch {
+      /* ohne Speicher nur fuer diese Sitzung */
+    }
+    set({ cardSize: s })
+  },
   toasts: [],
   pushToast: (t) => {
     const id = ++seq
