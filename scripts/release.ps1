@@ -12,7 +12,8 @@
     -Fly         danach deploy-fly.ps1 (braucht committeten Stand, ausser -AllowDirty)
     -Force       an deploy-fly.ps1 weitergeben (deployt auch, wenn gerade ein Spiel laeuft)
     -AllowDirty  uncommittete Aenderungen erlauben (auch fuer -Fly)
-  Das Skript committet nichts. Danach die Versionsdateien committen (Hinweis am Ende).
+  Mit -Fly committet das Skript die 4 Versionsdateien (package.json/-lock.json in desktop und ui) selbst, damit
+  der deployte Stand einem Commit entspricht (kein Push). Ohne -Fly committet es nichts (Hinweis am Ende).
 #>
 param(
     [ValidateSet('patch', 'minor', 'major', 'none')]
@@ -26,6 +27,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $desktop = Join-Path $root 'desktop'
 $ui = Join-Path $root 'ui'
+# Versionsdateien: aendert das Skript selbst, mit -Fly committet es sie
+$versionFiles = @('desktop/package.json', 'desktop/package-lock.json', 'ui/package.json', 'ui/package-lock.json')
 
 function Step([string]$text) { Write-Host "== $text" -ForegroundColor Cyan }
 function Fail([string]$text) { Write-Host $text -ForegroundColor Red; exit 1 }
@@ -53,7 +56,9 @@ function Get-InstalledVersion {
 Step 'Vorpruefung'
 Push-Location $root
 try {
-    $dirty = @((Invoke-Cmd 'git status --porcelain').Out | Where-Object { $_ -and $_ -notmatch '^\?\? ' })
+    # ungetrackte Dateien und die Versionsdateien (z. B. von einem abgebrochenen Lauf) zaehlen nicht
+    $dirty = @((Invoke-Cmd 'git status --porcelain').Out | Where-Object {
+        $_ -and $_ -notmatch '^\?\? ' -and ($versionFiles -notcontains $_.Substring(3).Trim()) })
 } finally { Pop-Location }
 if ($dirty.Count -gt 0) {
     if ($Fly -and -not $AllowDirty) {
@@ -123,7 +128,22 @@ if (-not $NoInstall) {
 }
 
 # ---------------------------------------------------------------- 4. fly.io
+$committed = $false
 if ($Fly) {
+    # Versionserhoehung committen (nur diese Dateien), sonst bricht deploy-fly.ps1 wegen uncommitteter Aenderungen ab
+    Push-Location $root
+    try {
+        $changed = @((Invoke-Cmd ("git status --porcelain -- " + ($versionFiles -join ' '))).Out | Where-Object { $_ })
+        if ($changed.Count -gt 0) {
+            Step "Versionsdateien committen (Version $version)"
+            $r = Invoke-Cmd ("git add -- " + ($versionFiles -join ' '))
+            if ($r.Code -ne 0) { $r.Out | ForEach-Object { Write-Host $_ }; Fail 'git add fehlgeschlagen' }
+            $r = Invoke-Cmd ("git commit -m `"Version $version`" -- " + ($versionFiles -join ' '))
+            if ($r.Code -ne 0) { $r.Out | ForEach-Object { Write-Host $_ }; Fail 'git commit fehlgeschlagen' }
+            $committed = $true
+        }
+    } finally { Pop-Location }
+
     Step 'Deploy auf fly.io'
     $flyArgs = @{}
     if ($Force) { $flyArgs.Force = $true }
@@ -138,7 +158,9 @@ Write-Host "Fertig: MageLite $version" -ForegroundColor Green
 Write-Host "  Setup:        $setup"
 Write-Host '  Lokal (Repo): MageLite.cmd startet jetzt diesen Stand'
 if ($installed) { Write-Host '  Installiert:  Startmenue / Desktop-Verknuepfung "MageLite"' }
-if ($Bump -ne 'none') {
+if ($committed) {
+    Write-Host "  Commit:       `"Version $version`" (nicht gepusht: git push)"
+} elseif ($Bump -ne 'none') {
     Write-Host ''
     Write-Host 'Versionsdateien committen:'
     Write-Host "  git add desktop/package.json desktop/package-lock.json ui/package.json ui/package-lock.json"
