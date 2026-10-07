@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-06. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-07. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -318,13 +318,31 @@ Fallback auf manuelles Klicken.
   erst `master` hat sie freigeschaltet. Sobald ein Release (≥ 1.4.62) erscheint: `scripts\import-xmage.ps1 -XmageDir …`,
   danach `build.ps1` (die DB wird beim ersten Start neu aufgebaut).
 
-## Redesign (UX/UI) – in Vorbereitung
+## Redesign „Graphit & Glut“ (2026-10-07)
 
-- 2026-10-06: Paket für **Claude Design** in `design/claude-design/` (nicht eingecheckt): `PROMPT.md` (fertiger Prompt,
-  Deutsch), `KONTEXT.md` (Zielgruppe, Maße, Screens, Zustände, Tech, No-Gos), `current-theme.css` (Kopie von
-  `ui/src/index.css`), `screenshots/` (55 PNGs aller Screens/Dialoge/Zustände, lokal + Server, plus 1280×760) mit
-  `INDEX.md`. Aufnahme reproduzierbar über `desktop/tools/steps-design-*.json` (+ `design-mate.mjs` für den zweiten
-  Menschen), siehe `DEVELOPMENT.md`. Nächster Schritt: Stilrichtung in Claude Design wählen, Handoff zurück nach Claude Code.
+- Umgesetzt nach dem Claude-Design-Handoff `design/design_handoff_magelite_redesign/` (Spec, Theme, 5 Prototypen):
+  ganze UI neu (Spielbrett, Held, Spielen, Decks/Import, Statistik, Login/Konto/Einladungen, Lobby/Tisch, Social),
+  Schriften Barlow Condensed + IBM Plex Sans/Mono, Icons lucide, keine Emojis, Toast-System (`store/ui.ts`, `Toaster`),
+  Spiel-Dialoge über `BoardModal` (Pille/Tab, Space/Esc). Kampf: Bedienung wie bisher, statt Pfeilen Etiketten
+  („→ NAME“, „BLOCKT X“, „GEBLOCKT“, „ZIEL“, „MARKIERT“) und Pod-Chip „N ANGREIFER“.
+- Neu: **Zuschauen** bei laufenden Tisch-Spielen (`/ws/game/{id}?spectate=1`, max. 8, nur wer an keinem Tisch sitzt;
+  öffentliche Sicht ohne Hand/Bibliothek/verdeckte Karten), **Mitspieler entfernen** (Gastgeber, vor dem Start;
+  Sperre bis zur nächsten Einladung), **Systemzeilen** im Lobby-Chat („X ist dem Lobby-Chat beigetreten“),
+  Import-Vorschau mit Zeilen-Hinweisen und Namensvorschlägen, Tisch-Turn in der Lobby, Statistik-Felder
+  (Spielzeit, „vor dir“, Kartenstatistik „in der Hand“), Dev-Szenario `blocker`.
+- Fixes nebenbei: Spieler, die ein Spiel selbst verlassen, landen hinter den Überlebenden (vorher geteilter Platz 1);
+  Nachzügler-Nachrichten eines alten WebSockets wurden ins neue Spiel übernommen (Mulligan-Dialog fehlte);
+  FX nannten den echten Namen verdeckter Quellen (Morph/Manifest); „commander-away“ verriet die Zone (Hand/Bibliothek);
+  Tailwind-Utility `table-row` kollidierte mit dem eingebauten `display: table-row` (jetzt `tbl-*`).
+- Geprüft: `tsc -b`, `vite build`, Token-/Emoji-/Hex-Gates; `gradlew test`; `humanSpike --humans=4` und
+  `--spectate` mit necro/dredge/gemstone/blocker (0 Fehler, keine STALLs); e2e social/tables/online/spectate/login
+  (Server) und flow (lokal) grün; Screenshot-Läufe `steps-redesign-{board,meta,meta-leer,online}.json` gegen die
+  Prototyp-Aufnahmen (`design/redesign-shots/`, nicht eingecheckt) verglichen; adversariale Leck- und Code-Review.
+- Offen (niedrig): Zuschau-Sicht wird bei Tisch-Spielen auch ohne Zuschauer gebaut (CPU); Entfernen per Platz-Index
+  kann bei gleichzeitigem Platzwechsel die falsche Person treffen; Karten-ids bleiben über Zonenwechsel gleich
+  (XMage, z. B. zurückgeschickt → später verdeckt gewirkt); Status „wartet auf X“ verrät indirekt Instants;
+  verdecktes Exil wird per Regeltext erkannt (Lücken möglich); entfernte Nutzer dürfen zuschauen;
+  `e2e-online` „Owner spielt weiter“ ist timing-anfällig (Spiel endet mitunter regulär).
 
 ## Ideen (nicht beauftragt)
 

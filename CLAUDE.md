@@ -45,6 +45,7 @@ node scripts\e2e-login.mjs          # Server-Modus: Konten/Cookie/Nutzertrennung
 node scripts\e2e-online.mjs         # Server-Modus: 2 Menschen in einem Spiel (Routing, Aufgeben, Belohnung je Nutzer)
 node scripts\e2e-tables.mjs         # Server-Modus: Lobby/Tische (eroeffnen, beitreten, Start, Revanche, 409-Faelle)
 node scripts\e2e-social.mjs         # Server-Modus: Lobby-Chat, Freunde, Tisch-Einladungen
+node scripts\e2e-spectate.mjs       # Server-Modus: Zuschauen (braucht MAGELITE_URL + MAGELITE_OWNER_CODE)
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB
@@ -76,7 +77,9 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
 6. **Jackson:** DTOs mit `@JsonInclude(NON_DEFAULT)` lassen Felder mit Default-Wert weg. Diskriminatoren wie
    `t = "prompt"` brauchen `@JsonInclude(ALWAYS)`.
 7. **Tailwind 4:** eigene Klassen mit `@utility` definieren (nicht `.klasse { @apply … }`), Verläufe heißen
-   `bg-linear-to-*`.
+   `bg-linear-to-*`. Utility-Namen nie wie Tailwind-Builtins (`table-row` war `display: table-row` → `tbl-*`).
+   Klassennamen nie per Template-String zusammensetzen (fehlen sonst still im Build). Nur Design-Tokens
+   (`bg-0..4`, `fg-1..5`, `line-1..4`, `ember`, …), keine Emojis, Versalien per CSS statt im Text.
 8. **VS Code setzt `ELECTRON_RUN_AS_NODE=1`.** Vor Electron-Aufrufen entfernen
    (`env -u ELECTRON_RUN_AS_NODE …` bzw. `Remove-Item Env:ELECTRON_RUN_AS_NODE`), sonst ist
    `require('electron')` nur ein Pfad-String.
@@ -94,6 +97,8 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
 
 - Engine-Änderung: `gradlew compileJava`, dann `humanSpike` (0 fehlgeschlagen, keine STALLs) und ggf. `test`.
 - UI-Änderung: `npx tsc -b`, dann visuell prüfen: Dev-Engine + Vite starten,
-  `desktop/tools/shot.cjs` mit `desktop/tools/steps-autoplay.json` ausführen und die PNGs ansehen
-  (In-Page-Autopilot über `window.__ml`, nur im Vite-Dev-Modus vorhanden).
+  `desktop/tools/shot.cjs` mit `desktop/tools/steps-autoplay.json` bzw. `steps-redesign-*.json` ausführen und die PNGs
+  ansehen (In-Page-Autopilot über `window.__ml`, nur im Vite-Dev-Modus vorhanden; Ablauf in `docs/DEVELOPMENT.md`).
+  Test-Hooks (`data-obj`, `data-player`, `data-testid` …) beim Umbau erhalten.
+- e2e-Skripte verlangen `MAGELITE_URL` (kein Default) – gegen eine eigene Test-Engine laufen lassen, nie gegen 7317/fly.
 - Danach `scripts\build.ps1`, damit `MageLite.cmd` den neuen Stand nutzt.

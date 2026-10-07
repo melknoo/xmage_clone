@@ -120,6 +120,12 @@ Server → Client:
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
 | `error`, `pong` | |
 
+**Zuschauen** (`/ws/game/{id}?spectate=1`, nur Server-Modus): `hello` mit `spectator:true`, `viewpointId`, `tableName`;
+öffentlicher `state` (`GameViewMapper.mapPublic`, viewer = null: keine Hand, kein `lookedAt`/`playable`/`actions`),
+Log/Chat/Status/Activity/Seats, FX ohne `hidden`, `gameOver` ohne `reward`. Eingehend nur `ping`. Close-Codes
+(endgültig, kein Reconnect): 4403 lokal, 4409 sitzt am Tisch/an einem Tisch, 4404 läuft nicht, 4429 > 8 Zuschauer,
+4000 ersetzt (neue Verbindung desselben Nutzers), 4408 zu langsam / kein Ping.
+
 Client → Server:
 
 | `t` | Wirkung |
@@ -158,6 +164,8 @@ Client → Server:
 | POST | `/api/decks` | speichern `{id?, name, text, commanders?, source?, sourceUrl?}` |
 | POST | `/api/games` | Spiel starten `{deck, bots[], tempo, humans?: [{userId, name?, deck?}]}` (weitere Menschen bis zur Lobby nur in der Dev-Engine; freie Plätze bis 4 werden mit Bots gefüllt); Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
 | GET | `/api/games/current` | eigenes laufendes Spiel (für Reconnect); fremdes → 404 |
+| PUT | `/api/tables/{id}/seats/{n}` | Gastgeber, nur LOBBY: `{kind:'BOT'\|'OPEN', deck?}`; `OPEN` auf einem Menschenplatz = **entfernen** (nie der eigene Platz; gesperrt bis zur nächsten Einladung) |
+| GET | `/api/tables`, `/api/tables/{id}` | Tisch-Sicht: Plätze mit Deck-Infos, `mySeat`, `host`, `turn` (RUNNING), `spectators`, `canSpectate`, `chat[]` (nur Sitzende) |
 | POST | `/api/tables/{id}/chat` | Tisch-Chat `{text}` (nur Sitzende, 409 sonst); die Zeilen (≤ 50) kommen in jeder Tisch-Antwort als `chat[]` mit |
 | GET | `/api/social?after=<seq>` | Server-Modus, ein Poll für alles: `{chatIn, seq, msgs[] (nur > after, leer wenn draußen), members[], friends[{id,name,status,tableId?,tableName?}], incoming[], outgoing[], invites[]}`; setzt die Präsenz |
 | POST/PUT | `/api/social/chat` | Lobby-Chat schreiben `{text}` (409 wenn draußen/Rate-Limit) / `{in: bool}` betreten/verlassen (pro Konto gespeichert) |
@@ -180,35 +188,38 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 
 ## UI (`ui/src`)
 
+Design „Graphit & Glut“ (Handoff: `design/design_handoff_magelite_redesign/`). Tokens in `index.css` (`bg-0..4`,
+`line-1..4`, `fg-1..5`, `ember`, `target`, `chosen`, `attack`, `block`), eigene Utilities per `@utility`
+(`label`, `btn-*`, `chip-*`, `card-*`, `tbl-*`, `toast`, …; Namen nie wie Tailwind-Builtins wählen, z. B. kein
+`table-row`). Versalien per CSS, Tastenhinweise als `<kbd>`. Test-Hooks: `data-obj|objs|player|life|zone|owner|stack|ref`,
+`data-testid` (z. B. `game-modal`, `modal-pill`, `attack-all`, `spectate-btn`, `seat-kick`, `conn-lost-bar`).
+
 | Datei | Aufgabe |
 |---|---|
-| `main.tsx`, `App.tsx` | Einstieg, Engine-Wartebildschirm (Server: bis 3 min „Server wird gestartet“), `#invite=`-Login, `/api/me`-Gate → `LoginScreen`, Navigation (Server: „Einladungen“ für Admins, Konto-Knopf mit Gast-Punkt), Reconnect zum laufenden Spiel; im Dev-Modus `window.__ml = {game, nav}` |
-| `api/client.ts` | Endpoint: lokal (`window.magelite` oder `?port=`) → `http://127.0.0.1:<port>` + Token; sonst `location.origin` ohne Token (Cookie). `api.get/post/put/del`, `ApiError.status`, 401-Hook, `cardImageUrl()` |
-| `store/auth.ts` | `mode` (local/server), `me` (`email`, `hasPassword`), `status` (ok/login), `login(code)`, `loginEmail()`, `register()`, `updateAccount()`, `secureDismissed` (Hinweis „Konto sichern?“ weggeklickt), `logout()`, `takeInviteFromUrl()` |
-| `screens/LoginScreen.tsx`, `AccountScreen.tsx`, `AdminScreen.tsx` | Login mit Tabs Einladungscode / E-Mail & Passwort; Konto sichern bzw. E-Mail/Passwort ändern, Abmelden; Einladungen anlegen (Code + Link einmalig), rotieren, entfernen, Spalte „Anmeldung“ (Gast / E-Mail), zuletzt gesehen |
-| `api/types.ts` | TypeScript-Typen des Protokolls (bei Änderungen an DTOs mitziehen!) |
-| `store/game.ts` | Zustand-Store: WebSocket, State, Prompt, Log, Toasts, `answer()`, `action()`, Tempo, Auto-Mana, `combatReset()`, `repeat()`, Chat (`chat`, `unreadChat`, `sendChat`), Ereignisse (`fx`/`recent` mit beim Empfang erfassten Bildschirmpositionen, `fxEnabled`) |
-| `store/nav.ts` | aktueller Screen, letzte Spielkonfiguration (localStorage) |
-| `store/social.ts`, `api/social.ts` | Social-Poll (3 s, nur Server-Modus außerhalb des Spiels; pausiert bei verstecktem Tab und nach 15 min ohne Eingabe), Lobby-Chat mit Cursor, Freunde, Anfragen, Einladungen, `readSeq` für das Badge am „Held“-Nav |
-| `social/LobbyChat.tsx`, `social/FriendsPanel.tsx`, `social/InviteToasts.tsx` | Lobby-Chat (Startseite, Klick auf Namen → Freund hinzufügen, Verlassen/Beitreten), Freundesliste (Startseite + Tisch „Freunde einladen“), Einladungs-Toasts im App-Shell |
-| `screens/*` | Held (`HomeScreen`), Spiel-Setup, Decks (Import-Dialog), Statistik |
-| `game/GameScreen.tsx` | Tisch-Layout, TopBar, eigener Bereich, Hotkeys, „ausgeschieden“-Banner |
-| `game/interaction.ts` | **Klicklogik**: aus Prompt + State → Modus (priority/attack/block/target/mana/dialog), Hervorhebung, Klickziel (Mana-Modus: Klick auf einberufbare Kreatur → `specialPay`) |
-| `game/promptActions.ts` | Buttons pro Prompt-Art („Weiter“ mit Ziel aus `nextStop`, „Alle angreifen“ mit Zwei-Klick-Bestätigung, „Angriff zurücksetzen“, Verteidiger-Wahl abbrechen = kein Angriff, „Länder automatisch“ + Sonderbezahlung), F-Tasten-Belegung, Texte für laufendes Passen, `isOpeningHandAsk()` |
-| `game/PromptBar.tsx`, `PromptDialogs.tsx` | Prompt-Leiste (laufendes F-Tasten-Passen + „Stopp“/F3), Dialoge (Auswahl mit ×N-Stepper bei Fähigkeiten, Kartennamen-Wahl mit Bildvorschau per Hover, Ersatzeffekte gruppiert, Menge, Stapel, Mulligan, Starthand-Aktion, Kartenwahl) |
-| `game/FxLayer.tsx` | Mini-Animationen zu `events`: Geisterkarte fliegt in die Zielzone (Anker `data-zone`/`data-owner`), schwebende Zahlen bei Schaden/Leben/Marken, Ereignisleiste links über der Prompt-Leiste (~5 s); Toggle „Animationen“ im Pausemenü (Leiste bleibt) |
-| `game/Battlefield.tsx`, `OpponentPod.tsx`, `Hand.tsx`, `StackPanel.tsx`, `PlayerInfo.tsx` | Spielflächen; Stapel mit großem obersten Objekt (einklappbar); Zonen-Knöpfe leuchten, wenn darin etwas spielbar/Ziel ist, 📚 öffnet die sichtbare oberste Bibliothekskarte; `OpponentPod.ConnBadge`: „getrennt N s“ + „aufgeben lassen“ für menschliche Mitspieler |
-| `game/CombatOverlay.tsx`, `TargetOverlay.tsx` | SVG-Pfeile für Kampf bzw. Stapel-Ziele (sucht Elemente über `data-obj` / `data-player` / `data-life` / `data-stack`, Hilfen in `overlayGeometry.ts`) |
-| `game/Side.tsx` | Kartenvorschau (liegt mit `z-[55]` über dem Dialog-Overlay, Dialoge zentrieren sich in der Hauptfläche), Spielverlauf (nach Zügen gruppiert, Filter Wichtiges/Alles, Icons per Stichwort-Regex), `ChatPanel` (Tab „Chat“ bei ≥ 2 Menschen, Ungelesen-Badge, Toast), Toasts, Einblendung aufgedeckter/angesehener Karten (`RevealPopups`, Store `reveals`) |
-| `game/ActivityIndicator.tsx` | Anzeige in der TopBar: arbeitet die Engine wirklich (Modus + CPU aus `activity`), Warnung bei Stillstand/ohne Verbindung |
-| `game/GameOverOverlay.tsx` | Ergebnis + XP-Animation, „Nochmal“ bzw. „Zurück zum Tisch“ |
-| `game/PauseMenu.tsx` | Pausemenü (Esc / „☰ Menü“): Auto-Mana, Auto-Passen, Ton, Verlauf-Filter, Tempo (Gastgeber); Aufgeben mit Ja/Nein; nach Aufgabe/Ausscheiden „Zuschauen“, „Zurück zum Tisch“, „Zum Hauptmenü“ |
-| `components/CardView.tsx` | Karte (Bild mit Text-Fallback, getappt = Querformat-Feld, `upright` für die Vorschau, Marken, P/T, Glow; `special` = einberufbar) |
-| `components/PasswordInput.tsx` | Passwortfeld mit Auge (ein-/ausblenden), Login + Konto |
-| `components/Modal.tsx` | Dialog; `minimizable` → einklappbar (Tab), Spielfeld bleibt bedienbar; `viewer` → reine Ansicht (Esc schließt nur sie, Spiel-Hotkeys gesperrt) |
-| `lib/mana.tsx` | Mana-Symbole (mana-font), Regeltext/Rich-Text ohne `innerHTML` |
-| `lib/sounds.ts` | kurze WebAudio-Töne, Stummschaltung |
-| `index.css` | Tailwind-4-Theme (`ink`, `gold`, `arcane`, `blood`), Glows, `@utility btn*` |
+| `main.tsx`, `App.tsx` | Einstieg, Boot (`shell/BootScreen` mit Phasen), Login-Gate, Shell mit `shell/NavRail` + `ConnectionBarSlot`, Resume (laufendes Spiel, sonst eigener Tisch), `<Toaster/>` über allem; Dev: `window.__ml = {game, nav, social, auth, table, ui, conn, api.start}` |
+| `api/client.ts`, `api/types.ts` | Endpoint (lokal Token, Server Cookie), Verbindungs-Listener für `store/conn`; Protokoll-Typen (neue Felder optional) |
+| `api/{tables,social,stats,decks,profile,admin}.ts` | REST-Module mit DTOs |
+| `store/game.ts` | WebSocket (Nachzügler alter Sockets werden ignoriert), State, Prompt, Log, Chat, FX, `spectator`, `viewer`, `stackFocus`, `logFilter`, `connect(id, {spectate})`, `stopSpectating()` |
+| `store/ui.ts`, `components/Toaster.tsx` | Toasts (info/success/error, max. 3, Info 4 s, Fehler bleiben), `dialogMinimized` |
+| `store/conn.ts` | online/offline (fetch-TypeError, 502–504), Health-Probe alle 4 s, Verbindungsleiste |
+| `store/table.ts` | eigener Tisch (`tableId`, `stamp`), zentrale Kick-Erkennung (`observe`, `observeList`, `verify`) |
+| `store/{auth,nav,social}.ts` | Konto, Screen + letzte Konfiguration, Social-Poll |
+| `components/ui/*` | Bausteine (Button, Kbd, Chip, Badge, Tabs, Segmented, Toggle, Checkbox, TextField, Table, Progress, XpRing, Avatar, StatusDot, EmptyState, Popover, Overlay, OptionRow, Wordmark, ConnectionBar) |
+| `components/CardView.tsx`, `BoardModal.tsx` | Karte (Rang-Reihenfolge der Hervorhebung, Etiketten, getappt in h×h-Box, Fallback-Rahmen); Spiel-Dialog mit Pille (Tab), Space/Esc, `BoardModalRoot` als Portal-Ziel |
+| `lib/{icons,motion,mana,tempo,mastery,format,useHotkey,sounds}` | Icons (lucide), Animationskonstanten, Mana/Rich-Text, Tempo-Texte, Meisterschaftskurve, Formate, Hotkeys, Töne |
+| `shell/*`, `screens/home/*` | Navigation, Boot, Held lokal (`HomeLocal`: Schnellstart, letzte Partien, Meisterschaft) bzw. Server (`HomeServer` + `social/SocialSidebar`) |
+| `screens/PlaySetupScreen.tsx`, `setup/*`, `decks/{catalog.ts,DeckPicker.tsx}` | Spiel-Setup, Deck-Katalog mit Cache, Deck-Auswahl (auswählen + Übernehmen) |
+| `screens/DecksScreen.tsx`, `decks/*` | Decks, Import/Bearbeiten mit Auto-Vorschau und Zeilen-Hinweisen, Löschen |
+| `screens/StatsScreen.tsx`, `stats/*` | KPIs, Formkurve, Tempo/Mulligans/Gegner, Deck-Tabelle mit aufklappbarer Kartenstatistik, Verlauf |
+| `screens/{Login,Account,Admin,Lobby,Table}Screen.tsx` | Login (Scryfall-Art), Konto, Einladungen, Lobby (Zuschauen), Tisch (Plätze, Bots, Entfernen, Freunde einladen, Tisch-Chat) |
+| `social/*` | Lobby-Chat (Systemzeilen), Freunde, Einladungskarte mit Countdown, Einladen-Popover |
+| `game/GameScreen.tsx`, `layout.ts` | Brett-Gerüst; Größen per `useBoardLayout` (kompakt bei < 1440×900), Hotkeys, Ausgeschieden-Banner |
+| `game/{TopBar,PhaseBar,PromptBar,ActivityIndicator}` | Kopf (Runde, Zug-Chip, Phasen), Prompt-Leiste mit Status-Chip, Kontext, Knöpfen; Zuschauer-Leiste |
+| `game/{OpponentPod,PlayerInfo,MyArea,Battlefield,Hand,ZoneViewer,LifeTotal,ZoneCounter,CommanderDamage,CommandZone,ManaPool}` | Spielflächen; Hand ohne Fächer (beim Zuschauen verdeckt) |
+| `game/boardDecor.ts`, `interaction.ts`, `promptActions.ts` | Kampf-/Ziel-Etiketten + Pod-Chips; **Klicklogik** (unverändert: Klick = Engine fragt, Shift = markieren); Knöpfe/F-Tasten pro Prompt |
+| `game/{StackPanel,ZoomPanel,SidePanel,LogPanel,ChatPanel,RevealPopups,FxLayer}` | Stapel, Kartenvorschau, Verlauf (Tabs, Spielerfarben), Chat (Zuschauer nur lesend), Einblendungen, FX |
+| `game/PromptDialogs.tsx`, `dialogs/*` | Dialoge (Starthand, Fähigkeit ×N, Ersatzeffekte, Ziele, Menge, Stapel, Karten) |
+| `game/{PauseMenu,GameOverOverlay}` | Pause (Optionen, Aufgeben), Spielende (XP-Ring, Meisterschaft, Zuschauer-Variante) |
 
 ## Desktop (`desktop/`)
 
@@ -222,6 +233,7 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 | `tools/steps-dredge.json`, `tools/dredge-pilot.js` | Szenario `dredge` (Dev-Engine): Ersatzeffekt-Dialog mit Gruppen + Hover, „Keinen anwenden“, „merken“ + Toolbar-Knopf |
 | `tools/steps-server.json` | Server-Modus über den Vite-Proxy: Login-Screen, `#invite=`-Login, Einladungen, Spiel |
 | `tools/steps-social.json` | Server-Modus: Startseite mit Lobby-Chat/Freunden/Einladungs-Toast, Namens-Popup, Tisch mit „Freunde einladen“, Chat verlassen (`"show": true` – versteckt bleiben Screen-Wechsel hängen; Testdaten vorher per Skript anlegen; Vite gegen andere Engine: `MAGELITE_ENGINE=http://127.0.0.1:7400`) |
+| `tools/shot.cjs` (v2), `steps-redesign-{board,meta,meta-leer,minsize,online}.json`, `social-seed.mjs`, `wait-images.js`, `proto-ready.js`, `steps-proto-*.json` | Redesign-Aufnahmen gegen isolierte Engines (Platzhalter `{{UI}}`/`{{PORT}}`/`{{OUT}}`, Sperre für 7317/fly), Testdaten für Online-Screens mit Steuerung auf 127.0.0.1:7499, Prototyp-Aufnahmen; siehe `DEVELOPMENT.md` |
 | `tools/scenario-pilot.js`, `tools/steps-necro.json`, `steps-attack-undo.json`, `steps-gemstone.json`, `steps-fx.json`, `steps-modal-hover.json` | Szenario-Screenshots (Dev-Engine): ×5-Picker + Stapel, „Alle angreifen“ → Abbrechen/Zurücksetzen, Starthand-Dialog, Ereignisleiste/Geisterkarte, Vorschau bei offenem Mulligan-Dialog (`window.__hold` steuert, was der Pilot offen lässt) |
 
 ## Skripte (`scripts/`) und Server-Dateien
@@ -229,6 +241,6 @@ Joins `game_card_stats` ↔ `games` immer über `game_id` **und** `user_id`. Neu
 `build.ps1` (alles bauen, prüft Java/Node) · `import-xmage.ps1` (XMage-Distribution → `vendor/xmage`) ·
 `bootstrap-gradle.ps1` (Wrapper neu erzeugen) · `e2e-flow.mjs` (REST+WS-Test) · `e2e-login.mjs` (Server-Modus:
 Konten, Sessions, E-Mail/Passwort, Nutzertrennung) · `e2e-online.mjs` (2 Menschen, Chat) · `e2e-tables.mjs` (Lobby,
-Tisch-Chat) · `e2e-social.mjs` (Lobby-Chat, Freunde, Einladungen) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
+Tisch-Chat) · `e2e-social.mjs` (Lobby-Chat, Freunde, Einladungen, Systemzeilen) · `e2e-spectate.mjs` (Zuschauen: Sicht, Lecks, Close-Codes) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
 Repo-Root: `Dockerfile` (UI → Engine `installDist` → JRE 17, Engine-Jar vor `lib/*`), `.dockerignore`, `fly.toml`
 (performance-2x/4 GB, Auto-Stop, Volume `/data`, Health-Grace 300 s). Betrieb: `docs/SERVER.md`.

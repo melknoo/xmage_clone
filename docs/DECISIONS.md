@@ -175,3 +175,15 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - **Einladungen nur an Freunde**, im Speicher, 10 min gültig, nur sichtbar solange der Tisch in der Lobby einen
     freien Platz hat. Sie erscheinen überall außer im laufenden Spiel. Tische bleiben trotzdem per Link/Code offen
     (keine privaten Tische).
+- **Redesign „Graphit & Glut“ (2026-10-07):**
+  - **Kampf-Bedienung unverändert** (Klick = Engine fragt nach, Shift = markieren); nur die Darstellung wechselt von
+    SVG-Pfeilen zu Etiketten an den Karten und einem „N ANGREIFER“-Chip am angegriffenen Spieler – Pfeile verdeckten
+    Karten und skalierten schlecht bei 4 Spielern.
+  - **Keine Bot-Füllung am Tisch:** freie Plätze bleiben leer; der Gastgeber setzt Bots selbst.
+  - **Zuschauen** nur bei Tisch-Spielen im Server-Modus, nur wer an keinem Tisch sitzt (sonst verpasst er den Start
+    seines Tisches), max. 8. Die Sicht baut XMage im Watcher-Modus (`viewer = null`), dadurch sind verdeckte Karten
+    schon leer; Hand, Bibliothek, `lookedAt`, Prompts, Toasts und Belohnung gibt es nur am Sitz.
+  - **Entfernen** nur durch den Gastgeber, nur vor dem Start; die Person bleibt gesperrt, bis der Gastgeber sie neu
+    einlädt oder der Tisch schließt.
+  - **Login-Bild** lädt der Browser direkt von Scryfall (`art_crop`) – kein Binary im Repo.
+  - **Versalien per CSS** (`label`/`btn`/`chip`-Utilities), Text im JSX normal geschrieben; Tastenhinweise als `<kbd>`.

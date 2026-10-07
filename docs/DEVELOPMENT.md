@@ -89,6 +89,19 @@ Das startet ein Zufallsspiel und spritzt `tools/autoplay.js` ein. Der Autopilot 
 (Länder, Zauber, Angriffe, Dialoge, Auto-Mana). Danach entstehen Screenshots in `engine/run/shot-*.png`.
 Eigene Abläufe: Schritte `wait`, `waitFor` (CSS-Selektor), `js`, `jsFile`, `shot` (siehe Kopf von `shot.cjs`).
 
+**Redesign-Aufnahmen (isolierte Engines, nie 7317):** `shot.cjs` kennt Platzhalter `{{UI}}` (`SHOT_UI`, Standard
+`http://localhost:5173`), `{{PORT}}` (`SHOT_PORT`, Standard 7400), `{{OUT}}`, `{{OWNER_CODE}}` (nur bei 127.0.0.1) und
+bricht bei 7317/`*.fly.dev` ab (außer `SHOT_ALLOW_LIVE=1`); Exit ≠ 0 bei Fehlern.
+- Brett/Meta: Engine auf 7400 (`--dev --data=<eigenes Verzeichnis>`), Vite 5173, dann
+  `SHOT_PORT=7400 npx electron tools/shot.cjs tools/steps-redesign-board.json` (bzw. `-meta`, `-meta-leer` mit leerer DB).
+- Online: Engine `--server --dev` auf 7401 mit `MAGELITE_OWNER_NAME=Anna`, zweites Vite
+  `MAGELITE_ENGINE=http://127.0.0.1:7401 npx vite --port 5174`, Testdaten
+  `MAGELITE_URL=http://127.0.0.1:7401 node desktop/tools/social-seed.mjs` (Steuerung auf 127.0.0.1:7499), dann
+  `steps-redesign-online.json`. Ausgabe nach `design/redesign-shots/app/` (nicht eingecheckt).
+- Nur eine JVM gleichzeitig (RAM); Gradle mit `--no-daemon`. `lib` vor dem Start in das Datenverzeichnis kopieren,
+  sonst sperrt die laufende Engine `installDist`.
+- Electron-Offline-Emulation blockt `localhost` nicht – Offline-Zustände per `fetch`-Patch im Step simulieren.
+
 Die echte App einmal starten und nach X ms abfotografieren (beendet sich danach):
 `$env:MAGELITE_AUTOSHOT="C:\pfad\bild.png;9000"; .\MageLite.cmd`
 

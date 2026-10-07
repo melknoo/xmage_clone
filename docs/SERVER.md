@@ -90,6 +90,10 @@ mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --r
    erscheint beim Freund als Karte oben rechts („Beitreten“), auch wenn er gerade woanders in der App ist (nicht
    im laufenden Spiel). Der Chat-Verlauf liegt nur im Speicher und ist nach einem Auto-Stop weg.
 
+6. **Zuschauen / Entfernen:** In der Lobby zeigt ein laufender Tisch „Läuft · Zug N“ und „Zuschauen“ (nur wer an
+   keinem Tisch sitzt, max. 8 pro Spiel; Zuschauer sehen keine Hände). Der Gastgeber kann vor dem Start Mitspieler
+   entfernen („Wirklich entfernen?“); sie kommen erst nach einer neuen Einladung wieder an den Tisch.
+
 Text für Freunde:
 
 > Hier kannst du dein Commander-Deck gegen drei Bots testen, direkt im Browser am PC/Laptop (Chrome, Edge oder
