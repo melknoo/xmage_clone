@@ -253,6 +253,8 @@ export interface Prompt {
   mode?: 'priority' | 'attackers' | 'blockers'
   /** Prioritaet im eigenen Zug bei leerem Stapel: wohin "Weiter" fuehrt */
   nextStop?: 'main1' | 'combat' | 'main2' | 'end'
+  /** Prioritaet: warum Auto-Passen hier angehalten hat (Ziel auf mich, Gegner-Upkeep) */
+  stopReason?: string
   possibleAttackers?: UUID[]
   possibleBlockers?: UUID[]
   mulligan?: boolean

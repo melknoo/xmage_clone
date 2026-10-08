@@ -390,6 +390,37 @@ Fallback auf manuelles Klicken.
   `magelite-engine.jar` („FFA aktiv“). Versionsdateien noch nicht committet. **Nicht deployt** (fly).
 - Offen: Tisch, dessen Gastgeber geht, lässt ein laufendes Spiel ohne Tisch weiterlaufen (Admin kann es beenden).
 
+## Stopps, Deck-Ordner, Brackets (2026-10-08)
+
+- **Stopp bei Ziel auf mich** (Pausenmenü, Standard an): Auto-Passen **und** F-Tasten halten, sobald ein fremdes
+  Stapelobjekt dich, deine bleibenden Karten, Stapelobjekte oder Karten anvisiert (je Stapelobjekt einmal).
+  `TargetCheck` + `GameHost.stopReason`; F-Tasten über `MageLiteHuman` (Unterklasse von `HumanPlayer`, setzt die
+  Pass-Flags in `priority()` auf dem Spiel-Thread zurück). Prompt zeigt „Angehalten · Quelle → Ziel“ (`stopReason`).
+- **Stopp im Gegner-Upkeep** (Pausenmenü, Standard aus): XMage gibt im Gegner-Upkeep bei leerem Stapel gar keine
+  Priorität (Step-Flag `opponentTurn.upkeep`); Umschalten setzt deshalb die `UserData` neu (`HumanSettings.of`).
+  Hält je Gegnerzug einmal, auch während F4/F9.
+- **Deck-Ordner** (eine Ebene): Migration `V6__deck_folder_bracket.sql`, `POST /api/decks/{id}/meta`
+  (Ordner/Bracket ohne Neuspeichern), `POST /api/decks/folders/rename` (leer = auflösen). Deckliste in einklappbaren
+  Abschnitten (Zustand im Browser), Menü an der Kachel (Bracket + Verschieben + neuer Ordner), Ordner/Bracket im
+  Import-Dialog, Deck-Auswahl sortiert nach Ordner und zeigt Ordner/Bracket.
+  **Drag & Drop:** Kachel auf einen Ordner-Abschnitt ziehen (auch eingeklappt, auf den Kopf); beim Ziehen erscheinen
+  leere Abschnitte (z. B. „Ohne Ordner“) als Ziel. Auch **Umsortieren** innerhalb eines Ordners: Drop auf eine Kachel
+  (linke/rechte Hälfte = davor/dahinter, Ember-Strich als Markierung). Migration `V7__deck_order.sql` (`sort_order`),
+  `POST /api/decks/order {folder, ids}`; neue/nie sortierte Decks stehen vorne (`screens/decks/order.ts`), Verschieben
+  per Menü setzt die Reihenfolge im Zielordner zurück. Deck-Auswahl nutzt dieselbe Reihenfolge.
+- **Brackets:** `BracketAnalyzer` schlägt 2–4 vor (Game Changers aus `brackets/game-changers.txt` = XMage-Liste,
+  2-Karten-Combos aus XMages `brackets/infinite-combos.txt`, Massen-Landzerstörung, Extra-Züge, Tutoren); 1 und 5
+  nur manuell. Vorschlag bei Vorschau/Speichern, Altbestand per Hintergrund-Backfill beim Start. Import übernimmt
+  die Autor-Bracket (Archidekt `edhBracket`, Moxfield `bracket`). Filter B1–B5 in der Deckliste.
+- Geprüft: `gradlew test` (neu `BracketAnalyzerTest`), `humanSpike` 2/2 ohne Fehler, `tsc -b`, eigene Test-Engine
+  7402: Backfill 4/4, Meta/Umbenennen/Validierung per curl, Screenshots Deckliste/Menü/Filter/Editor/Picker,
+  Stopp-Lauf mit F9 über 47 Züge (jeder Gegner-Upkeep + „Curse of Inertia → dich“).
+- Später: **Zweiten Tisch selbst hosten** (Desktop-App als Server für Freunde: Host-Schalter, Owner-Code,
+  Erreichbarkeit per Portfreigabe/Tunnel, ggf. „Server beitreten“ in der App; `preload.cjs` injiziert
+  `window.magelite` auch auf fremden Seiten → vorher beheben).
+- Grenzen: Game-Changer-Liste ist XMages Stand (1.4.60), nicht automatisch aktuell. Tutor-/Extra-Zug-Erkennung per
+  Regeltext (Heuristik).
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

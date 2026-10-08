@@ -34,6 +34,8 @@ public class PromptDto {
     public String mode;
     /** SELECT/priority im eigenen Zug bei leerem Stapel: wohin "Weiter" fuehrt (main1 | combat | main2 | end) */
     public String nextStop;
+    /** SELECT/priority: warum Auto-Passen hier angehalten hat (z.B. "Murder → Llanowar Elves", "Upkeep von Bot") */
+    public String stopReason;
     public List<UUID> possibleAttackers;
     public List<UUID> possibleBlockers;
 

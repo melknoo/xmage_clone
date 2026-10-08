@@ -124,7 +124,9 @@ public final class Main {
         accounts.setOnRevoke(httpServer::closeSessionsOf);
         httpServer.addModule(new AuthRoutes(cfg, auth, accounts));
         httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
-        httpServer.addModule(new DeckRoutes(deckStore));
+        DeckRoutes deckRoutes = new DeckRoutes(deckStore);
+        httpServer.addModule(deckRoutes);
+        deckRoutes.backfillBrackets();
         httpServer.addModule(new StatsRoutes(db, profile));
         if (server) {
             // Lobby/Tische: nur online sinnvoll (lokal startet man direkt)

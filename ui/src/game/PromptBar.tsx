@@ -172,6 +172,10 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
   } else if (inter.mode === 'mana') {
     st = { text: 'Mana zahlen', tone: 'turn' }
     detail = sourceName ?? null
+  } else if (inter.mode === 'priority' && p.stopReason) {
+    // Auto-Passen/F-Tasten angehalten: Ziel auf mich bzw. Gegner-Upkeep
+    st = { text: 'Angehalten', tone: 'target' }
+    detail = p.stopReason
   } else if (inter.mode === 'priority') {
     st = { text: 'Wartet auf dich', tone: 'turn' }
     detail = ctx.mine ? 'Priorität' : stepLabel(step) || null

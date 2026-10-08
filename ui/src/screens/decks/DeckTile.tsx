@@ -3,7 +3,9 @@ import type { StoredDeck } from '../../api/decks'
 import { Button, Chip, ProgressBar } from '../../components/ui'
 import { Icon } from '../../lib/icons'
 import { ColorPips } from '../../lib/mana'
+import { bracketTitle, deckBracket } from './bracket'
 import { DeckArt } from './DeckArt'
+import { DeckMetaMenu } from './DeckMetaMenu'
 import { deckMastery } from './deckMastery'
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
@@ -15,18 +17,62 @@ export function deckMeta(d: StoredDeck): string {
   return parts.filter(Boolean).join(' · ')
 }
 
-/** Kachel im Decks-Raster: Art 150 (110), Stufe-Chip, Name + Farben, Meta, Meisterschaft 3 px, Spielen + Bearbeiten/Löschen. */
-export function DeckTile({ deck, onPlay, onEdit, onDelete }: { deck: StoredDeck; onPlay: () => void; onEdit: () => void; onDelete: () => void }) {
+/** Kachel im Decks-Raster: Art 150 (110), Stufe-/Bracket-Chip, Name + Farben, Meta, Meisterschaft 3 px, Spielen + Ordner/Bracket, Bearbeiten, Löschen. */
+export function DeckTile({
+  deck,
+  folders,
+  onPlay,
+  onEdit,
+  onDelete,
+  onDragStart,
+  onDragEnd,
+  dragging = false,
+}: {
+  deck: StoredDeck
+  /** vorhandene Ordner (fuer "In Ordner verschieben") */
+  folders: string[]
+  onPlay: () => void
+  onEdit: () => void
+  onDelete: () => void
+  /** Drag & Drop in einen Ordner-Abschnitt (DecksScreen); ohne Handler nicht ziehbar */
+  onDragStart?: () => void
+  onDragEnd?: () => void
+  /** wird gerade gezogen (gedimmt) */
+  dragging?: boolean
+}) {
   const m = deckMastery(deck)
   const art = deck.commanderSet && deck.commanderNum ? cardImageUrl({ set: deck.commanderSet, num: deck.commanderNum }, { size: 'art_crop' }) : null
   const meta = deckMeta(deck)
+  const bracket = deckBracket(deck)
   return (
-    <div className="surface flex min-w-0 flex-col overflow-hidden" data-testid="deck-tile" data-deck-id={deck.id}>
-      <DeckArt src={art} className="h-[110px] flex-none board:h-[150px]">
+    // kein overflow-hidden: das Ordner-Menue ragt ueber die Kachel hinaus
+    <div
+      className={`surface flex min-w-0 flex-col transition-opacity duration-1 ${onDragStart ? 'cursor-grab active:cursor-grabbing' : ''}`}
+      style={dragging ? { opacity: 0.4 } : undefined}
+      data-testid="deck-tile"
+      data-deck-id={deck.id}
+      draggable={!!onDragStart}
+      onDragStart={
+        onDragStart &&
+        ((e) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData('text/x-magelite-deck', String(deck.id))
+          // DOM erst nach dem Start aendern (leere Abschnitte einblenden), sonst bricht Chromium das Ziehen ab
+          window.setTimeout(onDragStart, 0)
+        })
+      }
+      onDragEnd={onDragEnd}
+    >
+      <DeckArt src={art} className="h-[110px] flex-none rounded-t-md board:h-[150px]">
         <div className="absolute left-2.5 top-2.5 flex items-center gap-1.5">
           <Chip tone="onArt" icon="mastery" title={`Deck-Meisterschaft: ${m.text}`}>
             {`Stufe ${m.level}`}
           </Chip>
+          {bracket && (
+            <Chip tone="onArt" title={bracketTitle(deck)} testId="deck-bracket" style={bracket.auto ? { opacity: 0.72 } : undefined}>
+              {bracket.auto ? `Bracket ${bracket.value}?` : `Bracket ${bracket.value}`}
+            </Chip>
+          )}
           {!deck.valid && (
             <Chip tone="attack" title={deck.validation || 'Nicht Commander-legal'} style={{ background: 'rgba(18,17,16,.85)' }}>
               Nicht legal
@@ -52,6 +98,7 @@ export function DeckTile({ deck, onPlay, onEdit, onDelete }: { deck: StoredDeck;
           <Button variant="primary" icon="start" className="min-w-0 flex-1" style={{ height: 36, fontSize: 15, letterSpacing: '.08em' }} onClick={onPlay}>
             Spielen
           </Button>
+          <DeckMetaMenu deck={deck} folders={folders} />
           <button type="button" className="btn-tile" style={{ width: 36, height: 36 }} title="Bearbeiten" aria-label="Bearbeiten" data-testid="deck-edit" onClick={onEdit}>
             <Icon name="edit" size={16} />
           </button>

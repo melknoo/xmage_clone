@@ -47,7 +47,9 @@ Electron (desktop/src/main.cjs)
 | `game/StackSig` | Signatur des obersten Stapelobjekts (Controller, Quellname, Regeltext, Ziele): „gleiche Trigger“ erkennen |
 | `game/MageLiteMatch` | Commander-FFA-Match (40 Leben, London-Mulligan, Rollback aus) |
 | `game/TrackingLondonMulligan` | zählt Mulligans; Copy kopiert private Felder per Reflection |
-| `game/HumanSettings` | `UserData` für den Menschen (Stopps: eigene Mains, Endphase der Gegner; Auto-Pass nach Zauber …) |
+| `game/HumanSettings` | `UserData` für den Menschen (Stopps: eigene Mains, Endphase der Gegner, optional Gegner-Upkeep; Auto-Pass nach Zauber …) |
+| `game/MageLiteHuman` | `HumanPlayer` mit Haltepunkt: setzt laufendes F-Tasten-Passen zurück, wenn `GameHost.stopReason` anhalten will |
+| `game/TargetCheck` | fremde Stapelobjekte, die einen Spieler oder seine Objekte anvisieren („Stopp bei Ziel auf mich“) |
 | `game/GameRegistry`, `GameSetup` | laufende Spiele (ein Sitz pro Nutzer, insgesamt `maxGames`; voll → `BusyException`/409); `GameSetup(seats, tempo)` mit `SeatSpec.human(userId, name, deck, deckId)` / `SeatSpec.bot(deck)` in Tischreihenfolge, Komfort-Konstruktor 1 Mensch + 3 Bots |
 | `view/GameViewMapper` | XMage-`GameView` + Spielzustand → `StateDto` (Sitzordnung = echte Zugfolge aus `PlayerList`, Commander-Steuer/-Schaden, spielbare Objekte, Stapel-Ziele mit Namen) |
 | `view/RichText` | XMage-HTML (Log/Prompts) → sichere Segmente `{text}`/`{obj,text,color}`/`{br}` |
@@ -55,7 +57,8 @@ Electron (desktop/src/main.cjs)
 | `deck/TextDeckParser` | Textlisten parsen, Karten über `CardRepository` auflösen, Commander erkennen, `.dck` erzeugen |
 | `deck/DeckUrlImporter` | Archidekt/Moxfield-JSON → Textliste (409 „blocked“ → UI lädt über Electron) |
 | `deck/DeckRoutes` | `/api/decks/parse`, `/api/decks/url`, `POST /api/decks`, `/api/decks/{id}/text` |
-| `deck/DeckStore` | SQLite-Tabelle `decks` (gespeichert wird `.dck`-Text) |
+| `deck/DeckStore` | SQLite-Tabelle `decks` (gespeichert wird `.dck`-Text; Ordner, Bracket manuell/Vorschlag) |
+| `deck/BracketAnalyzer` | Bracket-Vorschlag 2–4 (Game Changers, 2-Karten-Combos, Landzerstörung, Extra-Züge, Tutoren) |
 | `deck/DeckLoader`, `LoadedDeck` | XMage-Importer + Validierung (`mage.deck.Commander`); `newDeck()` pro Spiel |
 | `deck/SampleDeckCatalog` | mitgelieferte Decks textuell lesen, Farben aus der Karten-DB |
 | `images/ImageService` | `/img/card`, `/img/token`, `/img/named`: Scryfall-Proxy mit Disk-Cache, Drossel 110 ms, 404-Merker 7 Tage |
@@ -89,7 +92,8 @@ beim Start (`BotTuning.checkFfaEvaluator`, Log „KI-Bewertung: …“).
    - Läuft ein Mehrfach-Angriff/-Block, beantwortet ihn `continueMacro`.
    - Dann wird versucht, ihn automatisch zu beantworten (`handleAutoPay`).
    - Läuft eine Sonderbezahlung (Einberufen), beantwortet `continueSpecial` Aktionswahl, Kreatur und Farbe.
-   - Prioritäts-Prompt: Hat der Mensch auf ein gleiches Stapelobjekt (`StackSig`) schon gepasst oder hat er keine
+   - Prioritäts-Prompt: `stopReason` (Ziel auf mich, Gegner-Upkeep) verhindert Auto-Passen und landet im Prompt.
+     Sonst: Hat der Mensch auf ein gleiches Stapelobjekt (`StackSig`) schon gepasst oder hat er keine
      Nicht-Mana-Aktion (Auto-Passen; nie in den eigenen Main-Phasen), wird automatisch gepasst. Dann geht nur ein
      gedrosselter State raus. Im eigenen Zug bei leerem Stapel bekommt der Prompt `nextStop`.
    - Sonst kommt ein State **mit** spielbaren Objekten und danach `PromptDto` mit neuer `id`.
@@ -214,7 +218,7 @@ Design „Graphit & Glut“ (Handoff: `design/design_handoff_magelite_redesign/`
 | `lib/{icons,motion,mana,tempo,mastery,format,useHotkey,sounds}` | Icons (lucide), Animationskonstanten, Mana/Rich-Text, Tempo-Texte, Meisterschaftskurve, Formate, Hotkeys, Töne |
 | `shell/*`, `screens/home/*` | Navigation (`NavRail`: Logo/„Start“ → Startseite, Badge Lobby-Chat außerhalb von Start/Lobby, Version unten), Boot, Startseite lokal (`HomeLocal`: Held-Kopf, Schnellstart, letzte Partien, Meisterschaft) bzw. Server (`HomeServer` + `social/SocialSidebar`) |
 | `screens/PlaySetupScreen.tsx`, `setup/*`, `decks/{catalog.ts,DeckPicker.tsx}` | Spiel-Setup, Deck-Katalog mit Cache, Deck-Auswahl (auswählen + Übernehmen) |
-| `screens/DecksScreen.tsx`, `decks/*` | Decks, Import/Bearbeiten mit Auto-Vorschau und Zeilen-Hinweisen, Löschen |
+| `screens/DecksScreen.tsx`, `decks/*` | Decks in Ordner-Abschnitten, Bracket-Filter, Import/Bearbeiten mit Auto-Vorschau, Zeilen-Hinweisen, Ordner/Bracket (`DeckMetaMenu`, `FolderHeader`, `bracket.ts`), Löschen |
 | `screens/StatsScreen.tsx`, `stats/*` | KPIs, Formkurve, Tempo/Mulligans/Gegner, Deck-Tabelle mit aufklappbarer Kartenstatistik, Verlauf |
 | `screens/{Login,Account,Admin,Lobby,Table}Screen.tsx` | Login (Scryfall-Art), Konto, Admin (Tabs Nutzer/Einladungen/Server, `screens/admin/*`, Detail-Panel rechts), Lobby (Zuschauen, rechts `SocialSidebar`), Tisch (Plätze, Bots, Entfernen, Freunde einladen, Tisch-Chat) |
 | `social/*` | Lobby-Chat (Systemzeilen), Freunde, Einladungskarte mit Countdown, Einladen-Popover |

@@ -6,6 +6,8 @@ import { Icon } from '../lib/icons'
 import { ColorPips } from '../lib/mana'
 import { DeckArt } from '../screens/decks/DeckArt'
 import { deckMastery } from '../screens/decks/deckMastery'
+import { deckBracket } from '../screens/decks/bracket'
+import { compareDecks } from '../screens/decks/order'
 
 export interface DeckPickerProps {
   decks: StoredDeck[]
@@ -59,10 +61,13 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
 
   const mineItems = useMemo<PickItem[]>(
     () =>
+      // nach Ordner (ohne Ordner zuerst), darin eigene Reihenfolge wie unter "Decks"
       [...decks]
-        .sort((a, b) => b.updatedAt - a.updatedAt)
+        .sort((a, b) => (a.folder ?? '').localeCompare(b.folder ?? '', 'de') || compareDecks(a, b))
         .map((d) => {
           const commander = d.commanders.join(' & ')
+          const bracket = deckBracket(d)
+          const setLine = [d.folder || 'Eigenes Deck', `Stufe ${deckMastery(d).level}`, bracket && `Bracket ${bracket.value}${bracket.auto ? '?' : ''}`].filter(Boolean).join(' · ')
           return {
             key: `user:${d.id}`,
             spec: { type: 'user', id: d.id },
@@ -70,10 +75,10 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
             commander,
             colors: d.colors,
             art: artOf(d.commanderSet, d.commanderNum),
-            setLine: `Eigenes Deck · Stufe ${deckMastery(d).level}`,
+            setLine,
             invalid: !d.valid,
             validation: d.validation,
-            hay: [d.name, commander, d.commanderSet ?? '', SOURCE[d.source] ?? d.source].join(' ').toLowerCase(),
+            hay: [d.name, commander, d.commanderSet ?? '', SOURCE[d.source] ?? d.source, d.folder ?? '', bracket ? `bracket ${bracket.value} b${bracket.value}` : ''].join(' ').toLowerCase(),
           }
         }),
     [decks],

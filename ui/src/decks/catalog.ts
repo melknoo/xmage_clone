@@ -83,6 +83,10 @@ interface CatalogStore {
   invalidate: () => void
   /** Abmelden: alles vergessen */
   reset: () => void
+  /** ein geaendertes Deck uebernehmen (Ordner/Bracket), Spiele/Siege bleiben */
+  replaceDeck: (d: StoredDeck) => void
+  /** Reihenfolge eines Ordners lokal uebernehmen (vor POST /api/decks/order, Drag & Drop) */
+  applyOrder: (folder: string, ids: number[]) => void
 }
 
 export const useCatalogStore = create<CatalogStore>((set, get) => ({
@@ -102,6 +106,14 @@ export const useCatalogStore = create<CatalogStore>((set, get) => ({
     void get().refresh()
   },
   reset: () => set({ decks: [], samples: [], loaded: false }),
+  applyOrder: (folder, ids) =>
+    set({
+      decks: get().decks.map((x) => {
+        const i = ids.indexOf(x.id)
+        return i < 0 ? x : { ...x, folder, sortOrder: i }
+      }),
+    }),
+  replaceDeck: (d) => set({ decks: get().decks.map((x) => (x.id === d.id ? { ...d, games: x.games, wins: x.wins } : x)) }),
 }))
 
 /** Cache verwerfen (ausserhalb von React, z. B. nach dem Speichern eines Decks) */

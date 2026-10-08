@@ -163,6 +163,14 @@ public final class GameHost {
         private volatile StateDto lastState;
         private volatile Messages.GameOver gameOver;
         private volatile boolean autoPass = true;
+        /** Auto-Passen (auch F-Tasten) im Upkeep eines Gegners anhalten */
+        private volatile boolean stopOppUpkeep;
+        /** Auto-Passen (auch F-Tasten) anhalten, sobald ein fremdes Stapelobjekt mich/meine Objekte anvisiert */
+        private volatile boolean stopOnTargeted = true;
+        /** anvisierende Stapelobjekte, fuer die schon angehalten wurde (Game-Thread) */
+        private final Set<UUID> targetAlerted = ConcurrentHashMap.newKeySet();
+        /** Zug, in dessen Gegner-Upkeep schon angehalten wurde (Game-Thread) */
+        private int upkeepStoppedTurn = -1;
         private volatile boolean autoPayDefault = true;
         private volatile boolean conceded;
         /** selbst verlassen ({@link #leave}); zaehlt bei der Platzierung hinter den Ueberlebenden */
@@ -350,9 +358,10 @@ public final class GameHost {
         for (GameSetup.SeatSpec spec : setup.seats()) {
             if (spec.human()) {
                 String name = uniqueName(spec.name() == null || spec.name().isBlank() ? "Spieler" : spec.name(), usedNames);
-                HumanPlayer hp = new HumanPlayer(name, RangeOfInfluence.ALL, 0);
+                MageLiteHuman hp = new MageLiteHuman(name, RangeOfInfluence.ALL, 0);
                 hp.setUserData(HumanSettings.defaults());
                 HumanSeat seat = new HumanSeat(hp, spec, first == null);
+                hp.setStopGuard(g -> stopReason(seat, g, false) != null);
                 humans.put(hp.getId(), seat);
                 if (first == null) {
                     first = seat;
@@ -470,6 +479,44 @@ public final class GameHost {
             // der Client schickt die Einstellung bei jedem Reconnect erneut.
             action(seat, PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS.name(), null);
         }
+    }
+
+    public void setStops(HumanSeat seat, Boolean stopOppUpkeep, Boolean stopOnTargeted) {
+        if (stopOppUpkeep != null && stopOppUpkeep != seat.stopOppUpkeep) {
+            seat.stopOppUpkeep = stopOppUpkeep;
+            // XMage ueberspringt Steps ohne Stop-Flag bei leerem Stapel selbst (kein Prompt) -> Flag in den UserData
+            seat.player.setUserData(HumanSettings.of(stopOppUpkeep));
+        }
+        if (stopOnTargeted != null) {
+            seat.stopOnTargeted = stopOnTargeted;
+        }
+    }
+
+    /**
+     * Grund, an dieser Prioritaet trotz Auto-Passen/F-Tasten anzuhalten (sonst null): ein fremdes Stapelobjekt visiert
+     * mich oder meine Objekte an (je Stapelobjekt einmal) bzw. Upkeep eines Gegners (je Zug einmal). Game-Thread;
+     * {@code mark} merkt sich den Halt (beim Zeigen des Prompts), ohne {@code mark} nur pruefen (F-Tasten-Guard).
+     */
+    private String stopReason(HumanSeat seat, Game g, boolean mark) {
+        if (seat.stopOnTargeted) {
+            for (TargetCheck.Hit hit : TargetCheck.targeting(g, seat.playerId)) {
+                if (!seat.targetAlerted.contains(hit.stackId())) {
+                    if (mark) {
+                        seat.targetAlerted.add(hit.stackId());
+                    }
+                    return hit.source() + " → " + hit.target();
+                }
+            }
+        }
+        if (seat.stopOppUpkeep && g.getTurnStepType() == PhaseStep.UPKEEP && g.getStack().isEmpty()
+                && !seat.playerId.equals(g.getActivePlayerId()) && seat.upkeepStoppedTurn != g.getTurnNum()) {
+            if (mark) {
+                seat.upkeepStoppedTurn = g.getTurnNum();
+            }
+            Player active = g.getPlayer(g.getActivePlayerId());
+            return "Upkeep von " + (active == null ? "?" : active.getName());
+        }
+        return null;
     }
 
     /**
@@ -1356,7 +1403,8 @@ public final class GameHost {
 
             boolean priorityPrompt = "SELECT".equals(prompt.kind) && "priority".equals(prompt.mode);
             String sig = priorityPrompt ? StackSig.top(game) : null;
-            if (sig != null && seat.passedSigs.contains(sig)) {
+            String stopReason = priorityPrompt ? stopReason(seat, game, true) : null;
+            if (sig != null && stopReason == null && seat.passedSigs.contains(sig)) {
                 // auf ein gleiches Stapelobjekt schon gepasst -> wieder passen (ohne vollen State)
                 onUpdate();
                 answerInternally(seat, prompt, Response.ofBool(false));
@@ -1369,12 +1417,13 @@ public final class GameHost {
                 PhaseStep step = game.getTurnStepType();
                 // eigene Main-Phasen halten immer (Main 2 nie still ueberspringen); F-Tasten passen XMage-seitig vorher
                 boolean ownMain = myTurnEmptyStack && (step == PhaseStep.PRECOMBAT_MAIN || step == PhaseStep.POSTCOMBAT_MAIN);
-                if (seat.autoPass && !playable.hasActions() && !ownMain) {
+                if (seat.autoPass && !playable.hasActions() && !ownMain && stopReason == null) {
                     // nichts spielbar (ausser Mana) -> automatisch passen; State nur gedrosselt
                     onUpdate();
                     answerInternally(seat, prompt, Response.ofBool(false));
                     return;
                 }
+                prompt.stopReason = stopReason;
                 if (myTurnEmptyStack) {
                     prompt.nextStop = NextStop.of(game, seat.player, seat.autoPass);
                 }
@@ -1881,6 +1930,9 @@ public final class GameHost {
             for (HumanSeat s : humans.values()) {
                 if (!s.passedSigs.isEmpty()) {
                     s.passedSigs.clear();
+                }
+                if (!s.targetAlerted.isEmpty()) {
+                    s.targetAlerted.clear();
                 }
             }
         }

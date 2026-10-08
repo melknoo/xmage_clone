@@ -27,6 +27,22 @@ export interface StoredDeck {
   games?: number
   /** nur in der Liste: davon gewonnen */
   wins?: number
+  /** Ordner (eine Ebene); '' = ohne Ordner */
+  folder?: string
+  /** manuell gesetzte Commander-Bracket 1-5; fehlt = Vorschlag gilt */
+  bracket?: number
+  /** Vorschlag der Engine (2-4) */
+  bracketAuto?: number
+  /** Gruende des Vorschlags */
+  bracketInfo?: BracketReason[]
+  /** eigene Reihenfolge im Ordner (Drag & Drop); fehlt = neu, steht vorne */
+  sortOrder?: number
+}
+
+/** Grund fuer einen Bracket-Vorschlag (Engine: BracketAnalyzer) */
+export interface BracketReason {
+  kind: 'gameChanger' | 'combo' | 'mld' | 'extraTurn' | 'tutor'
+  cards: string[]
 }
 
 /** grobe Kartenart der Vorschau (Rangfolge creature > land > planeswalker > battle > instant > sorcery > artifact > enchantment > other) */
@@ -63,6 +79,11 @@ export interface DeckPreview {
   colors?: string
   commanderSet?: string
   commanderNum?: string
+  /** Bracket-Vorschlag der Engine (2-4) und Gruende */
+  bracketAuto?: number
+  bracketInfo?: BracketReason[]
+  /** nur /api/decks/url: vom Deck-Autor gesetzte Bracket (Archidekt/Moxfield) */
+  bracket?: number
   /** nur /api/decks/url: Text der Liste */
   text?: string
   source?: string
@@ -77,12 +98,21 @@ export interface DeckSaveRequest {
   commanders?: string[]
   source?: string
   sourceUrl?: string
+  folder?: string
+  /** 0 = Vorschlag gilt, 1-5 manuell */
+  bracket?: number
 }
 
 export const decksApi = {
   list: () => api.get<StoredDeck[]>('/api/decks'),
   text: (id: number) => api.get<{ text: string }>(`/api/decks/${id}/text`),
   save: (req: DeckSaveRequest) => api.post<StoredDeck>('/api/decks', req),
+  /** Ordner/Bracket ohne Neuspeichern; bracket 0 = Vorschlag gilt */
+  meta: (id: number, meta: { folder?: string; bracket?: number }) => api.post<StoredDeck>(`/api/decks/${id}/meta`, meta),
+  /** Reihenfolge eines Ordners; die Decks landen dabei in diesem Ordner */
+  order: (folder: string, ids: number[]) => api.post<{ decks: number }>('/api/decks/order', { folder, ids }),
+  /** to '' loest den Ordner auf */
+  renameFolder: (from: string, to: string) => api.post<{ decks: number }>('/api/decks/folders/rename', { from, to }),
   remove: (id: number) => api.del<{ deleted: boolean }>(`/api/decks/${id}`),
   parse: (text: string, name?: string, commanders?: string[]) => api.post<DeckPreview>('/api/decks/parse', { text, name, commanders }),
   /** json: vom Client geholte Rohantwort (Cloudflare-Sperre: 409 {blocked, apiUrl}), sonst laedt die Engine selbst */

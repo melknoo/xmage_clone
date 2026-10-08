@@ -528,6 +528,8 @@ public final class HttpServer {
                     if (m.has("autoPass")) {
                         host.setAutoPass(seat, m.get("autoPass").asBoolean(true));
                     }
+                    host.setStops(seat, m.has("stopOppUpkeep") ? m.get("stopOppUpkeep").asBoolean() : null,
+                            m.has("stopOnTargeted") ? m.get("stopOnTargeted").asBoolean() : null);
                 }
                 case "replacement" -> host.replacement(seat, m.path("mode").asText(),
                         m.hasNonNull("key") ? m.get("key").asText() : null, m.path("always").asBoolean(false));

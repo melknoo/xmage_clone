@@ -22,7 +22,8 @@ public final class DeckUrlImporter {
     private static final Pattern ARCHIDEKT = Pattern.compile("archidekt\\.com/(?:api/)?decks/(\\d+)");
     private static final Pattern MOXFIELD = Pattern.compile("moxfield\\.com/decks/([A-Za-z0-9_-]+)");
 
-    public record Imported(String name, String text, String source) {
+    /** {@code bracket}: vom Deck-Autor gesetzte Commander-Bracket (1-5), sonst null */
+    public record Imported(String name, String text, String source, Integer bracket) {
     }
 
     /** Wird geworfen, wenn der Server den Abruf blockt (z.B. Moxfield/Cloudflare) - die UI kann dann selbst laden. */
@@ -117,7 +118,8 @@ public final class DeckUrlImporter {
             }
             line(isCmd ? cmd : deck, qty, name, set, num);
         }
-        return new Imported(root.path("name").asText("Archidekt-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "archidekt");
+        return new Imported(root.path("name").asText("Archidekt-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "archidekt",
+                bracket(root.path("edhBracket")));
     }
 
     private static Imported moxfield(JsonNode root) {
@@ -131,7 +133,17 @@ public final class DeckUrlImporter {
             board(root.path("commanders"), cmd);
             board(root.path("mainboard"), deck);
         }
-        return new Imported(root.path("name").asText("Moxfield-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "moxfield");
+        return new Imported(root.path("name").asText("Moxfield-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "moxfield",
+                bracket(root.path("bracket")));
+    }
+
+    /** Bracket-Feld der API (Archidekt {@code edhBracket}, Moxfield {@code bracket}); nur 1-5 zaehlt */
+    private static Integer bracket(JsonNode n) {
+        if (!n.canConvertToInt()) {
+            return null;
+        }
+        int b = n.asInt();
+        return b >= 1 && b <= 5 ? b : null;
     }
 
     private static void board(JsonNode cards, StringBuilder out) {

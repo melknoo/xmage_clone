@@ -1,6 +1,8 @@
 package dev.magelite.deck;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonRawValue;
+import dev.magelite.api.Json;
 import dev.magelite.stats.Db;
 import dev.magelite.stats.Progression;
 
@@ -10,6 +12,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,18 +24,26 @@ public final class DeckStore {
 
     /**
      * {@code masteryLevel}/{@code masteryNext} aus {@link Progression}; {@code games}/{@code wins} (Spiele ohne Fehlerende)
-     * nur in {@link #list}, sonst null und weggelassen.
+     * nur in {@link #list}, sonst null und weggelassen. {@code folder} '' = ohne Ordner; {@code bracket} manuell (null =
+     * Vorschlag {@code bracketAuto} gilt), {@code bracketInfo} = Gruende des Vorschlags (JSON-Liste). {@code sortOrder}:
+     * eigene Reihenfolge im Ordner (null = neu/nie sortiert; die UI zeigt diese zuerst, nach {@code updatedAt}).
      */
     public record StoredDeck(long id, String name, List<String> commanders, String colors, String commanderSet,
                              String commanderNum, String source, String sourceUrl, int cardCount, boolean valid,
                              String validation, int masteryXp, long createdAt, long updatedAt,
                              int masteryLevel, int masteryNext,
                              @JsonInclude(JsonInclude.Include.NON_NULL) Integer games,
-                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer wins) {
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer wins,
+                             String folder,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer bracket,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer bracketAuto,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) @JsonRawValue String bracketInfo,
+                             @JsonInclude(JsonInclude.Include.NON_NULL) Integer sortOrder) {
 
         StoredDeck withStats(int games, int wins) {
             return new StoredDeck(id, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, cardCount, valid,
-                    validation, masteryXp, createdAt, updatedAt, masteryLevel, masteryNext, games, wins);
+                    validation, masteryXp, createdAt, updatedAt, masteryLevel, masteryNext, games, wins, folder, bracket,
+                    bracketAuto, bracketInfo, sortOrder);
         }
     }
 
@@ -98,17 +109,19 @@ public final class DeckStore {
     }
 
     public long save(long userId, Long id, String name, List<String> commanders, String colors, String commanderSet, String commanderNum,
-                     String source, String sourceUrl, String dck, int cardCount, boolean valid, String validation) {
+                     String source, String sourceUrl, String dck, int cardCount, boolean valid, String validation,
+                     BracketAnalyzer.Result bracketAuto) {
         long now = System.currentTimeMillis();
+        String info = infoJson(bracketAuto);
         return db.with(c -> {
             if (id == null) {
                 try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, created_at, updated_at, user_id) "
-                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
-                    bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation);
-                    ps.setLong(12, now);
-                    ps.setLong(13, now);
-                    ps.setLong(14, userId);
+                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, bracket_auto, bracket_info, created_at, updated_at, user_id) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                    bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation, bracketAuto, info);
+                    ps.setLong(14, now);
+                    ps.setLong(15, now);
+                    ps.setLong(16, userId);
                     ps.executeUpdate();
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         keys.next();
@@ -117,17 +130,136 @@ public final class DeckStore {
                 }
             }
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, updated_at=? WHERE id=? AND user_id=?")) {
-                bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation);
-                ps.setLong(12, now);
-                ps.setLong(13, id);
-                ps.setLong(14, userId);
+                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, bracket_auto=?, bracket_info=?, updated_at=? WHERE id=? AND user_id=?")) {
+                bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation, bracketAuto, info);
+                ps.setLong(14, now);
+                ps.setLong(15, id);
+                ps.setLong(16, userId);
                 if (ps.executeUpdate() == 0) {
                     throw new IllegalArgumentException("Deck nicht gefunden");
                 }
                 return id;
             }
         });
+    }
+
+    /**
+     * Ordner/Bracket aendern, ohne das Deck neu zu speichern ({@code updated_at} bleibt). {@code folder} null = unveraendert;
+     * {@code bracket} null = unveraendert, 0 = Vorschlag gilt, 1-5 = manuell.
+     */
+    public boolean patchMeta(long userId, long id, String folder, Integer bracket) {
+        if (bracket != null && (bracket < 0 || bracket > 5)) {
+            throw new IllegalArgumentException("Bracket muss 1-5 sein");
+        }
+        String f = folder == null ? null : normalizeFolder(folder);
+        return db.with(c -> {
+            int n = 0;
+            if (f != null) {
+                // anderer Ordner -> eigene Reihenfolge verwerfen (das Deck erscheint dort vorne)
+                try (PreparedStatement ps = c.prepareStatement(
+                        "UPDATE decks SET sort_order = CASE WHEN folder = ? THEN sort_order END, folder = ? WHERE id = ? AND user_id = ?")) {
+                    ps.setString(1, f);
+                    ps.setString(2, f);
+                    ps.setLong(3, id);
+                    ps.setLong(4, userId);
+                    n += ps.executeUpdate();
+                }
+            }
+            if (bracket != null) {
+                try (PreparedStatement ps = c.prepareStatement("UPDATE decks SET bracket = ? WHERE id = ? AND user_id = ?")) {
+                    if (bracket == 0) {
+                        ps.setNull(1, java.sql.Types.INTEGER);
+                    } else {
+                        ps.setInt(1, bracket);
+                    }
+                    ps.setLong(2, id);
+                    ps.setLong(3, userId);
+                    n += ps.executeUpdate();
+                }
+            }
+            return n > 0;
+        });
+    }
+
+    /**
+     * Reihenfolge eines Ordners festlegen: {@code ids} landen (in dieser Reihenfolge) im Ordner {@code folder}, z.B. nach
+     * Drag & Drop. Fremde/unbekannte IDs werden ignoriert (user_id-Filter). Liefert die Anzahl geaenderter Decks.
+     */
+    public int reorder(long userId, String folder, List<Long> ids) {
+        String f = normalizeFolder(folder);
+        return db.tx(c -> {
+            int n = 0;
+            try (PreparedStatement ps = c.prepareStatement("UPDATE decks SET folder = ?, sort_order = ? WHERE id = ? AND user_id = ?")) {
+                for (int i = 0; i < ids.size(); i++) {
+                    ps.setString(1, f);
+                    ps.setInt(2, i);
+                    ps.setLong(3, ids.get(i));
+                    ps.setLong(4, userId);
+                    n += ps.executeUpdate();
+                }
+            }
+            return n;
+        });
+    }
+
+    /** Ordner umbenennen bzw. mit {@code to} = '' aufloesen (Decks landen ohne Ordner). Liefert die Anzahl Decks. */
+    public int renameFolder(long userId, String from, String to) {
+        String f = normalizeFolder(from);
+        String t = normalizeFolder(to);
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("UPDATE decks SET folder = ? WHERE folder = ? AND user_id = ?")) {
+                ps.setString(1, t);
+                ps.setString(2, f);
+                ps.setLong(3, userId);
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    /** Decks ohne Bracket-Vorschlag (Altbestand vor V6), alle Nutzer: id -> .dck */
+    public Map<Long, String> withoutBracketAuto() {
+        return db.with(c -> {
+            Map<Long, String> out = new LinkedHashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT id, dck FROM decks WHERE bracket_auto IS NULL");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.put(rs.getLong(1), rs.getString(2));
+                }
+            }
+            return out;
+        });
+    }
+
+    public void setBracketAuto(long id, BracketAnalyzer.Result r) {
+        String info = infoJson(r);
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("UPDATE decks SET bracket_auto = ?, bracket_info = ? WHERE id = ?")) {
+                ps.setInt(1, r.bracket());
+                ps.setString(2, info);
+                ps.setLong(3, id);
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    /** Ordnername bereinigen: getrimmt, Leerraum zusammengefasst, max. 40 Zeichen ('' = ohne Ordner). */
+    static String normalizeFolder(String folder) {
+        String f = folder == null ? "" : folder.strip().replaceAll("\\s+", " ");
+        if (f.length() > 40) {
+            throw new IllegalArgumentException("Ordnername zu lang (max. 40 Zeichen)");
+        }
+        return f;
+    }
+
+    private static String infoJson(BracketAnalyzer.Result r) {
+        if (r == null) {
+            return null;
+        }
+        try {
+            return Json.MAPPER.writeValueAsString(r.reasons());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public boolean delete(long userId, long id) {
@@ -152,7 +284,7 @@ public final class DeckStore {
 
     private static void bind(PreparedStatement ps, String name, List<String> commanders, String colors, String commanderSet,
                              String commanderNum, String source, String sourceUrl, String dck, int cardCount, boolean valid,
-                             String validation) throws java.sql.SQLException {
+                             String validation, BracketAnalyzer.Result bracketAuto, String bracketInfo) throws java.sql.SQLException {
         ps.setString(1, name);
         ps.setString(2, String.join("\n", commanders));
         ps.setString(3, colors == null ? "" : colors);
@@ -164,6 +296,12 @@ public final class DeckStore {
         ps.setInt(9, cardCount);
         ps.setInt(10, valid ? 1 : 0);
         ps.setString(11, validation);
+        if (bracketAuto == null) {
+            ps.setNull(12, java.sql.Types.INTEGER);
+        } else {
+            ps.setInt(12, bracketAuto.bracket());
+        }
+        ps.setString(13, bracketInfo);
     }
 
     private static StoredDeck read(ResultSet rs) throws java.sql.SQLException {
@@ -173,6 +311,13 @@ public final class DeckStore {
                 rs.getString("colors"), rs.getString("commander_set"), rs.getString("commander_num"),
                 rs.getString("source"), rs.getString("source_url"), rs.getInt("card_count"), rs.getInt("valid") != 0,
                 rs.getString("validation"), rs.getInt("mastery_xp"), rs.getLong("created_at"), rs.getLong("updated_at"),
-                Progression.masteryLevel(rs.getInt("mastery_xp")), Progression.masteryNext(rs.getInt("mastery_xp")), null, null);
+                Progression.masteryLevel(rs.getInt("mastery_xp")), Progression.masteryNext(rs.getInt("mastery_xp")), null, null,
+                rs.getString("folder"), intOrNull(rs, "bracket"), intOrNull(rs, "bracket_auto"), rs.getString("bracket_info"),
+                intOrNull(rs, "sort_order"));
+    }
+
+    private static Integer intOrNull(ResultSet rs, String col) throws java.sql.SQLException {
+        int v = rs.getInt(col);
+        return rs.wasNull() ? null : v;
     }
 }

@@ -2,11 +2,14 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ApiError, cardImageUrl } from '../../api/client'
 import { decksApi, type DeckCardType, type DeckIssue, type DeckPreview, type StoredDeck } from '../../api/decks'
 import { Button, Chip, Overlay, Segmented, TextField } from '../../components/ui'
+import { useCatalogStore } from '../../decks/catalog'
 import { Icon } from '../../lib/icons'
 import { pushToast } from '../../store/ui'
+import { BRACKET_NAME, reasonLines } from './bracket'
 import { DeckArt } from './DeckArt'
 
 type ImportTab = 'link' | 'text'
+type BracketPick = '0' | '1' | '2' | '3' | '4' | '5'
 
 /** Gruppen der Vorschau in Anzeige-Reihenfolge (Commander kommt separat davor) */
 const GROUPS: { type: DeckCardType; label: string }[] = [
@@ -46,6 +49,11 @@ export function ImportDialog({ edit, onClose, onSaved, onRequestDelete }: { edit
   const [previewBusy, setPreviewBusy] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [folder, setFolder] = useState(edit?.folder ?? '')
+  /** 0 = Vorschlag der Engine gilt */
+  const [bracket, setBracket] = useState(edit?.bracket ?? 0)
+  const decks = useCatalogStore((s) => s.decks)
+  const folders = [...new Set(decks.map((d) => d.folder ?? '').filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'))
 
   // Vorschau: Schluessel = Liste + Commander-Wahl; seq verwirft veraltete Antworten
   const seq = useRef(0)
@@ -127,6 +135,8 @@ export function ImportDialog({ edit, onClose, onSaved, onRequestDelete }: { edit
       setCommanders([])
       setName(p.name)
       setSource({ source: p.source, sourceUrl: p.sourceUrl ?? u })
+      // vom Deck-Autor gesetzte Bracket (Archidekt/Moxfield) uebernehmen
+      if (p.bracket) setBracket(p.bracket)
       setPreview(p)
       setPreviewError(null)
       setPreviewBusy(false)
@@ -169,6 +179,8 @@ export function ImportDialog({ edit, onClose, onSaved, onRequestDelete }: { edit
         commanders: commanders.length ? commanders : undefined,
         source: source.source ?? 'text',
         sourceUrl: source.sourceUrl,
+        folder: folder.trim(),
+        bracket,
       })
       pushToast({ kind: 'success', text: edit ? 'Deck gespeichert' : 'Deck importiert' })
       onSaved(deck ?? null)
@@ -253,6 +265,37 @@ export function ImportDialog({ edit, onClose, onSaved, onRequestDelete }: { edit
           ) : (
             <>
               <TextField label="Deck-Name" placeholder={preview?.name || 'Deckname (optional)'} value={name} onChange={(e) => setName(e.target.value)} />
+              <div className="flex flex-wrap items-end gap-3">
+                <TextField
+                  label="Ordner"
+                  className="min-w-[160px] flex-1"
+                  placeholder="Ohne Ordner"
+                  maxLength={40}
+                  list="import-folders"
+                  value={folder}
+                  onChange={(e) => setFolder(e.target.value)}
+                  data-testid="import-folder"
+                />
+                <datalist id="import-folders">
+                  {folders.map((f) => (
+                    <option key={f} value={f} />
+                  ))}
+                </datalist>
+                <div className="flex flex-col gap-[7px]">
+                  <span className="label">Bracket</span>
+                  <Segmented<BracketPick>
+                    variant="boxed"
+                    ariaLabel="Bracket"
+                    value={String(bracket) as BracketPick}
+                    onChange={(id) => setBracket(Number(id))}
+                    itemStyle={{ padding: '6px 9px' }}
+                    items={[
+                      { id: '0', label: 'Auto', title: preview?.bracketAuto ? `Vorschlag: ${preview.bracketAuto} · ${BRACKET_NAME[preview.bracketAuto]}` : 'Vorschlag aus der Liste', testId: 'import-bracket-auto' },
+                      ...[1, 2, 3, 4, 5].map((b) => ({ id: String(b) as BracketPick, label: String(b), title: BRACKET_NAME[b], testId: `import-bracket-${b}` })),
+                    ]}
+                  />
+                </div>
+              </div>
               <div className="flex min-h-0 flex-1 flex-col gap-[7px]">
                 <label htmlFor="import-text" className="label">
                   Textliste · eine Karte pro Zeile
@@ -389,6 +432,11 @@ function PreviewBody({
             </Chip>
           ))}
         {colors && <Chip tone="outline">{colors}</Chip>}
+        {p.bracketAuto && (
+          <Chip tone="outline" testId="import-bracket-suggestion" title={reasonLines(p.bracketInfo).join('\n') || 'Keine Game Changer, Combos, Landzerstörung oder Extra-Züge'}>
+            {`Bracket-Vorschlag ${p.bracketAuto} · ${BRACKET_NAME[p.bracketAuto]}`}
+          </Chip>
+        )}
         {unknownN > 0 && <Chip tone="target">{`${unknownN} unbekannt`}</Chip>}
         {unfinishedN > 0 && <Chip tone="target">{`${unfinishedN} nicht in XMage`}</Chip>}
       </div>
@@ -420,6 +468,14 @@ function PreviewBody({
         <IssueRow key={i.key}>{i.node}</IssueRow>
       ))}
       {issues.length > MAX_ISSUES && <span className="text-[12.5px] text-fg-3">{`+${issues.length - MAX_ISSUES} weitere`}</span>}
+
+      {p.bracketInfo && p.bracketInfo.length > 0 && (
+        <div className="flex flex-col gap-1 text-[12.5px] leading-[1.45] text-fg-3" data-testid="import-bracket-reasons">
+          {reasonLines(p.bracketInfo).map((l) => (
+            <span key={l}>{l}</span>
+          ))}
+        </div>
+      )}
 
       {!p.valid && p.validation && p.commanders.length > 0 && <p className="m-0 whitespace-pre-line text-[12.5px] leading-[1.45] text-fg-3">{p.validation}</p>}
 

@@ -18,6 +18,13 @@ public final class HumanSettings {
     }
 
     public static UserData defaults() {
+        return of(false);
+    }
+
+    /**
+     * @param stopOppUpkeep im Upkeep der Gegner halten (XMage gibt dort sonst bei leerem Stapel gar keine Prioritaet)
+     */
+    public static UserData of(boolean stopOppUpkeep) {
         UserData data = UserData.getDefaultUserDataView();
         UserSkipPrioritySteps skips = new UserSkipPrioritySteps();
         SkipPrioritySteps mine = skips.getYourTurn();
@@ -29,7 +36,7 @@ public final class HumanSettings {
         mine.setMain2(true);
         mine.setEndOfTurn(false);
         SkipPrioritySteps opp = skips.getOpponentTurn();
-        opp.setUpkeep(false);
+        opp.setUpkeep(stopOppUpkeep);
         opp.setDraw(false);
         opp.setMain1(false);
         opp.setBeforeCombat(false);

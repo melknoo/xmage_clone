@@ -109,6 +109,12 @@ interface GameStore {
   setAutoMana: (on: boolean) => void
   autoPass: boolean
   setAutoPass: (on: boolean) => void
+  /** Auto-Passen/F-Tasten im Upkeep eines Gegners anhalten */
+  stopOppUpkeep: boolean
+  setStopOppUpkeep: (on: boolean) => void
+  /** Auto-Passen/F-Tasten anhalten, wenn mich/meine Objekte etwas anvisiert */
+  stopOnTargeted: boolean
+  setStopOnTargeted: (on: boolean) => void
   leave: () => void
   setHover: (c: Card | null) => void
   dismissReveal: (key: string) => void
@@ -416,7 +422,13 @@ export const useGame = create<GameStore>((set, get) => {
     ws.onopen = () => {
       if (socket !== ws) return
       set({ conn: 'open' })
-      send({ t: 'settings', autoPay: get().autoMana, autoPass: get().autoPass })
+      send({
+        t: 'settings',
+        autoPay: get().autoMana,
+        autoPass: get().autoPass,
+        stopOppUpkeep: get().stopOppUpkeep,
+        stopOnTargeted: get().stopOnTargeted,
+      })
       window.clearInterval(pingTimer)
       pingTimer = window.setInterval(() => send({ t: 'ping' }), 20000)
     }
@@ -571,6 +583,18 @@ export const useGame = create<GameStore>((set, get) => {
       saveBool('magelite.autoPass', on)
       set({ autoPass: on })
       send({ t: 'settings', autoPass: on })
+    },
+    stopOppUpkeep: loadBool('magelite.stopOppUpkeep', false),
+    setStopOppUpkeep: (on) => {
+      saveBool('magelite.stopOppUpkeep', on)
+      set({ stopOppUpkeep: on })
+      send({ t: 'settings', stopOppUpkeep: on })
+    },
+    stopOnTargeted: loadBool('magelite.stopOnTargeted', true),
+    setStopOnTargeted: (on) => {
+      saveBool('magelite.stopOnTargeted', on)
+      set({ stopOnTargeted: on })
+      send({ t: 'settings', stopOnTargeted: on })
     },
     leave: () => {
       // optimistisch; die Engine bestaetigt mit {t:"seat", conceded:true}

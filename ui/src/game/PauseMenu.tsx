@@ -40,6 +40,10 @@ export function PauseMenu() {
   const setAutoMana = useGame((s) => s.setAutoMana)
   const autoPass = useGame((s) => s.autoPass)
   const setAutoPass = useGame((s) => s.setAutoPass)
+  const stopOppUpkeep = useGame((s) => s.stopOppUpkeep)
+  const setStopOppUpkeep = useGame((s) => s.setStopOppUpkeep)
+  const stopOnTargeted = useGame((s) => s.stopOnTargeted)
+  const setStopOnTargeted = useGame((s) => s.setStopOnTargeted)
   const fxEnabled = useGame((s) => s.fxEnabled)
   const setFxEnabled = useGame((s) => s.setFxEnabled)
   const muted = useGame((s) => s.muted)
@@ -139,6 +143,18 @@ export function PauseMenu() {
             <>
               <Toggle checked={autoMana} onChange={setAutoMana} label="Auto-Mana" title="Mana automatisch bezahlen" />
               <Toggle checked={autoPass} onChange={setAutoPass} label="Auto-Passen" title="Automatisch passen, wenn nichts spielbar ist" />
+              <Toggle
+                checked={stopOnTargeted}
+                onChange={setStopOnTargeted}
+                label="Stopp bei Ziel auf mich"
+                title="Auto-Passen und F-Tasten anhalten, sobald ein Gegner dich oder deine Karten anvisiert"
+              />
+              <Toggle
+                checked={stopOppUpkeep}
+                onChange={setStopOppUpkeep}
+                label="Stopp im Gegner-Upkeep"
+                title="Auto-Passen und F-Tasten im Upkeep jedes Gegners anhalten"
+              />
             </>
           )}
           <Toggle
