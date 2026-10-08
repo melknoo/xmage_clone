@@ -2,6 +2,7 @@ package dev.magelite;
 
 import dev.magelite.admin.AdminRoutes;
 import dev.magelite.admin.AdminService;
+import dev.magelite.admin.UptimeBudget;
 import dev.magelite.api.Auth;
 import dev.magelite.api.DownloadRoutes;
 import dev.magelite.api.HttpServer;
@@ -14,6 +15,10 @@ import dev.magelite.social.SocialRoutes;
 import dev.magelite.social.SocialService;
 import dev.magelite.auth.AccountService;
 import dev.magelite.auth.AuthRoutes;
+import dev.magelite.auth.Mailer;
+import dev.magelite.auth.SignupRoutes;
+import dev.magelite.auth.SignupService;
+import dev.magelite.auth.Turnstile;
 import dev.magelite.boot.CardDbManager;
 import dev.magelite.boot.LogConfig;
 import dev.magelite.deck.DeckRoutes;
@@ -53,8 +58,9 @@ import java.util.concurrent.TimeUnit;
  * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus), auf fly im Server-Modus.
  * <p>
  * Args: {@code --port=0 --data=<dir> --vendor=<dir> --ui=<dist> --parent-pid=<pid> --dev}
- * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10}; Owner-Konto aus
- * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}.
+ * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10 --anon-exit-min=3}; Owner-Konto aus
+ * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}; Monatsbudget {@code MAGELITE_BUDGET_HOURS} (Standard 100,
+ * Test: {@code --budget-min}), Preis fuer die Anzeige {@code MAGELITE_PRICE_PER_HOUR}.
  * Das Arbeitsverzeichnis muss {@code <data>} sein (XMage oeffnet {@code ./db/cards.h2}).
  * Meldet sich auf stdout mit {@code MAGELITE_READY {"port":..,"token":..}}.
  */
@@ -92,6 +98,7 @@ public final class Main {
         String host = opt.getOrDefault("host", "127.0.0.1");
         int maxGames = Integer.parseInt(opt.getOrDefault("max-games", "1"));
         int idleExitMin = Integer.parseInt(opt.getOrDefault("idle-exit-min", "0"));
+        int anonExitMin = Integer.parseInt(opt.getOrDefault("anon-exit-min", String.valueOf(Math.min(3, idleExitMin))));
         Files.createDirectories(data.resolve("logs"));
         LogConfig.configure(data.resolve("logs"), dev || server); // Server: INFO auf stdout fuer `fly logs`
         Logger log = Logger.getLogger(Main.class);
@@ -126,10 +133,19 @@ public final class Main {
         Path ui = opt.containsKey("ui") ? Path.of(opt.get("ui")) : null;
         HttpServer.Config cfg = new HttpServer.Config(Integer.parseInt(opt.getOrDefault("port", "0")), host, token, ui, VERSION, server, dev);
         Auth auth = new Auth(cfg, accounts);
+        UptimeBudget budget = null;
+        if (server) {
+            long budgetMin = opt.containsKey("budget-min") ? Long.parseLong(opt.get("budget-min"))
+                    : Math.round(envDouble("MAGELITE_BUDGET_HOURS", 100) * 60);
+            budget = new UptimeBudget(db, budgetMin, envDouble("MAGELITE_PRICE_PER_HOUR", 0.0861));
+            auth.setBudget(budget);
+        }
         HttpServer httpServer = new HttpServer(cfg, auth, games, deckStore, samples);
         accounts.setOnRevoke(httpServer::closeSessionsOf);
         AuthRoutes authRoutes = new AuthRoutes(cfg, auth, accounts);
         httpServer.addModule(authRoutes);
+        SignupService signup = server ? signupService(opt, data, dev, accounts, budget) : null;
+        httpServer.addModule(new SignupRoutes(cfg, auth, accounts, signup));
         httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
         DeckRoutes deckRoutes = new DeckRoutes(deckStore);
         httpServer.addModule(deckRoutes);
@@ -162,9 +178,9 @@ public final class Main {
             // Lobby-Chat, Freunde, Einladungen
             httpServer.addModule(new SocialRoutes(social));
             // Admin-Bereich: Nutzer, Server-Uebersicht, Eingriffe
-            httpServer.addModule(new AdminRoutes(new AdminService(db, accounts, games, tableManager, social, VERSION, remoteGames, hostLinks::count)));
-            // Setup-Download fuer die Startseite (oeffentlich)
-            httpServer.addModule(new DownloadRoutes(data.resolve("downloads")));
+            httpServer.addModule(new AdminRoutes(new AdminService(db, accounts, games, tableManager, social, VERSION, remoteGames, hostLinks::count, budget)));
+            // Setup-Download fuer die Startseite (oeffentlich): nur der Link, die Datei liegt extern (GitHub-Releases)
+            httpServer.addModule(new DownloadRoutes(System.getenv("MAGELITE_DOWNLOAD_URL"), VERSION));
         } else {
             // Host-Link: diese Engine haengt sich an einen Server (Electron meldet das Session-Cookie)
             hostLink = new HostLinkClient(games);
@@ -197,8 +213,8 @@ public final class Main {
         if (!server) {
             Optional.ofNullable(opt.get("parent-pid")).map(Long::parseLong).ifPresent(Main::watchParent);
         }
-        if (idleExitMin > 0) {
-            watchIdle(httpServer, games, idleExitMin);
+        if (idleExitMin > 0 || budget != null) {
+            watchIdle(httpServer, games, idleExitMin, anonExitMin, budget);
         }
 
         Map<String, Object> ready = new LinkedHashMap<>();
@@ -208,6 +224,79 @@ public final class Main {
         System.out.println("MAGELITE_READY " + Json.write(ready));
         System.out.flush();
         log.info("MageLite-Engine bereit auf " + host + ":" + port + (server ? " (Server-Modus)" : "") + " in " + (System.currentTimeMillis() - t0) + " ms");
+    }
+
+    /**
+     * Selbstregistrierung (Server-Modus). Offen nur mit {@code MAGELITE_SIGNUP=open} und - ausser im Dev-Modus - mit
+     * Mail-Key, Captcha-Secret und {@code MAGELITE_PUBLIC_URL}; sonst bleibt sie geschlossen (Fehler im Log). Im Dev-Modus
+     * ohne Mail-Key landen Mails als JSON in {@code <data>/mail-outbox} (e2e liest die Links daraus).
+     */
+    private static SignupService signupService(Map<String, String> opt, Path data, boolean dev, AccountService accounts, UptimeBudget budget) {
+        Logger log = Logger.getLogger(Main.class);
+        boolean open = "open".equalsIgnoreCase(env("MAGELITE_SIGNUP", "closed"));
+        String mailKey = env("MAGELITE_MAIL_API_KEY", null);
+        String mailFrom = env("MAGELITE_MAIL_FROM", null);
+        Mailer mailer = null;
+        if (mailKey != null && mailFrom != null) {
+            mailer = new Mailer.Brevo(mailKey, mailFrom, env("MAGELITE_MAIL_FROM_NAME", "MageLite"));
+        } else if (dev) {
+            mailer = new Mailer.Outbox(data.resolve("mail-outbox"));
+        }
+        Turnstile turnstile = new Turnstile(env("MAGELITE_TURNSTILE_SECRET", null));
+        String publicUrl = env("MAGELITE_PUBLIC_URL", dev ? "http://localhost:5173" : null);
+        if (publicUrl != null && publicUrl.endsWith("/")) {
+            publicUrl = publicUrl.substring(0, publicUrl.length() - 1);
+        }
+        boolean captchaOk = turnstile.enabled() && env("MAGELITE_TURNSTILE_SITEKEY", null) != null;
+        if (open && !dev && (mailer == null || !captchaOk || publicUrl == null)) {
+            log.error("MAGELITE_SIGNUP=open, aber Mail (MAGELITE_MAIL_API_KEY/_FROM), Captcha (MAGELITE_TURNSTILE_SECRET/_SITEKEY) oder "
+                    + "MAGELITE_PUBLIC_URL fehlen - Registrierung bleibt geschlossen");
+            open = false;
+        }
+        long ttlMin = Long.parseLong(opt.getOrDefault("unverified-ttl-min", "1440"));
+        SignupService.Settings settings = new SignupService.Settings(open,
+                (int) envDouble("MAGELITE_MAX_PUBLIC_USERS", 200), (int) envDouble("MAGELITE_SIGNUPS_PER_DAY", 30),
+                (int) envDouble("MAGELITE_SIGNUPS_PER_IP", 3), publicUrl,
+                turnstile.enabled() ? env("MAGELITE_TURNSTILE_SITEKEY", null) : null, ttlMin * 60_000L);
+        SignupService signup = new SignupService(accounts, mailer, turnstile, settings, budget);
+        log.info("Registrierung: " + signup.state().name().toLowerCase(java.util.Locale.ROOT)
+                + (mailer == null ? " (kein Mailversand)" : "") + (turnstile.enabled() ? "" : " (ohne Captcha)"));
+        // Owner bei 80 % / 100 % des Monatsbudgets per Mail warnen (wenn er eine E-Mail hinterlegt hat)
+        Mailer warnMailer = mailer;
+        if (budget != null && warnMailer != null) {
+            budget.setOnThreshold((pct, st) -> accounts.ownerEmail().ifPresent(to -> warnMailer.send(to,
+                    "MageLite: " + pct + " % des Server-Budgets verbraucht",
+                    "Laufzeit im " + st.month() + ": " + (st.minutes() / 60) + " von " + (st.budgetMin() / 60) + " Stunden"
+                            + String.format(java.util.Locale.ROOT, " (ca. %.2f $).", st.minutes() / 60.0 * st.pricePerHour())
+                            + (pct >= 100 ? "\n\nÖffentliche Konten sind bis Monatsende gesperrt; eingeladene Spieler spielen weiter.\n"
+                            : "\n"))));
+        }
+        // unbestaetigte Konten: beim Start und stuendlich aufraeumen
+        ScheduledExecutorService purge = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "signup-purge");
+            t.setDaemon(true);
+            return t;
+        });
+        purge.scheduleAtFixedRate(signup::purge, 0, 60, TimeUnit.MINUTES);
+        return signup;
+    }
+
+    private static String env(String name, String def) {
+        String v = System.getenv(name);
+        return v == null || v.isBlank() ? def : v.strip();
+    }
+
+    private static double envDouble(String name, double def) {
+        String v = System.getenv(name);
+        if (v == null || v.isBlank()) {
+            return def;
+        }
+        try {
+            return Double.parseDouble(v.strip());
+        } catch (NumberFormatException e) {
+            Logger.getLogger(Main.class).warn(name + " ungueltig (" + v + "), nehme " + def);
+            return def;
+        }
     }
 
     private static void watchParent(long pid) {
@@ -230,36 +319,48 @@ public final class Main {
     }
 
     /**
-     * Leerlauf-Exit (fly Auto-Stop): kein laufendes Spiel und seit {@code minutes} keine API-Anfrage mehr -> Prozess
-     * beenden. Offene WebSockets (vergessene Tabs) zaehlen bewusst nicht; sie werden mit 4404 geschlossen, die UI
-     * verbindet sich nach dem naechsten Start neu.
+     * Leerlauf-Exit (fly Auto-Stop): kein laufendes Spiel und seit {@code minutes} keine API-Anfrage eines angemeldeten
+     * Nutzers mehr -> Prozess beenden. Offene WebSockets (vergessene Tabs) zaehlen bewusst nicht; sie werden mit 4404
+     * geschlossen, die UI verbindet sich nach dem naechsten Start neu. Hat seit dem Start nur Anonymes die Maschine
+     * geweckt (Startseite, Crawler), endet sie schon nach {@code anonMinutes}.
      * <p>
      * Verwaiste Spiele (Tab geschlossen, Spiel wartet auf den Menschen) werden nach {@code minutes} ohne verbundenen
-     * Client abgebrochen, sonst hielte das Spiel die Maschine ewig wach.
+     * Client abgebrochen, sonst hielte das Spiel die Maschine ewig wach. Jede Minute Laufzeit geht ins Monatsbudget.
      */
-    private static void watchIdle(HttpServer server, GameRegistry games, int minutes) {
+    private static void watchIdle(HttpServer server, GameRegistry games, int minutes, int anonMinutes, UptimeBudget budget) {
         ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "idle-watchdog");
             t.setDaemon(true);
             return t;
         });
         long limitMs = minutes * 60_000L;
+        long anonLimitMs = Math.max(1, anonMinutes) * 60_000L;
         ses.scheduleAtFixedRate(() -> {
-            for (GameHost g : games.runningGames()) {
+            if (budget != null) {
+                try {
+                    budget.tick();
+                } catch (RuntimeException e) {
+                    Logger.getLogger(Main.class).warn("Budget-Zaehler: " + e);
+                }
+            }
+            for (GameHost g : minutes > 0 ? games.runningGames() : java.util.List.<GameHost>of()) {
                 long gone = g.disconnectedForMs();
                 if (gone > limitMs) {
                     Logger.getLogger(Main.class).warn("Spiel " + g.getId() + " seit " + (gone / 60_000) + " min ohne Spieler - wird abgebrochen");
                     g.abort();
                 }
             }
-            if (server.runningGames() > 0) {
-                return; // auch Relay-Spiele (Host-Link) halten die Maschine wach
+            if (minutes <= 0 || server.runningGames() > 0) {
+                return; // kein Leerlauf-Exit konfiguriert; auch Relay-Spiele (Host-Link) halten die Maschine wach
             }
-            long idle = System.currentTimeMillis() - server.lastActivity();
-            if (idle < limitMs) {
+            long last = server.lastActivity();
+            boolean anonOnly = last == 0;
+            long idle = System.currentTimeMillis() - (anonOnly ? server.startedAt() : last);
+            if (idle < (anonOnly ? anonLimitMs : limitMs)) {
                 return;
             }
-            Logger.getLogger(Main.class).info("Leerlauf seit " + (idle / 60_000) + " min, kein Spiel - Engine stoppt (" + server.openSockets() + " offene Verbindungen)");
+            Logger.getLogger(Main.class).info((anonOnly ? "Seit dem Start keine angemeldete Anfrage" : "Leerlauf seit " + (idle / 60_000) + " min")
+                    + ", kein Spiel - Engine stoppt (" + server.openSockets() + " offene Verbindungen)");
             server.closeAllSessions();
             System.exit(0);
         }, 1, 1, TimeUnit.MINUTES);

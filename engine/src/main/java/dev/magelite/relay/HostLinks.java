@@ -127,7 +127,9 @@ public final class HostLinks implements HttpServer.Module {
                     LOG.info("Host-Link von " + user.name() + " ersetzt");
                     closeQuiet(old.ctx, 4000, "replaced");
                 }
-                touch.run();
+                if (auth.countsAsActivity(user)) {
+                    touch.run();
+                }
                 LOG.info("Host-Link verbunden: " + user.name() + " (" + user.id() + ")");
             });
             ws.onMessage(ctx -> {

@@ -14,3 +14,4 @@ vendor/xmage/db
 vendor/xmage/tools-lib
 *.log
 design
+cloudflare_token

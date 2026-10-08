@@ -17,7 +17,8 @@ const RANK = { game: 0, table: 1, online: 2, offline: 3 } as const
 export function UsersTab({ users, meId, selected, onSelect, compact }: { users: AdminUser[] | null; meId?: number; selected: number | null; onSelect: (id: number | null) => void; compact?: boolean }) {
   if (users === null) return <div className="px-3 py-4 text-[13px] text-fg-3">Lade …</div>
   const active = users
-    .filter((u) => u.lastSeen !== null)
+    // nie angemeldete Einladungen stehen unter "Einladungen"; Registrierungen (auch unbestaetigte) hier
+    .filter((u) => u.lastSeen !== null || u.tier === 'public')
     .sort((a, b) => RANK[a.status] - RANK[b.status] || (b.lastSeen ?? 0) - (a.lastSeen ?? 0))
   const columns = compact ? COLUMNS_COMPACT : COLUMNS
   const online = active.filter((u) => u.status !== 'offline').length
@@ -47,6 +48,11 @@ export function UsersTab({ users, meId, selected, onSelect, compact }: { users: 
               <span className="truncate text-[14px] font-semibold text-fg-1">{u.name}</span>
               {u.id === meId && <span className="text-[12px] text-fg-3">(du)</span>}
               {u.admin && <span className="label !text-[10.5px] !text-ember">Admin</span>}
+              {!u.admin && u.tier === 'public' && (
+                <span className="label !text-[10.5px]" title={u.verified ? 'Selbst registriert' : 'Selbst registriert, E-Mail noch nicht bestätigt'} data-testid="admin-user-public">
+                  {u.verified ? 'Registriert' : 'Unbestätigt'}
+                </span>
+              )}
             </span>
             <span className="flex min-w-0 items-center gap-[7px] text-[13px] text-fg-2">
               <StatusDot status={u.status} />

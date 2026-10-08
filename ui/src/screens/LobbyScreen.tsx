@@ -6,11 +6,12 @@ import { Button, Checkbox, EmptyState, Overlay, Segmented, TextField } from '../
 import { Icon, type IconName } from '../lib/icons'
 import { SocialSidebar } from '../social/SocialSidebar'
 import { useMarkLobbyRead } from '../social/useMarkLobbyRead'
+import { openLocalApp } from '../lib/localApp'
 import { tempoLabel } from '../lib/tempo'
 import { useAuth } from '../store/auth'
 import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
-import { useSocial } from '../store/social'
+import { pollPaused, useSocial } from '../store/social'
 import { useTable } from '../store/table'
 import { pushToast } from '../store/ui'
 
@@ -67,7 +68,7 @@ export function LobbyScreen() {
   useEffect(() => {
     void load()
     const iv = window.setInterval(() => {
-      if (!document.hidden) void load()
+      if (!pollPaused()) void load()
     }, POLL_MS)
     return () => window.clearInterval(iv)
   }, [load])
@@ -128,7 +129,13 @@ export function LobbyScreen() {
           <h1 className="m-0 font-display text-[36px] font-semibold uppercase leading-none tracking-[.03em] text-fg-1">Lobby</h1>
           {tables !== null && <span className="text-[14px] text-fg-3">{count === 0 ? 'Kein offener Tisch' : sub}</span>}
           <span className="flex-1" />
-          <Button variant="secondary" icon="autoMana" onClick={() => go('solo')} testId="lobby-solo">
+          <Button
+            variant="secondary"
+            icon="autoMana"
+            onClick={() => (me?.tier === 'public' ? void openLocalApp() : go('solo'))}
+            title={me?.tier === 'public' ? 'Spiele gegen Bots laufen für dich in der MageLite-App auf deinem PC' : undefined}
+            testId="lobby-solo"
+          >
             Allein üben
           </Button>
           <Button variant="primary" icon="plus" disabled={busy} onClick={openTable} testId="lobby-open-table">
@@ -281,8 +288,10 @@ function SeatChip({ seat }: { seat: TableSeat }) {
  */
 function CreateTableDialog({ busy, onClose, onCreate }: { busy: boolean; onClose: () => void; onCreate: (opts: { name?: string; hosting: TableHosting; password?: string }) => Promise<void> }) {
   const hostLink = useAuth((s) => s.hostLink)
+  // oeffentliche (selbst registrierte) Konten: Server-Tische nur fuer Eingeladene
+  const serverAllowed = useAuth((s) => s.me?.tier !== 'public')
   const [name, setName] = useState('')
-  const [hosting, setHosting] = useState<TableHosting>('SERVER')
+  const [hosting, setHosting] = useState<TableHosting>(serverAllowed ? 'SERVER' : 'REMOTE')
   const [locked, setLocked] = useState(false)
   const [password, setPassword] = useState('')
   const desktop = typeof window !== 'undefined' && !!window.mageliteDesktop
@@ -324,12 +333,20 @@ function CreateTableDialog({ busy, onClose, onCreate }: { busy: boolean; onClose
             value={hosting}
             onChange={setHosting}
             items={[
-              { id: 'SERVER', label: 'Auf dem Server', testId: 'create-table-server' },
+              {
+                id: 'SERVER',
+                label: 'Auf dem Server',
+                disabled: !serverAllowed,
+                testId: 'create-table-server',
+                title: serverAllowed ? undefined : 'Server-Tische gibt es nur für eingeladene Spieler',
+              },
               { id: 'REMOTE', label: 'Auf meinem Rechner', disabled: !hostLink, testId: 'create-table-remote', title: hostLink ? undefined : 'Dafür muss die MageLite-App auf deinem PC laufen und hier angemeldet sein' },
             ]}
           />
           <span className="text-[12.5px] leading-[1.45] text-fg-3" data-testid="create-table-hosting-hint">
-            {hosting === 'REMOTE'
+            {!serverAllowed && !hostLink
+              ? 'Tische eröffnest du auf deinem eigenen Rechner: MageLite-App installieren, dort „Online spielen“ und anmelden. Beitreten kannst du überall.'
+              : hosting === 'REMOTE'
               ? 'Das Spiel und die Bots laufen in deiner MageLite-App; der Server reicht nur durch. Der Server bleibt frei für andere.'
               : hostLink
                 ? 'Der Server rechnet nur ein Spiel gleichzeitig. Deine App ist verbunden – du kannst auch auf deinem Rechner hosten.'

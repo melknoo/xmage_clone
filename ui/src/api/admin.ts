@@ -10,6 +10,8 @@ export interface Account {
   lastSeen: number | null
   email: string | null
   hasPassword: boolean
+  /** friend: eingeladen/Owner · public: selbst registriert */
+  tier?: 'friend' | 'public'
 }
 
 /** neues Konto mit Einladungscode (POST /api/admin/invites); der Code wird nur hier einmal gezeigt */
@@ -32,6 +34,8 @@ export const adminApi = {
   user: (id: number) => api.get<AdminUserDetail>(`/api/admin/users/${id}`),
   /** alle Sessions beenden; der Code bleibt gueltig */
   logout: (id: number) => api.post<{ ok: boolean }>(`/api/admin/users/${id}/logout`),
+  /** Konto-Art: friend (Server-Spiele erlaubt, nicht vom Budget begrenzt) oder public (selbst registriert) */
+  setTier: (id: number, tier: 'friend' | 'public') => api.post<{ ok: boolean }>(`/api/admin/users/${id}/tier`, { tier }),
   server: () => api.get<ServerInfo>('/api/admin/server'),
   abortGame: (id: string) => api.post<{ ok: boolean }>(`/api/admin/games/${id}/abort`),
   closeTable: (id: string) => api.del<{ ok: boolean }>(`/api/admin/tables/${id}`),
@@ -51,6 +55,8 @@ export interface AdminUser extends Account {
   sessions: number
   status: PresenceStatus
   tableName: string | null
+  /** E-Mail bestaetigt (nur fuer selbst registrierte Konten relevant) */
+  verified?: boolean
 }
 
 export interface AdminGameRow {
@@ -145,4 +151,17 @@ export interface ServerInfo {
   tables: AdminTable[]
   /** angebundene Engines von Gastgebern (Host-Link) */
   hostLinks?: number
+  /** Laufzeit-Budget dieses Monats (null ohne Budget) */
+  budget?: BudgetStatus | null
+}
+
+/** Monatsbudget: Laufzeit der Maschine (fly kennt kein Ausgabenlimit); ab budgetMin sind oeffentliche Konten gesperrt */
+export interface BudgetStatus {
+  /** yyyy-MM (UTC) */
+  month: string
+  minutes: number
+  budgetMin: number
+  pricePerHour: number
+  exhausted: boolean
+  resetsAt: number
 }

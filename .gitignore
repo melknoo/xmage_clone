@@ -32,3 +32,6 @@ Thumbs.db
 design/claude-design/screenshots/*.png
 design/redesign-shots/
 .vite/
+
+# lokale Zugangsdaten (nie committen/deployen)
+cloudflare_token

@@ -205,3 +205,22 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - **Setup-Download vom fly-Volume** (`/data/downloads`, `fly ssh sftp put`), nicht GitHub Releases: das Repo
     ist privat. Kein Zuschauen an Relay-Tischen (v1), kein lokales Solo-Spiel während des Hostens (eine Engine).
   - **Versalien per CSS** (`label`/`btn`/`chip`-Utilities), Text im JSX normal geschrieben; Tastenhinweise als `<kbd>`.
+- **Öffentliche Registrierung und Kostenbremsen (2026-10-08):**
+  - **Budget in der Engine statt fly-Limit:** fly kennt kein hartes Ausgabenlimit (Prepaid-Guthaben läuft einfach in
+    die Rechnung über). Die Engine zählt ihre Laufzeit pro Monat (`uptime_month`); ab `MAGELITE_BUDGET_HOURS` sind
+    öffentliche Konten bis Monatsende gesperrt und halten die Maschine nicht mehr wach. Freunde bleiben unbegrenzt –
+    sie waren vorher schon da und ihre Nutzung ist überschaubar.
+  - **Öffentlich = nur Host-Link:** selbst registrierte Konten lassen keine Spiele auf dem Server rechnen (Solo und
+    eigene Tische laufen in ihrer App); Beitreten zu Tischen von Freunden ist erlaubt. So kostet ein öffentlicher
+    Nutzer fast nur Lobby-Laufzeit, und der eine Server-Spielplatz bleibt den Freunden.
+  - **Nur angemeldete Anfragen zählen als Aktivität:** anonyme Weckrufe (Crawler, Scanner, Startseite) beenden die
+    Engine nach 3 statt 10 Minuten; Polls ruhen bei verstecktem Tab und nach 15 min ohne Eingabe.
+  - **Setup als GitHub-Release in einem eigenen öffentlichen Repo** (`melknoo/magelite-releases`) statt auf dem
+    fly-Volume: 308 MB pro Download wären Egress auf fly gewesen, und lange Downloads hielten die Maschine wach.
+    Das Code-Repo bleibt privat. Ersetzt die Volume-Lösung vom Host-Link.
+  - **Brevo + Turnstile:** Brevo sitzt in der EU (DSGVO) und ist bis 300 Mails/Tag kostenlos; Cloudflare Turnstile
+    ist kostenlos und ohne Bilderrätsel. Ohne beides (und ohne `MAGELITE_PUBLIC_URL`) bleibt die Registrierung zu.
+  - **Grenzen in der DB, nicht im Speicher:** die Maschine stoppt oft, In-Memory-Zähler wären nach jedem Kaltstart
+    leer. Zählbasis ist `users.created_ip/created_at`.
+  - **Keine Konto-Aufzählung:** Registrierung, „erneut senden“ und „Passwort vergessen“ antworten immer gleich;
+    bestehende Konten bekommen eine Hinweis-Mail statt einer Fehlermeldung.

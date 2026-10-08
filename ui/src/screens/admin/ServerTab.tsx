@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { adminApi, type AdminGame, type AdminTable, type ServerInfo } from '../../api/admin'
+import { adminApi, type AdminGame, type AdminTable, type BudgetStatus, type ServerInfo } from '../../api/admin'
 import { Button, ProgressBar, TableHead, TableRow, Th } from '../../components/ui'
 import { pushToast } from '../../store/ui'
 import { AdminSection, created, errText, mb, span } from './shared'
@@ -63,6 +63,8 @@ export function ServerTab({ info, onChanged }: { info: ServerInfo | null; onChan
           </span>
         </div>
       </div>
+
+      {info.budget && <BudgetRow budget={info.budget} />}
 
       <AdminSection title="Laufende Spiele" testId="admin-games">
         {info.games.length === 0 ? (
@@ -154,6 +156,33 @@ export function ServerTab({ info, onChanged }: { info: ServerInfo | null; onChan
           </div>
         )}
       </AdminSection>
+    </div>
+  )
+}
+
+/** Laufzeit diesen Monat gegen das Budget, geschaetzte Kosten, Zustand der oeffentlichen Konten. */
+function BudgetRow({ budget }: { budget: BudgetStatus }) {
+  const hours = budget.minutes / 60
+  const max = budget.budgetMin / 60
+  const pct = budget.budgetMin > 0 ? Math.min(100, Math.round((budget.minutes / budget.budgetMin) * 100)) : 100
+  const cost = (hours * budget.pricePerHour).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const maxCost = (max * budget.pricePerHour).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  // Monat und Stichtag in UTC (wie die Engine zaehlt), sonst kippt "Oktober" nachts in "November"
+  const [y, m] = budget.month.split('-').map(Number)
+  const month = new Date(Date.UTC(y, m - 1, 15)).toLocaleDateString('de-DE', { month: 'long', timeZone: 'UTC' })
+  const reset = new Date(budget.resetsAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'long', timeZone: 'UTC' })
+  return (
+    <div className="flex flex-col gap-2.5 border-b border-line-2 pb-5 pl-5" data-kpi="budget" data-testid="admin-budget">
+      <span className="label">Laufzeit {month}</span>
+      <div className="flex items-baseline gap-4">
+        <span className="num text-[40px] leading-[.85]" style={{ color: budget.exhausted ? 'var(--color-ember)' : 'var(--color-fg-1)' }}>
+          {hours.toLocaleString('de-DE', { maximumFractionDigits: 1 })} / {max.toLocaleString('de-DE', { maximumFractionDigits: 1 })} h
+        </span>
+        <span className="text-[13px] text-fg-3">
+          ≈ {cost} $ von {maxCost} $ · {budget.exhausted ? `registrierte Konten gesperrt bis ${reset}` : `registrierte Konten frei (${pct} %)`}
+        </span>
+      </div>
+      <ProgressBar value={Math.min(budget.minutes, budget.budgetMin)} max={Math.max(1, budget.budgetMin)} height={3} tone={budget.exhausted ? 'attack' : pct >= 80 ? 'ember' : 'fg'} />
     </div>
   )
 }

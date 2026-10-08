@@ -81,6 +81,14 @@ interface SocialStore {
 
 let timer: number | null = null
 let lastInput = Date.now()
+
+/**
+ * Sollen Polls (Tisch, Lobby, Admin) gerade ruhen? Bei verstecktem Tab oder nach 15 min ohne Eingabe - sonst haelt
+ * ein vergessener Tab die fly-Maschine wach. Wie das Social-Polling selbst.
+ */
+export function pollPaused(): boolean {
+  return document.hidden || Date.now() - lastInput > AWAY_MS
+}
 let listening = false
 let inflight = false
 

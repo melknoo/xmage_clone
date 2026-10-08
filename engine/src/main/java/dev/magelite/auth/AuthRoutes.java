@@ -1,6 +1,7 @@
 package dev.magelite.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.admin.UptimeBudget;
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
@@ -104,6 +105,10 @@ public final class AuthRoutes implements HttpServer.Module {
             String email = normalizeEmail(b.path("email").asText(""));
             char[] pw = b.path("password").asText("").toCharArray();
             u = accounts.byCredentials(email, pw).orElseThrow(() -> new UnauthorizedResponse("Anmeldung fehlgeschlagen"));
+            if (accounts.needsVerification(u.id())) {
+                ctx.status(HttpStatus.FORBIDDEN).json(Map.of("error", "Bitte erst die E-Mail bestätigen (Link in der Mail)", "unverified", true));
+                return;
+            }
             via = "password";
         } else {
             String code = b.path("code").asText("");
@@ -129,7 +134,7 @@ public final class AuthRoutes implements HttpServer.Module {
         String email = validEmail(b.path("email").asText(""));
         char[] pw = validPassword(b.path("password").asText(""));
         accounts.setCredentials(u.id(), email, Passwords.hash(pw));
-        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true), ctx.attribute(Auth.SESSION_ATTR)));
+        ctx.json(me(u.withCredentials(email), ctx.attribute(Auth.SESSION_ATTR)));
     }
 
     /** E-Mail und/oder Passwort aendern; braucht das aktuelle Passwort. Passwortwechsel beendet andere Sessions. */
@@ -155,6 +160,10 @@ public final class AuthRoutes implements HttpServer.Module {
         if (b.hasNonNull("email")) {
             email = validEmail(b.path("email").asText(""));
             if (!email.equalsIgnoreCase(u.email())) {
+                if (!u.friend()) {
+                    // die E-Mail ist bestaetigt und Login/Reset haengen daran; Aenderung bisher nur ueber den Admin
+                    throw new IllegalArgumentException("Die E-Mail eines registrierten Kontos kann (noch) nicht geändert werden");
+                }
                 accounts.updateEmail(u.id(), email);
             }
         }
@@ -163,10 +172,10 @@ public final class AuthRoutes implements HttpServer.Module {
             accounts.updatePassword(u.id(), Passwords.hash(pw));
             accounts.deleteOtherSessions(u.id(), ctx.attribute(Auth.SESSION_ATTR));
         }
-        ctx.json(me(new User(u.id(), u.name(), u.admin(), email, true), ctx.attribute(Auth.SESSION_ATTR)));
+        ctx.json(me(u.withCredentials(email), ctx.attribute(Auth.SESSION_ATTR)));
     }
 
-    private Cookie sessionCookie(Context ctx, String token) {
+    static Cookie sessionCookie(Context ctx, String token) {
         return new Cookie(Auth.SESSION_COOKIE, token, "/", COOKIE_MAX_AGE,
                 "https".equalsIgnoreCase(ctx.header("X-Forwarded-Proto")), 0, true, null, null, SameSite.LAX);
     }
@@ -175,7 +184,7 @@ public final class AuthRoutes implements HttpServer.Module {
         return s == null ? "" : s.strip().toLowerCase(Locale.ROOT);
     }
 
-    private static String validEmail(String s) {
+    static String validEmail(String s) {
         String email = normalizeEmail(s);
         if (email.isEmpty() || email.length() > 120 || !EMAIL.matcher(email).matches()) {
             throw new IllegalArgumentException("Bitte eine gültige E-Mail-Adresse angeben");
@@ -183,7 +192,7 @@ public final class AuthRoutes implements HttpServer.Module {
         return email;
     }
 
-    private static char[] validPassword(String s) {
+    static char[] validPassword(String s) {
         if (s == null || s.length() < PW_MIN || s.length() > PW_MAX) {
             throw new IllegalArgumentException("Passwort: mindestens " + PW_MIN + " Zeichen");
         }
@@ -205,7 +214,13 @@ public final class AuthRoutes implements HttpServer.Module {
         user.put("admin", u.admin());
         user.put("email", u.email());
         user.put("hasPassword", u.hasPassword());
+        user.put("tier", u.friend() ? User.FRIEND : User.PUBLIC);
         m.put("user", user);
+        UptimeBudget budget = auth.budget();
+        if (config.server() && budget != null) {
+            UptimeBudget.Status st = budget.status();
+            m.put("budget", Map.of("limited", !budget.counts(u), "resetsAt", st.resetsAt()));
+        }
         Map<String, Object> session = null;
         if (config.server() && sessionHash != null) {
             session = accounts.sessionInfo(u.id(), sessionHash)

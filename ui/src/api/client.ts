@@ -51,6 +51,13 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn
 }
 
+let onBudget: (() => void) | null = null
+
+/** Wird bei 503 mit {budget: true} aufgerufen (oeffentliches Konto, Monatsbudget des Servers erschoepft). */
+export function setBudgetHandler(fn: (() => void) | null) {
+  onBudget = fn
+}
+
 let onConnection: ((ok: boolean) => void) | null = null
 
 /**
@@ -91,9 +98,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     reportConnection(!(res.status >= 500))
     throw new ApiError(res.ok ? 'Unerwartete Antwort vom Server' : `Server nicht erreichbar (${res.status}) – bitte gleich nochmal versuchen`, res.status)
   }
-  reportConnection(!(res.status === 502 || res.status === 503 || res.status === 504))
+  // 503 mit budget = gewollte Sperre, kein Verbindungsproblem
+  const budget = res.status === 503 && data?.budget === true
+  reportConnection(!(res.status === 502 || (res.status === 503 && !budget) || res.status === 504))
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
+    if (budget) onBudget?.()
     throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status, data)
   }
   return data as T

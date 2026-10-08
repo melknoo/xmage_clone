@@ -1,5 +1,8 @@
 # MageLite auf fly.io. Siehe docs/SERVER.md.
-# Kosten: nur waehrend die Maschine laeuft (Auto-Stop); die Engine beendet sich selbst nach 10 min Leerlauf.
+# Kosten: nur waehrend die Maschine laeuft (Auto-Stop); die Engine beendet sich selbst nach 10 min Leerlauf
+# (3 min, wenn nur Anonymes sie geweckt hat). fly kennt kein Ausgabenlimit -> Monatsbudget in der Engine:
+# ab MAGELITE_BUDGET_HOURS Laufzeit sind oeffentliche (selbst registrierte) Konten bis Monatsende gesperrt.
+# Secrets (fly secrets set): MAGELITE_OWNER_CODE, MAGELITE_MAIL_API_KEY, MAGELITE_TURNSTILE_SECRET.
 
 app = "magelite"
 primary_region = "fra"
@@ -8,7 +11,19 @@ primary_region = "fra"
 
 [env]
   MAGELITE_IDLE_EXIT_MIN = "10"
+  MAGELITE_ANON_EXIT_MIN = "3"
   MAGELITE_MAX_GAMES = "1"
+  MAGELITE_BUDGET_HOURS = "100"
+  MAGELITE_PRICE_PER_HOUR = "0.0861"
+  MAGELITE_PUBLIC_URL = "https://magelite.fly.dev"
+  MAGELITE_DOWNLOAD_URL = "https://github.com/melknoo/magelite-releases/releases/download/v{v}/MageLite-Setup-{v}.exe"
+  # Registrierung: bleibt trotz "open" automatisch zu, solange Mail-Key, Captcha-Secret, MAGELITE_MAIL_FROM oder
+  # MAGELITE_PUBLIC_URL fehlen (Log: "Registrierung bleibt geschlossen"); Impressum/Datenschutz vorher ausfuellen
+  MAGELITE_SIGNUP = "open"
+  MAGELITE_MAX_PUBLIC_USERS = "200"
+  MAGELITE_SIGNUPS_PER_DAY = "30"
+  MAGELITE_MAIL_FROM = "noreply@schleiweb.de"
+  MAGELITE_TURNSTILE_SITEKEY = "0x4AAAAAAFRQ6-yj3OLQyUtp"
 
 [http_service]
   internal_port = 8080

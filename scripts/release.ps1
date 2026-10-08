@@ -3,13 +3,13 @@
     1. Version erhoehen (desktop/package.json = einzige Quelle; Engine, Installer und /api/health lesen sie)
     2. package.ps1: build.ps1 (danach startet MageLite.cmd den neuen Stand) + Java-Laufzeit + Setup-EXE
     3. Setup still installieren (Benutzerdaten in %APPDATA%\MageLite bleiben) und installierte Version pruefen
-    4. optional: auf fly.io deployen (-Fly)
+    4. optional: Setup als GitHub-Release veroeffentlichen und auf fly.io deployen (-Fly)
 
   Aufruf:  powershell -ExecutionPolicy Bypass -File scripts\release.ps1 [-Bump patch|minor|major|none]
            [-NoInstall] [-Fly] [-Force] [-AllowDirty]
     -Bump        Versionsteil, der erhoeht wird (Standard patch; none = Version behalten)
     -NoInstall   nur bauen, nicht installieren
-    -Fly         danach deploy-fly.ps1 (braucht committeten Stand, ausser -AllowDirty)
+    -Fly         danach publish-setup.ps1 + deploy-fly.ps1 (braucht committeten Stand, ausser -AllowDirty; gh angemeldet)
     -Force       an deploy-fly.ps1 weitergeben (deployt auch, wenn gerade ein Spiel laeuft)
     -AllowDirty  uncommittete Aenderungen erlauben (auch fuer -Fly)
   Mit -Fly committet das Skript die 4 Versionsdateien (package.json/-lock.json in desktop und ui) selbst, damit
@@ -144,6 +144,11 @@ if ($Fly) {
         }
     } finally { Pop-Location }
 
+    # Setup vor dem Deploy veroeffentlichen: die neue Version verlinkt sofort auf ihr eigenes Setup (GitHub-Release)
+    Step 'Setup veroeffentlichen (publish-setup.ps1)'
+    & (Join-Path $PSScriptRoot 'publish-setup.ps1') -Setup $setup
+    if (-not $?) { Fail 'publish-setup.ps1 fehlgeschlagen' }
+
     Step 'Deploy auf fly.io'
     $flyArgs = @{}
     if ($Force) { $flyArgs.Force = $true }
@@ -151,10 +156,6 @@ if ($Fly) {
     & (Join-Path $PSScriptRoot 'deploy-fly.ps1') @flyArgs
     if (-not $?) { Fail 'deploy-fly.ps1 fehlgeschlagen' }
 
-    # Setup auf das Volume: die Startseite bietet es zum Download an (Tische auf dem eigenen Rechner hosten)
-    Step 'Setup auf fly hochladen (upload-setup.ps1)'
-    & (Join-Path $PSScriptRoot 'upload-setup.ps1') -Setup $setup
-    if (-not $?) { Fail 'upload-setup.ps1 fehlgeschlagen' }
 }
 
 # ---------------------------------------------------------------- Zusammenfassung

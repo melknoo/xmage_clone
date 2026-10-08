@@ -102,7 +102,8 @@ export function AccountScreen() {
             <span className="text-[13.5px] leading-normal text-fg-2">
               {secured ? 'Anmeldung mit E-Mail und Passwort ist aktiv.' : 'Mit E-Mail und Passwort kannst du dich auf jedem Gerät anmelden. Level, Decks und Freunde bleiben erhalten.'}
             </span>
-            <TextField fieldHeight={42} label="E-Mail" type="email" autoComplete="username" required={!secured} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="deine@mail.de" />
+            {/* registrierte Konten: E-Mail ist bestaetigt, Login und Reset haengen daran - Aenderung (noch) nur per Admin */}
+            <TextField fieldHeight={42} label="E-Mail" type="email" autoComplete="username" required={!secured} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="deine@mail.de" disabled={me.tier === 'public'} title={me.tier === 'public' ? 'Die E-Mail eines registrierten Kontos lässt sich (noch) nicht ändern' : undefined} />
             <PasswordInput fieldHeight={42} label="Neues Passwort" autoComplete="new-password" minLength={PW_MIN} required={!secured} value={pw} onChange={(e) => setPw(e.target.value)} placeholder={`mindestens ${PW_MIN} Zeichen`} />
             {secured && <PasswordInput fieldHeight={42} label="Aktuelles Passwort" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="zur Bestätigung" />}
             {error && (

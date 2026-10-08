@@ -81,6 +81,7 @@ export function UserDetailPanel({ userId, meId, onClose, onChanged }: { userId: 
           <div className="flex flex-col gap-1 text-[13px] text-fg-3">
             <span>
               Konto seit {created(u.createdAt)} · {u.hasPassword && u.email ? <span className="text-fg-2">{u.email}</span> : 'Gast (nur Code)'}
+              {u.tier === 'public' ? (u.verified ? ' · selbst registriert' : ' · selbst registriert, unbestätigt') : ''}
             </span>
             {u.lastGameAt && <span>Letzte Partie {relDay(u.lastGameAt)}</span>}
           </div>
@@ -94,6 +95,25 @@ export function UserDetailPanel({ userId, meId, onClose, onChanged }: { userId: 
               ) : (
                 <Button variant="secondary" size="sm" icon="logout" disabled={busy || u.sessions === 0} title={u.sessions === 0 ? 'Keine aktive Session' : 'Beendet alle Sessions und ein laufendes Spiel; der Code bleibt gültig'} onClick={() => setConfirm('logout')} testId="admin-logout">
                   Abmelden
+                </Button>
+              )}
+              {!u.admin && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={u.tier === 'public' ? 'friend' : 'human'}
+                  disabled={busy}
+                  title={u.tier === 'public' ? 'Darf dann Server-Spiele starten und ist nicht vom Monatsbudget begrenzt' : 'Wie selbst registriert: keine Server-Spiele, fällt unters Monatsbudget'}
+                  onClick={() =>
+                    void run(async () => {
+                      const tier = u.tier === 'public' ? 'friend' : 'public'
+                      await adminApi.setTier(userId, tier)
+                      pushToast({ kind: 'success', text: tier === 'friend' ? `${u.name} ist jetzt Freund` : `${u.name} ist jetzt öffentlich` })
+                    })
+                  }
+                  testId="admin-detail-tier"
+                >
+                  {u.tier === 'public' ? 'Zum Freund machen' : 'Nur öffentlich'}
                 </Button>
               )}
               <Button
@@ -194,7 +214,7 @@ export function UserDetailPanel({ userId, meId, onClose, onChanged }: { userId: 
             {d.sessions.length === 0 && <span className="text-[13px] text-fg-3">Nicht angemeldet.</span>}
             {d.sessions.map((s) => (
               <div key={s.id} className="flex items-baseline gap-3 text-[13px]">
-                <span className="flex-1 text-fg-2">{s.via === 'password' ? 'E-Mail + Passwort' : 'Einladungscode'}</span>
+                <span className="flex-1 text-fg-2">{s.via === 'password' ? 'E-Mail + Passwort' : s.via === 'verify' ? 'E-Mail bestätigt' : s.via === 'reset' ? 'Passwort zurückgesetzt' : 'Einladungscode'}</span>
                 <span className="flex-none text-[12px] text-fg-3">
                   seit {created(s.createdAt)} · aktiv {ago(s.lastSeen)}
                 </span>

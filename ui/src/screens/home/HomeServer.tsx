@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '../../components/ui'
 import { useDeckCatalog } from '../../decks/catalog'
 import { Icon, type IconName } from '../../lib/icons'
+import { openLocalApp } from '../../lib/localApp'
 import { SeatedStrip } from '../../social/SeatedStrip'
 import { SocialSidebar } from '../../social/SocialSidebar'
 import { useMarkLobbyRead } from '../../social/useMarkLobbyRead'
@@ -47,7 +48,12 @@ export function HomeServer() {
   const lobbySub =
     tables === null ? 'Tische eröffnen und beitreten' : tables === 0 ? 'Kein offener Tisch' : [plural(tables, 'Tisch', 'Tische'), online !== null ? `${online} Spieler online` : null].filter(Boolean).join(' · ')
   const soloDeck = lastSetup ? describe(lastSetup.deck)?.name : undefined
-  const soloSub = lastSetup && soloDeck ? `${soloDeck} · gegen ${plural(lastSetup.bots.length, 'Bot', 'Bots')}` : 'Deck und Gegner wählen'
+  const publicTier = me?.tier === 'public'
+  const soloSub = publicTier
+    ? 'Läuft in der MageLite-App auf deinem PC'
+    : lastSetup && soloDeck
+      ? `${soloDeck} · gegen ${plural(lastSetup.bots.length, 'Bot', 'Bots')}`
+      : 'Deck und Gegner wählen'
 
   return (
     <div className="flex h-full min-h-0" data-testid="home-server">
@@ -67,7 +73,7 @@ export function HomeServer() {
           <SeatedStrip />
           <div className="grid grid-cols-2 gap-4 board:gap-[26px]">
             <CtaCard icon="lobby" title="Lobby" sub={lobbySub} filled testId="home-lobby" onClick={() => go('play')} />
-            <CtaCard icon="autoMana" title="Allein üben" sub={soloSub} testId="home-solo" onClick={() => go('solo')} />
+            <CtaCard icon={publicTier ? 'desktop' : 'autoMana'} title="Allein üben" sub={soloSub} testId="home-solo" onClick={() => (publicTier ? void openLocalApp() : go('solo'))} />
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
             <RecentGames limit={wide ? 3 : 2} variant="server" />

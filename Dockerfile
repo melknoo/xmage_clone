@@ -35,6 +35,7 @@ RUN mkdir -p /data
 WORKDIR /data
 EXPOSE 8080
 ENV MAGELITE_IDLE_EXIT_MIN=10 \
+    MAGELITE_ANON_EXIT_MIN=3 \
     MAGELITE_MAX_GAMES=1
 
 # Engine-Jar explizit VOR lib/* (harte Regel 10: eigener GameStateEvaluator2 muss zuerst geladen werden)
@@ -42,4 +43,5 @@ CMD exec java -XX:MaxRAMPercentage=70 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError \
     -Djava.awt.headless=true -Dfile.encoding=UTF-8 -Dmagelite.vendor=/app/vendor/xmage \
     -cp "/app/lib/magelite-engine.jar:/app/lib/*" dev.magelite.Main \
     --server --host=0.0.0.0 --port=8080 --data=/data --vendor=/app/vendor/xmage --ui=/app/ui \
-    --max-games=${MAGELITE_MAX_GAMES} --idle-exit-min=${MAGELITE_IDLE_EXIT_MIN}
+    --max-games=${MAGELITE_MAX_GAMES} --idle-exit-min=${MAGELITE_IDLE_EXIT_MIN} \
+    --anon-exit-min=${MAGELITE_ANON_EXIT_MIN}

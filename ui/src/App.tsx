@@ -8,6 +8,7 @@ import { GameScreen } from './game/GameScreen'
 import { screenFade } from './lib/motion'
 import { AccountScreen } from './screens/AccountScreen'
 import { AdminScreen } from './screens/AdminScreen'
+import { BudgetScreen } from './screens/BudgetScreen'
 import { DecksScreen } from './screens/DecksScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { LobbyScreen } from './screens/LobbyScreen'
@@ -19,7 +20,7 @@ import { BootScreen, type BootPhase } from './shell/BootScreen'
 import { ConnectionBarSlot } from './shell/ConnectionBarSlot'
 import { NavRail } from './shell/NavRail'
 import { InviteCard } from './social/InviteCard'
-import { takeInviteFromUrl, useAuth } from './store/auth'
+import { takeHashParam, takeInviteFromUrl, useAuth } from './store/auth'
 import { onConnectionRecovered, useConn } from './store/conn'
 import { useGame } from './store/game'
 import { useNav } from './store/nav'
@@ -75,13 +76,16 @@ export function App() {
   const gameId = useGame((s) => s.gameId)
   const authStatus = useAuth((s) => s.status)
   const mode = useAuth((s) => s.mode)
+  const budgetLimited = useAuth((s) => s.budgetLimited)
+  const resetToken = useAuth((s) => s.resetToken)
   const version = useConn((s) => s.version)
   /** wait: Engine/Server noch nicht erreichbar · account: erreichbar, Anmeldung/Spiel/Tisch wird geprueft */
   const [engine, setEngine] = useState<EngineState>('wait')
   const engineRef = useRef<EngineState>(engine)
   engineRef.current = engine
   const inGame = screen === 'game' && !!gameId
-  const socialOn = engine === 'ok' && authStatus === 'ok' && mode === 'server' && !inGame
+  // gesperrtes (oeffentliches) Konto pollt nicht: jede Anfrage waere ein 503
+  const socialOn = engine === 'ok' && authStatus === 'ok' && mode === 'server' && !inGame && !budgetLimited
 
   // Lobby-Chat/Freunde/Einladungen: Polling außerhalb des Spiels (Server-Modus)
   useEffect(() => {
@@ -128,6 +132,14 @@ export function App() {
         if (invite) {
           await auth.login(invite)
         }
+        // Links aus Mails: Bestaetigung meldet direkt an, Reset zeigt "Neues Passwort" im Login-Screen
+        const verify = takeHashParam('verify')
+        if (verify) {
+          const err = await auth.verify(verify)
+          pushToast(err ? { kind: 'error', text: err } : { kind: 'success', text: 'E-Mail bestätigt – willkommen!' })
+        }
+        const reset = takeHashParam('reset')
+        if (reset) auth.setResetToken(reset)
         if (useAuth.getState().status !== 'ok') {
           await auth.load()
         }
@@ -185,8 +197,10 @@ export function App() {
     const local = endpoint.mode === 'local'
     const phase: BootPhase = engine === 'down' ? 'down' : engine === 'account' ? 'account' : local ? 'engine' : 'server'
     body = <BootScreen phase={phase} mode={local ? 'local' : 'server'} version={version ?? undefined} onRetry={() => retryBoot.current()} />
-  } else if (authStatus === 'login') {
+  } else if (authStatus === 'login' || resetToken) {
     body = <LoginScreen />
+  } else if (mode === 'server' && budgetLimited && !(screen === 'game' && gameId)) {
+    body = <BudgetScreen />
   } else if (screen === 'game' && gameId) {
     body = <GameScreen />
   } else {

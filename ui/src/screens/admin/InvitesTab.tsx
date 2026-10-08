@@ -68,7 +68,8 @@ export function InvitesTab({ onShowUsers }: { onShowUsers: () => void }) {
       pushToast({ kind: 'success', text: `${a.name} gelöscht` })
     })
 
-  const open = list.filter((a) => a.lastSeen === null && !a.admin)
+  // selbst registrierte Konten haben keinen Einladungscode
+  const open = list.filter((a) => a.lastSeen === null && !a.admin && a.tier !== 'public')
   const used = list.length - open.length
 
   return (

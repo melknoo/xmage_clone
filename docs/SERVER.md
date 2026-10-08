@@ -21,17 +21,31 @@ Browser ──HTTPS/WSS──▶ fly-proxy (TLS, Auto-Start/Stop) ──▶ Masc
 
 - Dieselbe Engine wie lokal, Flag `--server`: bindet `0.0.0.0`, kein Zufallstoken, kein Parent-Watchdog.
 - **Anmeldung per Einladungscode oder E-Mail + Passwort.** Jeder Login erzeugt eine Session (Tabelle `sessions`,
-  Cookie `ml_sess` mit Zufallstoken, HttpOnly, 1 Jahr; in der DB nur der SHA-256). Ein Konto ist zunächst „Gast“
-  (nur Code); unter **Konto** kann der Nutzer E-Mail + Passwort setzen (PBKDF2) und sich danach auch damit anmelden.
-  Der Code bleibt gültig – es gibt keinen Mailversand, „Passwort vergessen“ heißt: Gastgeber erzeugt einen neuen
-  Code. Ohne Cookie sind nur Startseite, `/api/health` und `/api/auth/login` erreichbar.
+  Cookie `ml_sess` mit Zufallstoken, HttpOnly, 1 Jahr; in der DB nur der SHA-256). Ein eingeladenes Konto ist zunächst
+  „Gast“ (nur Code); unter **Konto** kann der Nutzer E-Mail + Passwort setzen (PBKDF2) und sich danach auch damit
+  anmelden. Optional (Schalter `MAGELITE_SIGNUP=open`) kann sich jeder selbst per E-Mail **registrieren** – siehe
+  „Öffentliche Registrierung“. Ohne Cookie sind nur Startseite, Health, Login/Registrierung und die Download-Info
+  erreichbar (`Auth.isPublicPath`).
+- **Zwei Konto-Arten** (`users.tier`): `friend` = eingeladen oder Owner (alles erlaubt) und `public` = selbst
+  registriert (keine Spiele, die der Server rechnet – nur Tische auf dem eigenen Rechner bzw. Beitritt zu Tischen
+  anderer; fällt unter das Monatsbudget). Der Admin kann ein Konto unter „Nutzer“ zum Freund machen und zurück.
 - **Konten:** Nutzer 1 = der lokale Held (hat keinen Code), Nutzer 2 = Owner (Admin) aus den fly-Secrets, weitere
   per „Einladungen“ in der UI. `decks`, `games`, `xp_ledger`, `profile` sind pro Nutzer getrennt.
-- **Kostenbremse:** fly stoppt die Maschine ohne Verbindungen; zusätzlich beendet sich die Engine selbst, wenn
-  10 Minuten kein Spiel läuft und keine API-Anfrage kam (`--idle-exit-min`). Vergessene Tabs halten sie nicht wach,
-  und ein **verwaistes Spiel** (Tab geschlossen, Spiel wartet auf den Menschen) wird nach 10 Minuten ohne
-  verbundenen Client abgebrochen. Der nächste Aufruf startet die Maschine (5–10 s, die UI zeigt „Server wird
-  gestartet …“).
+- **Kostenbremsen** (fly hat kein hartes Ausgabenlimit, Stand 2026 – die Bremsen sitzen in der Engine):
+  - fly stoppt die Maschine ohne Verbindungen; zusätzlich beendet sich die Engine selbst, wenn 10 Minuten kein Spiel
+    läuft und keine Anfrage eines **angemeldeten** Nutzers kam (`--idle-exit-min`). Anonyme Anfragen (Startseite,
+    Crawler, Scanner) zählen nicht: hat seit dem Start nur Anonymes die Maschine geweckt, endet sie nach 3 Minuten
+    (`--anon-exit-min`). `robots.txt` sperrt Suchmaschinen aus.
+  - Vergessene Tabs halten sie nicht wach: Startseite, Lobby, Tisch und Admin pollen nur bei sichtbarem Tab und bis
+    15 min nach der letzten Eingabe (`pollPaused()`); ein **verwaistes Spiel** (Tab zu, Spiel wartet auf den Menschen)
+    wird nach 10 Minuten ohne verbundenen Client abgebrochen.
+  - **Monatsbudget** (`MAGELITE_BUDGET_HOURS`, Standard 100 h ≈ 8,60 $): die Engine zählt jede Laufzeit-Minute in
+    `uptime_month`. Ist das Budget erreicht, sind **öffentliche Konten bis Monatsende gesperrt** (503 `budget`, UI
+    zeigt „Kontingent aufgebraucht“, ihre Anfragen halten die Maschine nicht wach, Registrierung zu); Owner und
+    eingeladene Freunde spielen normal weiter. Bei 80 % und 100 % bekommt der Owner eine Mail (wenn er unter Konto
+    eine E-Mail hinterlegt hat und Mailversand eingerichtet ist). Stand: Admin → Server, Kachel „Laufzeit <Monat>“.
+  - Das Setup liegt nicht auf fly, sondern als GitHub-Release (kein Egress, kein Volume-Platz).
+  - Der nächste Aufruf startet die Maschine (5–10 s, die UI zeigt „Server wird gestartet …“).
 
 ## Einmal-Setup
 
@@ -119,8 +133,9 @@ Text für Freunde:
 Der Server rechnet nur **ein Spiel** gleichzeitig. Wer mehr Tische will, hostet einen auf seinem PC – der Server
 bleibt Lobby, Konto und Vermittler und reicht das Spiel nur durch. Keine Portfreigabe, keine Zusatzsoftware.
 
-1. **Setup laden:** Die Startseite (vor dem Login) bietet `MageLite-Setup-<version>.exe` an (liegt auf dem Volume
-   unter `/data/downloads`, hochgeladen von `release.ps1 -Fly` bzw. `scripts\upload-setup.ps1`).
+1. **Setup laden:** Die Startseite (vor dem Login) verlinkt `MageLite-Setup-<version>.exe` der Server-Version als
+   GitHub-Release im öffentlichen Repo `melknoo/magelite-releases` (`MAGELITE_DOWNLOAD_URL` in `fly.toml`,
+   hochgeladen von `release.ps1 -Fly` bzw. `scripts\publish-setup.ps1`; braucht `gh`, einmal `gh auth login`).
 2. **In der App „Online spielen“** (Startseite der App): das Fenster lädt `https://magelite.fly.dev`, dort wie im
    Browser anmelden (Einladungscode oder E-Mail + Passwort). Die App merkt sich das Session-Cookie und bindet ihre
    lokale Engine ausgehend an den Server (`/ws/host`). In der Lobby zeigt „Tisch eröffnen“ dann **„Auf meinem
@@ -152,7 +167,36 @@ Relay-Spiele halten die fly-Maschine wach (Leerlauf-Exit zählt sie mit), kosten
 | Volume 3 GB | ≈ 0,5 $/Monat |
 
 Bei 20 Spielstunden im Monat ≈ 2–3 $. Keine Grundgebühr. Kontrolle: `fly status` (Maschine `stopped`?),
-`fly dashboard` → Billing.
+`fly dashboard` → Billing, in der App Admin → Server („Laufzeit <Monat>“). Obergrenze bei öffentlicher Registrierung:
+Monatsbudget (Standard 100 h ≈ 8,60 $) plus Laufzeit durch Freunde danach plus Volume. Volume-Snapshots kosten seit
+2026 extra.
+
+## Öffentliche Registrierung
+
+Standard ist **geschlossen** (`MAGELITE_SIGNUP = "closed"` in `fly.toml`). Vor dem Öffnen:
+
+1. **Impressum und Datenschutz** ausfüllen: `ui/public/impressum.html`, `ui/public/datenschutz.html` (Platzhalter,
+   von der Startseite verlinkt).
+2. **Mailversand (Brevo, EU, kostenlos bis 300 Mails/Tag):** Konto anlegen, Absender verifizieren (eigene Domain
+   empfohlen – Mails von gmx/web.de-Adressen über fremde Server landen oft im Spam), AV-Vertrag abschließen,
+   API-Key erzeugen. In `fly.toml`: `MAGELITE_MAIL_FROM = "noreply@…"`; Secret: `fly secrets set
+   MAGELITE_MAIL_API_KEY=…`.
+3. **Captcha (Cloudflare Turnstile, kostenlos):** Widget für `magelite.fly.dev` anlegen; Site-Key nach `fly.toml`
+   (`MAGELITE_TURNSTILE_SITEKEY`), Secret per `fly secrets set MAGELITE_TURNSTILE_SECRET=…`.
+4. `MAGELITE_SIGNUP = "open"`, deployen. Fehlt Mail, Captcha oder `MAGELITE_PUBLIC_URL`, bleibt die Registrierung
+   trotzdem zu (Fehler im Log: „Registrierung bleibt geschlossen“).
+
+Ablauf: Name, E-Mail, Passwort, Captcha → Konto `public`, unbestätigt → Mail mit Link `…/#verify=<token>` (24 h) →
+Klick meldet an. Unbestätigte Konten werden nach 24 h gelöscht (beim Start und stündlich). „Passwort vergessen?“ auf
+der Startseite schickt einen Reset-Link (`#reset=`, 1 h; gilt auch für eingeladene Konten mit E-Mail). Antworten
+verraten nie, ob eine E-Mail registriert ist (bestehende Konten bekommen stattdessen eine Hinweis-Mail). E-Mail-
+Änderung für registrierte Konten ist (noch) gesperrt.
+
+Grenzen (alle in der DB gezählt, überleben Neustarts): höchstens 3 Konten pro IP und 24 h
+(`MAGELITE_SIGNUPS_PER_IP`), 30 pro 24 h insgesamt (`MAGELITE_SIGNUPS_PER_DAY`), 200 öffentliche Konten
+(`MAGELITE_MAX_PUBLIC_USERS`); dazu das Login-Rate-Limit (10/min/IP) für alle Registrierungs-Routen und höchstens
+eine Mail je Konto und Zweck alle 5 Minuten. Die Startseite zeigt den Stand (`GET /api/auth/options`: open, closed,
+full, daily, budget).
 
 ## Betrieb
 
@@ -179,12 +223,15 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
 - **Leerlauf trotz offener Tabs:** Startseite/Lobby pollen (Social alle 3 s), aber nur bei sichtbarem Tab und bis
   15 min nach der letzten Maus-/Tastatureingabe; danach greift der Idle-Exit wie gewohnt.
 - **Volume voll?** `cache/images` wächst unbegrenzt (Scryfall-Bilder). Notfalls per `fly ssh console` leeren.
+  Alte Setups aus der Zeit vor GitHub-Releases: `rm -rf /data/downloads`.
 - Die lokale Electron-App bleibt unverändert (eigener lokaler Held, Token, nur `127.0.0.1`).
 
 ## Sicherheit
 
-- Öffentlich ohne Code: nur Startseite, `/api/health`, `/api/auth/login` (Rate-Limit 10/min pro IP),
-  `/api/download/info` und `/api/download/file` (Setup, 3/min pro IP).
+- Öffentlich ohne Code: nur Startseite, `/api/health`, `/api/auth/login`, die Registrierungs-Routen
+  `/api/auth/options|signup|verify|resend|forgot|reset` (Rate-Limit 10/min pro IP, Captcha) und `/api/download/info`.
+- Links in Mails kommen aus `MAGELITE_PUBLIC_URL`, nie aus dem Host-Header. Bestätigungs-/Reset-Tokens nur als
+  SHA-256 in `email_tokens`, einmalig, mit Ablauf.
 - Host-Link (`/ws/host`): nur mit gültigem Session-Cookie **und** passendem `Origin` (die App sendet ihn); ein
   Link je Konto, geroutet werden nur Tische dieses Gastgebers. Die Host-Engine erfährt Konto-ids, Namen und
   Decklisten der Mitspieler – nicht deren Sessions. Tisch-Passwörter nur als Hash (`tableId:pw`), 5 Versuche/min.
@@ -205,6 +252,7 @@ cd ui; npm run dev                     # http://localhost:5173/  (ohne ?port= ->
 node scripts\e2e-login.mjs             # Konten, Cookie, Nutzertrennung, 409, Rotieren, Rate-Limit
 cd desktop; npx electron tools\shot.cjs tools\steps-server.json   # Screenshots Login/Home/Einladungen/Spiel
 node scripts\e2e-relay.mjs             # Host-Link: startet selbst zwei Engines (7411 = Server, 7412 = Host-App)
+node scripts\e2e-signup.mjs            # Registrierung, Limits, Budget, Weck-Schutz: startet selbst eine Engine (7421)
 ```
 
 Host-Link von Hand: `RELAY_ONLY_START=1 node scripts\e2e-relay.mjs` (Engines bleiben stehen), dann

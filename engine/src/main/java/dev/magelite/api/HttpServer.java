@@ -1,6 +1,7 @@
 package dev.magelite.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.auth.Limits;
 import dev.magelite.auth.User;
 import dev.magelite.deck.DeckLoader;
 import dev.magelite.deck.DeckStore;
@@ -87,6 +88,8 @@ public final class HttpServer {
     public static final int CLOSE_TOO_SLOW = 4408;
     public static final int CLOSE_SEATED = 4409;
     public static final int CLOSE_FULL = 4429;
+    /** oeffentliches Konto, Monatsbudget erschoepft */
+    public static final int CLOSE_BUDGET = 4503;
     /** Zuschauer ohne Ping so lange -> schliessen (die UI pingt alle 20 s; Jetty-Idle-Timeout sind 2 h) */
     private static final long SPECTATOR_PING_TIMEOUT_MS = 60_000;
 
@@ -98,7 +101,9 @@ public final class HttpServer {
     private final List<Module> modules = new ArrayList<>();
     private final Map<WsContext, Session> sockets = new ConcurrentHashMap<>();
     private final Random random = new Random();
-    private volatile long lastActivity = System.currentTimeMillis();
+    private final long startedAt = System.currentTimeMillis();
+    /** letzte Aktivitaet eines angemeldeten Nutzers; 0 = seit dem Start keine (nur anonyme Anfragen) */
+    private volatile long lastActivity;
     private volatile Consumer<GameHost> onGameFinished = g -> {
     };
     private volatile GameStartListener onGameStarted = (host, deckId) -> {
@@ -147,9 +152,16 @@ public final class HttpServer {
         this.remoteGames = remoteGames;
     }
 
-    /** Zeitpunkt der letzten API-Anfrage (ohne Health-Checks); fuer den Leerlauf-Exit im Server-Modus. */
+    /**
+     * Zeitpunkt der letzten API-Anfrage eines angemeldeten Nutzers (0 = noch keine seit dem Start); fuer den
+     * Leerlauf-Exit im Server-Modus. Anonyme Anfragen (Startseite, Crawler) und abgelehnte zaehlen nicht.
+     */
     public long lastActivity() {
         return lastActivity;
+    }
+
+    public long startedAt() {
+        return startedAt;
     }
 
     /** Aktivitaet melden (Host-Link-Verkehr zaehlt wie eine API-Anfrage). */
@@ -188,14 +200,18 @@ public final class HttpServer {
         });
 
         app.before("/api/*", ctx -> {
-            if (!ctx.path().equals("/api/health")) {
+            auth.filter(ctx);
+            // erst nach dem Filter: nur angemeldete (und vom Budget zugelassene) Nutzer halten die Maschine wach
+            User u = ctx.attribute(Auth.ATTR);
+            if (u != null && auth.countsAsActivity(u)) {
                 lastActivity = System.currentTimeMillis();
             }
-            auth.filter(ctx);
         });
         app.before("/img/*", auth::filter);
         app.exception(IllegalArgumentException.class, (e, ctx) -> ctx.status(HttpStatus.BAD_REQUEST).json(Map.of("error", e.getMessage())));
         app.exception(GameRegistry.BusyException.class, (e, ctx) -> ctx.status(HttpStatus.CONFLICT).json(Map.of("error", e.getMessage(), "busy", true)));
+        app.exception(Limits.BudgetExhausted.class, (e, ctx) -> ctx.status(HttpStatus.SERVICE_UNAVAILABLE).json(Map.of("error", e.getMessage(), "budget", true)));
+        app.exception(Limits.ServerGamesForbidden.class, (e, ctx) -> ctx.status(HttpStatus.FORBIDDEN).json(Map.of("error", e.getMessage(), "publicLimit", true)));
         app.exception(Exception.class, (e, ctx) -> {
             LOG.error("API-Fehler " + ctx.path(), e);
             ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).json(Map.of("error", String.valueOf(e.getMessage())));
@@ -330,6 +346,10 @@ public final class HttpServer {
             ctx.closeSession(CLOSE_NOT_ALLOWED, "spectate");
             return;
         }
+        if (!auth.countsAsActivity(user)) {
+            ctx.closeSession(CLOSE_BUDGET, "budget");
+            return;
+        }
         if (host.seatOf(user.id()).isPresent() || seatedAtTable.test(user.id())) {
             ctx.closeSession(CLOSE_SEATED, "seated");
             return;
@@ -441,6 +461,7 @@ public final class HttpServer {
 
     private void createGame(Context ctx) throws Exception {
         User user = Auth.user(ctx);
+        Limits.requireServerGames(user, "Spiele gegen Bots laufen für dich in der App auf deinem Rechner");
         JsonNode body = Json.MAPPER.readTree(ctx.body());
         JsonNode deckSpec = body.path("deck");
         Long humanDeckId = "user".equals(deckSpec.path("type").asText()) ? deckSpec.path("id").asLong() : null;

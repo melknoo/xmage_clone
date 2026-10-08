@@ -17,6 +17,7 @@ import { useGame } from '../store/game'
 import { useNav } from '../store/nav'
 import { useTable } from '../store/table'
 import { pushToast } from '../store/ui'
+import { pollPaused } from '../store/social'
 
 const POLL_MS = 1500
 
@@ -68,7 +69,9 @@ export function TableScreen() {
 
   useEffect(() => {
     void load()
-    const iv = window.setInterval(() => void load(), POLL_MS)
+    const iv = window.setInterval(() => {
+      if (!pollPaused()) void load()
+    }, POLL_MS)
     return () => window.clearInterval(iv)
   }, [load])
 

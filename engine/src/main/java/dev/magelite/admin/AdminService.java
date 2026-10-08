@@ -27,10 +27,13 @@ import java.util.function.IntSupplier;
  */
 public final class AdminService {
 
-    /** Zeile der Nutzerliste. {@code status}: game | table | online | offline. */
+    /**
+     * Zeile der Nutzerliste. {@code status}: game | table | online | offline. {@code tier}: friend | public;
+     * {@code verified}: E-Mail bestaetigt (nur fuer selbst registrierte Konten relevant).
+     */
     public record UserRow(long id, String name, boolean admin, long createdAt, Long lastSeen, String email, boolean hasPassword,
                           long xp, int level, String title, int games, int wins, Long lastGameAt, int decks, int sessions,
-                          String status, String tableName) {
+                          String status, String tableName, String tier, boolean verified) {
     }
 
     public record GameRow(String id, long startedAt, Long endedAt, Long durationMs, Integer turns, String deckName, String commander,
@@ -62,9 +65,13 @@ public final class AdminService {
                             String gameId, long createdAt, String hosting, boolean locked) {
     }
 
-    /** {@code running} zaehlt Server- und Relay-Spiele, {@code maxGames} nur Server-Spiele; {@code hostLinks} = angebundene Engines. */
+    /**
+     * {@code running} zaehlt Server- und Relay-Spiele, {@code maxGames} nur Server-Spiele; {@code hostLinks} = angebundene
+     * Engines; {@code budget} = Laufzeit diesen Monat (null ohne Budget).
+     */
     public record ServerInfo(String version, long startedAt, long uptimeMs, long heapUsed, long heapMax, int maxGames,
-                             int running, int online, int tableCount, List<GameInfo> games, List<TableInfo> tables, int hostLinks) {
+                             int running, int online, int tableCount, List<GameInfo> games, List<TableInfo> tables, int hostLinks,
+                             UptimeBudget.Status budget) {
     }
 
     private static final String USER_SQL = """
@@ -74,7 +81,8 @@ public final class AdminService {
                    (SELECT COUNT(*) FROM games g WHERE g.user_id = u.id AND g.placement = 1),
                    (SELECT MAX(g.ended_at) FROM games g WHERE g.user_id = u.id),
                    (SELECT COUNT(*) FROM decks d WHERE d.user_id = u.id),
-                   (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id)
+                   (SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id),
+                   u.tier, u.email_verified_at IS NOT NULL
             FROM users u LEFT JOIN profile p ON p.id = u.id
             WHERE u.id != 1""";
 
@@ -86,14 +94,18 @@ public final class AdminService {
     private final String version;
     private final RemoteGames remoteGames;
     private final IntSupplier hostLinks;
+    private final UptimeBudget budget;
 
     public AdminService(Db db, AccountService accounts, GameRegistry games, TableManager tables, SocialService social, String version) {
-        this(db, accounts, games, tables, social, version, null, () -> 0);
+        this(db, accounts, games, tables, social, version, null, () -> 0, null);
     }
 
-    /** @param remoteGames Relay-Spiele (Host-Link), null ohne; {@code hostLinks} = Anzahl angebundener Engines */
+    /**
+     * @param remoteGames Relay-Spiele (Host-Link), null ohne; {@code hostLinks} = Anzahl angebundener Engines;
+     * @param budget      Monatsbudget, null ohne
+     */
     public AdminService(Db db, AccountService accounts, GameRegistry games, TableManager tables, SocialService social, String version,
-                        RemoteGames remoteGames, IntSupplier hostLinks) {
+                        RemoteGames remoteGames, IntSupplier hostLinks, UptimeBudget budget) {
         this.db = db;
         this.accounts = accounts;
         this.games = games;
@@ -102,13 +114,14 @@ public final class AdminService {
         this.version = version;
         this.remoteGames = remoteGames;
         this.hostLinks = hostLinks;
+        this.budget = budget;
     }
 
     // ------------------------------------------------------------------ Nutzer
 
     public List<UserRow> users() {
         record Raw(long id, String name, boolean admin, long createdAt, Long lastSeen, String email, boolean hasPassword,
-                   long xp, int games, int wins, Long lastGameAt, int decks, int sessions) {
+                   long xp, int games, int wins, Long lastGameAt, int decks, int sessions, String tier, boolean verified) {
         }
         List<Raw> raws = db.with(c -> {
             List<Raw> out = new ArrayList<>();
@@ -116,7 +129,7 @@ public final class AdminService {
                 while (rs.next()) {
                     out.add(new Raw(rs.getLong(1), rs.getString(2), rs.getInt(3) != 0, rs.getLong(4), nullableLong(rs, 5),
                             rs.getString(6), rs.getInt(7) != 0, rs.getLong(8), rs.getInt(9), rs.getInt(10), nullableLong(rs, 11),
-                            rs.getInt(12), rs.getInt(13)));
+                            rs.getInt(12), rs.getInt(13), rs.getString(14), rs.getInt(15) != 0));
                 }
             }
             return out;
@@ -127,7 +140,8 @@ public final class AdminService {
             SocialService.Presence p = social.presence(r.id());
             int level = Progression.levelOf(r.xp()).level();
             out.add(new UserRow(r.id(), r.name(), r.admin(), r.createdAt(), r.lastSeen(), r.email(), r.hasPassword(), r.xp(), level,
-                    Progression.titleOf(level), r.games(), r.wins(), r.lastGameAt(), r.decks(), r.sessions(), p.status(), p.tableName()));
+                    Progression.titleOf(level), r.games(), r.wins(), r.lastGameAt(), r.decks(), r.sessions(), p.status(), p.tableName(),
+                    r.tier(), r.verified()));
         }
         return out;
     }
@@ -191,6 +205,11 @@ public final class AdminService {
         return accounts.revokeSessions(id);
     }
 
+    /** Konto-Art aendern ("Zum Freund machen" / zurueck); Admins bleiben unveraendert. */
+    public boolean setTier(long id, String tier) {
+        return accounts.setTier(id, tier);
+    }
+
     // ------------------------------------------------------------------ Server
 
     public ServerInfo server() {
@@ -231,7 +250,8 @@ public final class AdminService {
                     t.gameId() == null ? null : t.gameId().toString(), t.createdAt(), t.hosting().name(), t.locked()));
         }
         return new ServerInfo(version, started, System.currentTimeMillis() - started, rt.totalMemory() - rt.freeMemory(), rt.maxMemory(),
-                games.maxGames(), gameInfos.size(), social.onlineCount(), tableInfos.size(), gameInfos, tableInfos, hostLinks.getAsInt());
+                games.maxGames(), gameInfos.size(), social.onlineCount(), tableInfos.size(), gameInfos, tableInfos, hostLinks.getAsInt(),
+                budget == null ? null : budget.status());
     }
 
     /** Laufendes Spiel beenden (alle geben auf). */

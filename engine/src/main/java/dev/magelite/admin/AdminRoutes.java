@@ -2,6 +2,7 @@ package dev.magelite.admin;
 
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
+import dev.magelite.api.Json;
 import dev.magelite.auth.User;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -44,6 +45,19 @@ public final class AdminRoutes implements HttpServer.Module {
                 throw new IllegalArgumentException("Das eigene Konto kann nicht abgemeldet werden");
             }
             ctx.json(Map.of("ok", admin.logout(id)));
+        });
+        app.post("/api/admin/users/{id}/tier", ctx -> {
+            Auth.requireAdmin(ctx);
+            long id = Long.parseLong(ctx.pathParam("id"));
+            String tier = Json.MAPPER.readTree(ctx.body()).path("tier").asText("");
+            if (!User.FRIEND.equals(tier) && !User.PUBLIC.equals(tier)) {
+                throw new IllegalArgumentException("tier: friend oder public");
+            }
+            if (!admin.setTier(id, tier)) {
+                notFound(ctx, "Konto nicht gefunden");
+                return;
+            }
+            ctx.json(Map.of("ok", true));
         });
         app.get("/api/admin/server", ctx -> {
             Auth.requireAdmin(ctx);

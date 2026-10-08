@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-07. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-08. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -470,6 +470,42 @@ Fallback auf manuelles Klicken.
   **Tisch schließen** (`POST /api/host/table/leave`). „Tisch verlassen/schließen“ am Tisch ist jetzt ein sichtbarer
   Secondary-Button mit Tooltip. Geprüft per `steps-relay-home.json` (`relay-08/09`) gegen Test-Engines; `tsc`, Build.
   Live erst mit dem nächsten Release (0.1.7).
+
+### Öffentliche Registrierung + Kostenbremsen (2026-10-08, nicht deployt)
+
+Ziel: Jeder kann sich per E-Mail registrieren, ohne dass die fly-Kosten steigen (fly hat kein hartes
+Ausgabenlimit). Details und Einrichtung: `SERVER.md` → „Kostenbremsen“, „Öffentliche Registrierung“.
+- **Weck-Schutz:** nur angemeldete Anfragen zählen als Aktivität (Bump nach `auth.filter`); nur anonym geweckt →
+  Exit nach `--anon-exit-min` (3). `TableScreen` (1,5 s), Lobby und Admin pollen nicht mehr bei verstecktem Tab
+  bzw. nach 15 min ohne Eingabe (`pollPaused()` in `store/social.ts`) – vorher hielt ein vergessener Tisch-Tab die
+  Maschine ewig wach. `robots.txt`.
+- **Konto-Art** `users.tier` (V8): `friend` (eingeladen/Owner) / `public` (selbst registriert). Öffentliche Konten:
+  keine Server-Spiele (`POST /api/games`, Server-Tische → 403 `publicLimit`), Beitritt zu Freundes-Tischen ok;
+  UI: „Allein üben“ → App/Setup, Tisch-Dialog nur „Auf meinem Rechner“. Admin: Badge, „Zum Freund machen“.
+- **Monatsbudget** `admin/UptimeBudget` (`uptime_month`, Tick im Leerlauf-Wächter): ab `MAGELITE_BUDGET_HOURS`
+  (100) öffentliche Konten 503 `budget` (außer `/api/me`, `/api/auth/*`), zählen nicht als Aktivität, keine
+  Registrierung; UI `BudgetScreen`; Admin-Kachel „Laufzeit <Monat>“; Owner-Mail bei 80/100 %.
+- **Registrierung** (`auth/SignupService`, `SignupRoutes`, `Mailer` Brevo/Outbox, `Turnstile`): Schalter
+  `MAGELITE_SIGNUP` (Standard closed; ohne Mail-Key/Captcha/`MAGELITE_PUBLIC_URL` bleibt sie zu), Bestätigungslink
+  `#verify=`, „Passwort vergessen“ `#reset=`, Hinweis-Mail statt Konto-Aufzählung, Grenzen pro IP/Tag/gesamt in der
+  DB, unbestätigte Konten nach 24 h weg. Login-Screen mit Tab „Registrieren“, Impressum/Datenschutz als **Platzhalter**
+  (`ui/public/*.html`, vom Betreiber auszufüllen).
+- **Setup extern:** `/api/download/info` liefert nur den Link (`MAGELITE_DOWNLOAD_URL`, GitHub-Release im öffentlichen
+  Repo `melknoo/magelite-releases`); `/api/download/file` und `upload-setup.ps1` entfernt, neu `publish-setup.ps1`
+  (von `release.ps1 -Fly` vor dem Deploy). Nach dem nächsten Deploy `/data/downloads` auf dem Volume löschen.
+- Geprüft: `gradlew test`, **`e2e-signup.mjs` 58/58** (Registrierung, 403 unverified, Link einmalig, Hinweis-Mail,
+  Name vergeben, Reset beendet alte Sessions, 3/IP → 429, Tageslimit, öffentlich 403 für Server-Spiel/-Tisch,
+  Beitritt ok, Admin-tier, Budget 0 → 503/limited/Owner normal, full, Aufräumen, **nur anonym → Exit nach 65 s,
+  angemeldet nach 160 s noch wach**); Regression gegen eigene Engine: `e2e-tables`, `e2e-social`, `e2e-admin`,
+  `e2e-login` (allein, sonst 429 durchs Rate-Limit der Vorläufer), `e2e-relay` grün; `humanSpike` 1/1 ohne STALL;
+  `tsc -b`; `build.ps1`. Screenshots `tools\steps-signup.json` gegen `SIGNUP_ONLY_START=1 node scripts/e2e-signup.mjs`
+  + Vite 5176 (`engine/run/signup/*.png`: Login-Tabs, Registrieren, „Schau in dein Postfach“, unbestätigt + „Mail
+  erneut senden“, Passwort vergessen, Neues Passwort, Startseite/Tisch-Dialog als öffentliches Konto, BudgetScreen,
+  Admin-Nutzer mit Badges, Detail „Zum Freund machen“, Server-Kachel „Laufzeit Oktober“). Dabei behoben: Monatsname
+  kippte durch die Zeitzone auf „November“ (jetzt UTC), unbestätigte Registrierungen fehlten in „Nutzer“ und wären
+  als „offene Einladung“ erschienen.
+- **Vor dem Öffnen (Nutzer):** Brevo (API-Key, Absender, AV-Vertrag), Turnstile (Site-Key/Secret), öffentliches
+  Releases-Repo + `gh auth login`, Impressum/Datenschutz ausfüllen, dann `MAGELITE_SIGNUP="open"` und deployen.
 
 ## Ideen (nicht beauftragt)
 

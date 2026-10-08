@@ -8,6 +8,7 @@ import { ServerTab } from './admin/ServerTab'
 import { errText, useWide } from './admin/shared'
 import { UserDetailPanel } from './admin/UserDetailPanel'
 import { UsersTab } from './admin/UsersTab'
+import { pollPaused } from '../store/social'
 
 type AdminTab = 'users' | 'invites' | 'server'
 
@@ -25,13 +26,13 @@ function loadTab(): AdminTab {
   }
 }
 
-/** Pollt `fn`, solange `on` gilt und das Fenster sichtbar ist; sofort beim Einschalten. */
+/** Pollt `fn`, solange `on` gilt, das Fenster sichtbar ist und jemand davor sitzt; sofort beim Einschalten. */
 function usePoll(on: boolean, ms: number, fn: () => Promise<void>) {
   useEffect(() => {
     if (!on) return
     void fn()
     const t = window.setInterval(() => {
-      if (!document.hidden) void fn()
+      if (!pollPaused()) void fn()
     }, ms)
     return () => window.clearInterval(t)
   }, [on, ms, fn])

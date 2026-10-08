@@ -1,0 +1,3 @@
+# Jeder Aufruf weckt die Server-Maschine (fly Auto-Start) - Suchmaschinen bitte draussen bleiben.
+User-agent: *
+Disallow: /

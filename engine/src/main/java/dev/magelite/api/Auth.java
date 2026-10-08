@@ -1,7 +1,9 @@
 package dev.magelite.api;
 
+import dev.magelite.admin.UptimeBudget;
 import dev.magelite.auth.AccountService;
 import dev.magelite.auth.InviteCodes;
+import dev.magelite.auth.Limits;
 import dev.magelite.auth.Passwords;
 import dev.magelite.auth.User;
 import io.javalin.http.Context;
@@ -21,8 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>Lokal: Zufallstoken (Header/Query) wie bisher; der Nutzer ist immer {@link User#LOCAL}.</li>
  *   <li>Server: Session-Cookie {@value #SESSION_COOKIE} (Zufallstoken, SHA-256 in {@code sessions}); jeder Login
  *       (Code oder E-Mail/Passwort) erzeugt eine Session. Uebergangsweise gilt auch noch das alte Cookie
- *       {@value #COOKIE} mit dem Einladungscode. Ohne gueltiges Cookie sind nur {@code /api/health} und
- *       {@code /api/auth/login} erreichbar.</li>
+ *       {@value #COOKIE} mit dem Einladungscode. Ohne gueltiges Cookie sind nur die Pfade aus {@link #isPublicPath}
+ *       erreichbar (Health, Login/Registrierung, Download-Info).</li>
  * </ul>
  */
 public final class Auth {
@@ -39,10 +41,34 @@ public final class Auth {
     private final HttpServer.Config config;
     private final AccountService accounts;
     private final Map<String, Deque<Long>> loginAttempts = new ConcurrentHashMap<>();
+    /** Server-Modus: Monatsbudget (null = unbegrenzt, z.B. lokal) */
+    private volatile UptimeBudget budget;
 
     public Auth(HttpServer.Config config, AccountService accounts) {
         this.config = config;
         this.accounts = accounts;
+    }
+
+    public void setBudget(UptimeBudget budget) {
+        this.budget = budget;
+    }
+
+    /** null ohne Budget (lokal) */
+    public UptimeBudget budget() {
+        return budget;
+    }
+
+    /** Haelt eine Anfrage dieses Nutzers die Maschine wach? Oeffentliche Konten nicht mehr, wenn das Budget erschoepft ist. */
+    public boolean countsAsActivity(User u) {
+        UptimeBudget b = budget;
+        return b == null || b.counts(u);
+    }
+
+    /** Oeffentliche Pfade ohne Anmeldung (Server-Modus). */
+    public static boolean isPublicPath(String p) {
+        return p.equals("/api/health") || p.equals("/api/download/info") || p.equals("/api/auth/login")
+                || p.equals("/api/auth/options") || p.equals("/api/auth/signup") || p.equals("/api/auth/verify")
+                || p.equals("/api/auth/resend") || p.equals("/api/auth/forgot") || p.equals("/api/auth/reset");
     }
 
     /** Before-Handler fuer {@code /api/*} und {@code /img/*}. */
@@ -62,11 +88,15 @@ public final class Auth {
             return;
         }
         String p = ctx.path();
-        if (p.equals("/api/health") || p.equals("/api/auth/login") || p.equals("/api/download/info") || p.equals("/api/download/file")) {
+        if (isPublicPath(p)) {
             return;
         }
         String sess = ctx.cookie(SESSION_COOKIE);
         User u = resolve(sess, ctx.cookie(COOKIE)).orElseThrow(() -> new UnauthorizedResponse("login"));
+        // Budget erschoepft: oeffentliche Konten nur noch /api/me und Konto/Abmelden (zaehlen nicht als Aktivitaet)
+        if (!countsAsActivity(u) && !p.equals("/api/me") && !p.startsWith("/api/auth/")) {
+            throw new Limits.BudgetExhausted();
+        }
         ctx.attribute(ATTR, u);
         String sessHash = sess == null || sess.isBlank() ? null : Passwords.tokenHash(sess);
         ctx.attribute(SESSION_ATTR, sessHash);

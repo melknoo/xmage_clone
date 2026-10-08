@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api, ApiError, setUnauthorizedHandler } from '../api/client'
+import { api, ApiError, setBudgetHandler, setUnauthorizedHandler } from '../api/client'
 
 export interface Me {
   id: number
@@ -8,6 +8,8 @@ export interface Me {
   /** gesichertes Konto: E-Mail + Passwort gesetzt; sonst "Gast" (nur Einladungscode) */
   email: string | null
   hasPassword: boolean
+  /** friend: eingeladen/Owner · public: selbst registriert (keine Server-Spiele, faellt unters Monatsbudget) */
+  tier?: 'friend' | 'public'
   /**
    * Aktuelle Session ("angemeldet seit"). Die Engine sendet sie NICHT im user-Objekt, sondern als MeResponse.session;
    * der Store muss sie beim Uebernehmen hineinkopieren (noch offen). null/fehlt: lokal oder altes Code-Cookie.
@@ -19,8 +21,17 @@ export interface Me {
 export interface SessionInfo {
   /** Anmeldezeitpunkt (ms) */
   since: number
-  /** Anmeldeweg */
-  via: 'code' | 'password'
+  /** Anmeldeweg (verify/reset: per Link aus der Mail) */
+  via: 'code' | 'password' | 'verify' | 'reset'
+}
+
+/** GET /api/auth/options (oeffentlich): Stand der Selbstregistrierung */
+export interface AuthOptions {
+  signup: 'open' | 'closed' | 'full' | 'daily' | 'budget'
+  /** Cloudflare Turnstile; null = kein Captcha (Dev) */
+  turnstileSiteKey: string | null
+  /** "Passwort vergessen" per Mail moeglich */
+  forgot: boolean
 }
 
 export type ServerMode = 'local' | 'server'
@@ -32,6 +43,8 @@ export interface MeResponse {
   session?: SessionInfo | null
   /** Server-Modus: meine MageLite-App ist angebunden (Host-Link) -> Tische auf dem eigenen Rechner moeglich */
   hostLink?: boolean
+  /** Server-Modus mit Monatsbudget: limited = mein (oeffentliches) Konto ist bis resetsAt gesperrt */
+  budget?: { limited: boolean; resetsAt: number }
 }
 
 interface AuthStore {
@@ -46,7 +59,25 @@ interface AuthStore {
   busy: boolean
   /** Hinweis "Konto sichern?" auf der Startseite weggeklickt (pro Konto, localStorage) */
   secureDismissed: boolean
+  /** oeffentliches Konto, Server-Kontingent fuer diesen Monat aufgebraucht */
+  budgetLimited: boolean
+  budgetResetsAt: number | null
+  /** Login scheiterte an unbestaetigter E-Mail (fuer "Mail erneut senden") */
+  unverifiedEmail: string | null
+  /** Reset-Token aus dem Mail-Link (#reset=…): Login-Screen zeigt "Neues Passwort" */
+  resetToken: string | null
+  options: AuthOptions | null
   load: () => Promise<void>
+  loadOptions: () => Promise<void>
+  /** Registrierung; liefert Fehlertext oder null (dann ist die Bestaetigungsmail unterwegs) */
+  signup: (p: { name: string; email: string; password: string; captcha: string }) => Promise<string | null>
+  /** Bestaetigungslink einloesen und anmelden; Fehlertext oder null */
+  verify: (token: string) => Promise<string | null>
+  resend: (email: string, captcha: string) => Promise<string | null>
+  forgot: (email: string, captcha: string) => Promise<string | null>
+  /** neues Passwort per Reset-Link; danach angemeldet */
+  resetPassword: (password: string) => Promise<string | null>
+  setResetToken: (token: string | null) => void
   login: (code: string) => Promise<boolean>
   loginEmail: (email: string, password: string) => Promise<boolean>
   /** Konto sichern (E-Mail + Passwort); liefert Fehlertext oder null */
@@ -73,11 +104,41 @@ function errorText(e: unknown, unauthorized: string): string {
   return e instanceof Error ? e.message : String(e)
 }
 
+function isUnverified(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 403 && (e.data as { unverified?: boolean } | null)?.unverified === true
+}
+
 export const useAuth = create<AuthStore>((set, get) => {
   setUnauthorizedHandler(() => {
     if (get().mode === 'server') set({ status: 'login', me: null })
   })
-  const apply = (r: MeResponse) => set({ mode: r.mode, me: { ...r.user, session: r.session ?? null }, hostLink: r.hostLink === true, status: 'ok', error: null, secureDismissed: loadDismissed(r.user.id) })
+  setBudgetHandler(() => {
+    if (get().me?.tier === 'public') set({ budgetLimited: true })
+  })
+  const apply = (r: MeResponse) =>
+    set({
+      mode: r.mode,
+      me: { ...r.user, session: r.session ?? null },
+      hostLink: r.hostLink === true,
+      status: 'ok',
+      error: null,
+      unverifiedEmail: null,
+      secureDismissed: loadDismissed(r.user.id),
+      budgetLimited: r.budget?.limited === true,
+      budgetResetsAt: r.budget?.resetsAt ?? null,
+    })
+  /** POST ohne MeResponse; Fehlertext oder null */
+  const call = async (path: string, body: unknown): Promise<string | null> => {
+    set({ busy: true })
+    try {
+      await api.post(path, body)
+      return null
+    } catch (e) {
+      return errorText(e, 'Nicht angemeldet.')
+    } finally {
+      set({ busy: false })
+    }
+  }
   return {
     mode: null,
     me: null,
@@ -86,6 +147,11 @@ export const useAuth = create<AuthStore>((set, get) => {
     error: null,
     busy: false,
     secureDismissed: false,
+    budgetLimited: false,
+    budgetResetsAt: null,
+    unverifiedEmail: null,
+    resetToken: null,
+    options: null,
 
     load: async () => {
       try {
@@ -113,12 +179,12 @@ export const useAuth = create<AuthStore>((set, get) => {
     },
 
     loginEmail: async (email, password) => {
-      set({ busy: true, error: null })
+      set({ busy: true, error: null, unverifiedEmail: null })
       try {
         apply(await api.post<MeResponse>('/api/auth/login', { email, password }))
         return true
       } catch (e) {
-        set({ error: errorText(e, 'E-Mail oder Passwort stimmen nicht.') })
+        set({ error: errorText(e, 'E-Mail oder Passwort stimmen nicht.'), unverifiedEmail: isUnverified(e) ? email : null })
         return false
       } finally {
         set({ busy: false })
@@ -149,6 +215,39 @@ export const useAuth = create<AuthStore>((set, get) => {
       }
     },
 
+    loadOptions: async () => {
+      try {
+        set({ options: await api.get<AuthOptions>('/api/auth/options') })
+      } catch {
+        set({ options: { signup: 'closed', turnstileSiteKey: null, forgot: false } })
+      }
+    },
+
+    signup: (p) => call('/api/auth/signup', p),
+
+    verify: async (token) => {
+      const err = await call('/api/auth/verify', { token })
+      if (err) return err
+      await get().load()
+      return null
+    },
+
+    resend: (email, captcha) => call('/api/auth/resend', { email, captcha }),
+
+    forgot: (email, captcha) => call('/api/auth/forgot', { email, captcha }),
+
+    resetPassword: async (password) => {
+      const token = get().resetToken
+      if (!token) return 'Der Link ist ungültig oder abgelaufen'
+      const err = await call('/api/auth/reset', { token, password })
+      if (err) return err
+      set({ resetToken: null })
+      await get().load()
+      return null
+    },
+
+    setResetToken: (token) => set({ resetToken: token }),
+
     dismissSecure: () => {
       const me = get().me
       if (me) {
@@ -176,7 +275,12 @@ export const useAuth = create<AuthStore>((set, get) => {
 
 /** Einladungscode aus dem Link (#invite=XXXX-XXXX-XXXX-XXXX) lesen und aus der URL entfernen. */
 export function takeInviteFromUrl(): string | null {
-  const m = window.location.hash.match(/invite=([^&]+)/)
+  return takeHashParam('invite')
+}
+
+/** Parameter aus dem Link-Hash (#invite=…, #verify=…, #reset=…) lesen und aus der URL entfernen. */
+export function takeHashParam(name: 'invite' | 'verify' | 'reset'): string | null {
+  const m = window.location.hash.match(new RegExp(`${name}=([^&]+)`))
   if (!m) return null
   try {
     window.history.replaceState(null, '', window.location.pathname + window.location.search)

@@ -2,6 +2,7 @@ package dev.magelite.game;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.magelite.auth.Passwords;
+import dev.magelite.auth.Limits;
 import dev.magelite.auth.User;
 import dev.magelite.deck.DeckResolver;
 import dev.magelite.deck.LoadedDeck;
@@ -375,6 +376,9 @@ public final class TableManager {
         if (tables.size() >= MAX_TABLES) {
             throw new TableException("Zu viele offene Tische");
         }
+        if (hosting != Hosting.REMOTE) {
+            Limits.requireServerGames(host, "Tische auf dem Server nur für eingeladene Spieler – eröffne den Tisch auf deinem Rechner (MageLite-App)");
+        }
         if (hosting == Hosting.REMOTE && !remote.linked(host.id())) {
             throw new TableException("Keine Verbindung zu deinem Rechner – MageLite-App starten und dort anmelden");
         }
@@ -614,6 +618,8 @@ public final class TableManager {
             t.touch();
             return new RemoteGameSpec(null, tableId, t.name, t.hostUserId, t.hostName, t.tempo.name(), 0, remoteSeats);
         }
+        // Konto-Art kann sich seit dem Eroeffnen geaendert haben (Admin)
+        Limits.requireServerGames(host, "Tische auf dem Server nur für eingeladene Spieler – eröffne den Tisch auf deinem Rechner (MageLite-App)");
         // Tisch-Spiele sind zuschaubar: oeffentliche Sicht ab dem ersten State (vor host.start())
         GameHost game = games.start(new GameSetup(specs, t.tempo), h -> onGameFinished(tableId, h), h -> h.setSpectatable(true));
         t.state = "RUNNING";

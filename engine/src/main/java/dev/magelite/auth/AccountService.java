@@ -24,9 +24,10 @@ public final class AccountService {
 
     private static final Logger LOG = Logger.getLogger(AccountService.class);
     private static final long TOUCH_INTERVAL_MS = 60_000;
-    private static final String USER_COLS = "id, name, is_admin, email, pw_hash IS NOT NULL";
+    private static final String USER_COLS = "id, name, is_admin, email, pw_hash IS NOT NULL, tier";
 
-    public record Account(long id, String name, boolean admin, long createdAt, Long lastSeen, String email, boolean hasPassword) {
+    /** {@code tier}: friend | public (selbst registriert - kein Einladungscode, nicht in "offene Einladungen") */
+    public record Account(long id, String name, boolean admin, long createdAt, Long lastSeen, String email, boolean hasPassword, String tier) {
     }
 
     public record Created(long id, String name, String code) {
@@ -54,7 +55,7 @@ public final class AccountService {
     }
 
     private static User mapUser(ResultSet rs) throws SQLException {
-        return new User(rs.getLong(1), rs.getString(2), rs.getInt(3) != 0, rs.getString(4), rs.getInt(5) != 0);
+        return new User(rs.getLong(1), rs.getString(2), rs.getInt(3) != 0, rs.getString(4), rs.getInt(5) != 0, rs.getString(6));
     }
 
     /** Konto zum Hash eines Einladungscodes. */
@@ -77,7 +78,7 @@ public final class AccountService {
             try (PreparedStatement ps = c.prepareStatement("SELECT " + USER_COLS + ", pw_hash FROM users WHERE email = ? AND pw_hash IS NOT NULL")) {
                 ps.setString(1, email);
                 try (ResultSet rs = ps.executeQuery()) {
-                    return rs.next() ? new Row(mapUser(rs), rs.getString(6)) : null;
+                    return rs.next() ? new Row(mapUser(rs), rs.getString(7)) : null;
                 }
             }
         });
@@ -88,7 +89,7 @@ public final class AccountService {
     public Optional<User> bySession(String tokenHash) {
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT u.id, u.name, u.is_admin, u.email, u.pw_hash IS NOT NULL FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?")) {
+                    "SELECT u.id, u.name, u.is_admin, u.email, u.pw_hash IS NOT NULL, u.tier FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?")) {
                 ps.setString(1, tokenHash);
                 try (ResultSet rs = ps.executeQuery()) {
                     return rs.next() ? Optional.of(mapUser(rs)) : Optional.<User>empty();
@@ -183,12 +184,12 @@ public final class AccountService {
         return db.with(c -> {
             List<Account> out = new ArrayList<>();
             try (Statement st = c.createStatement();
-                 ResultSet rs = st.executeQuery("SELECT id, name, is_admin, created_at, last_seen, email, pw_hash IS NOT NULL FROM users WHERE id != 1 ORDER BY id")) {
+                 ResultSet rs = st.executeQuery("SELECT id, name, is_admin, created_at, last_seen, email, pw_hash IS NOT NULL, tier FROM users WHERE id != 1 ORDER BY id")) {
                 while (rs.next()) {
                     long seen = rs.getLong(5);
                     boolean noSeen = rs.wasNull();
                     out.add(new Account(rs.getLong(1), rs.getString(2), rs.getInt(3) != 0, rs.getLong(4), noSeen ? null : seen,
-                            rs.getString(6), rs.getInt(7) != 0));
+                            rs.getString(6), rs.getInt(7) != 0, rs.getString(8)));
                 }
             }
             return out;
@@ -317,6 +318,234 @@ public final class AccountService {
                 return ps.executeUpdate();
             }
         });
+    }
+
+    // ------------------------------------------------------------------ Selbstregistrierung (oeffentliche Konten)
+
+    /** Kontodaten zu einer E-Mail (fuer Registrierung, erneut senden, Passwort vergessen). */
+    public record EmailAccount(long id, String name, String tier, boolean verified, boolean hasPassword) {
+    }
+
+    /** Selbst registriertes Konto ({@link User#PUBLIC}, unbestaetigt). @throws Conflict E-Mail schon vergeben */
+    public long createPublic(String name, String email, String pwHash, String ip) {
+        try {
+            long id = db.tx(c -> {
+                long newId;
+                try (PreparedStatement ps = c.prepareStatement(
+                        "INSERT INTO users (name, is_admin, created_at, email, pw_hash, pw_set_at, tier, created_ip) VALUES (?, 0, ?, ?, ?, ?, ?, ?)",
+                        Statement.RETURN_GENERATED_KEYS)) {
+                    long now = System.currentTimeMillis();
+                    ps.setString(1, name);
+                    ps.setLong(2, now);
+                    ps.setString(3, email);
+                    ps.setString(4, pwHash);
+                    ps.setLong(5, now);
+                    ps.setString(6, User.PUBLIC);
+                    ps.setString(7, ip);
+                    ps.executeUpdate();
+                    try (ResultSet keys = ps.getGeneratedKeys()) {
+                        keys.next();
+                        newId = keys.getLong(1);
+                    }
+                }
+                ProfileService.ensure(c, newId, name);
+                return newId;
+            });
+            LOG.info("Registrierung: " + name + " (#" + id + ", unbestaetigt)");
+            return id;
+        } catch (IllegalStateException e) {
+            throw uniqueOr(e);
+        }
+    }
+
+    public Optional<EmailAccount> byEmail(String email) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id, name, tier, email_verified_at IS NOT NULL, pw_hash IS NOT NULL FROM users WHERE email = ? AND id != 1")) {
+                ps.setString(1, email);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next()
+                            ? Optional.of(new EmailAccount(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getInt(4) != 0, rs.getInt(5) != 0))
+                            : Optional.<EmailAccount>empty();
+                }
+            }
+        });
+    }
+
+    /** Ist ein Name schon vergeben (Gross/klein egal, wie die Freundessuche)? */
+    public boolean nameTaken(String name) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM users WHERE id != 1 AND name = ? COLLATE NOCASE")) {
+                ps.setString(1, name);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        });
+    }
+
+    /** Selbst registriertes Konto, dessen E-Mail noch nicht bestaetigt ist (Login gesperrt)? */
+    public boolean needsVerification(long id) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM users WHERE id = ? AND tier = ? AND email_verified_at IS NULL")) {
+                ps.setLong(1, id);
+                ps.setString(2, User.PUBLIC);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        });
+    }
+
+    public void markVerified(long id) {
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("UPDATE users SET email_verified_at = ? WHERE id = ? AND email_verified_at IS NULL")) {
+                ps.setLong(1, System.currentTimeMillis());
+                ps.setLong(2, id);
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    /** Zaehlt oeffentliche Konten: gesamt ({@code since = 0}, {@code ip = null}), seit einem Zeitpunkt bzw. von einer IP. */
+    public int countPublic(long since, String ip) {
+        return db.with(c -> {
+            String sql = "SELECT COUNT(*) FROM users WHERE tier = ? AND created_at >= ?" + (ip == null ? "" : " AND created_ip = ?");
+            try (PreparedStatement ps = c.prepareStatement(sql)) {
+                ps.setString(1, User.PUBLIC);
+                ps.setLong(2, since);
+                if (ip != null) {
+                    ps.setString(3, ip);
+                }
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    return rs.getInt(1);
+                }
+            }
+        });
+    }
+
+    /** Neues Einmal-Token ({@code verify}/{@code reset}); aeltere Tokens desselben Zwecks verfallen. Zurueck kommt der Klartext. */
+    public String createEmailToken(long userId, String purpose, long ttlMs) {
+        String token = Passwords.newToken();
+        db.tx(c -> {
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM email_tokens WHERE user_id = ? AND purpose = ?")) {
+                ps.setLong(1, userId);
+                ps.setString(2, purpose);
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO email_tokens (user_id, purpose, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")) {
+                long now = System.currentTimeMillis();
+                ps.setLong(1, userId);
+                ps.setString(2, purpose);
+                ps.setString(3, Passwords.tokenHash(token));
+                ps.setLong(4, now);
+                ps.setLong(5, now + ttlMs);
+                return ps.executeUpdate();
+            }
+        });
+        return token;
+    }
+
+    /** Zeitpunkt des letzten Tokens dieses Zwecks (fuer "hoechstens eine Mail alle 5 Minuten"), 0 = keins. */
+    public long lastEmailTokenAt(long userId, String purpose) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT MAX(created_at) FROM email_tokens WHERE user_id = ? AND purpose = ?")) {
+                ps.setLong(1, userId);
+                ps.setString(2, purpose);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getLong(1) : 0L;
+                }
+            }
+        });
+    }
+
+    /** Token einloesen (einmalig): Konto-id, wenn gueltig und nicht abgelaufen. */
+    public Optional<Long> consumeEmailToken(String purpose, String token) {
+        if (token == null || token.isBlank() || token.length() > 200) {
+            return Optional.empty();
+        }
+        String hash = Passwords.tokenHash(token.strip());
+        return db.tx(c -> {
+            Long userId = null;
+            long expires = 0;
+            try (PreparedStatement ps = c.prepareStatement("SELECT user_id, expires_at FROM email_tokens WHERE token_hash = ? AND purpose = ?")) {
+                ps.setString(1, hash);
+                ps.setString(2, purpose);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        userId = rs.getLong(1);
+                        expires = rs.getLong(2);
+                    }
+                }
+            }
+            if (userId == null) {
+                return Optional.<Long>empty();
+            }
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM email_tokens WHERE token_hash = ?")) {
+                ps.setString(1, hash);
+                ps.executeUpdate();
+            }
+            return expires >= System.currentTimeMillis() ? Optional.of(userId) : Optional.<Long>empty();
+        });
+    }
+
+    /** Unbestaetigte oeffentliche Konten aelter als {@code olderThan} loeschen, abgelaufene Tokens entfernen. @return geloeschte Konten */
+    public int purgeUnverified(long olderThan) {
+        List<Long> ids = db.with(c -> {
+            List<Long> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT id FROM users WHERE tier = ? AND email_verified_at IS NULL AND created_at < ? AND id != 1")) {
+                ps.setString(1, User.PUBLIC);
+                ps.setLong(2, olderThan);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        out.add(rs.getLong(1));
+                    }
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement("DELETE FROM email_tokens WHERE expires_at < ?")) {
+                ps.setLong(1, System.currentTimeMillis());
+                ps.executeUpdate();
+            }
+            return out;
+        });
+        int n = 0;
+        for (long id : ids) {
+            if (delete(id)) {
+                n++;
+            }
+        }
+        if (n > 0) {
+            LOG.info(n + " unbestaetigte Registrierung(en) geloescht");
+        }
+        return n;
+    }
+
+    /** E-Mail des Owners (erster Admin ausser Nutzer 1), falls hinterlegt - fuer Budget-Warnungen. */
+    public Optional<String> ownerEmail() {
+        return db.with(c -> {
+            try (Statement st = c.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT email FROM users WHERE is_admin = 1 AND id != 1 AND email IS NOT NULL ORDER BY id LIMIT 1")) {
+                return rs.next() ? Optional.ofNullable(rs.getString(1)) : Optional.<String>empty();
+            }
+        });
+    }
+
+    /** Konto-Art setzen ({@link User#FRIEND}/{@link User#PUBLIC}); nicht fuer Nutzer 1 und Admins. Wirkt sofort (Session liest sie neu). */
+    public boolean setTier(long id, String tier) {
+        int n = db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("UPDATE users SET tier = ? WHERE id = ? AND id != 1 AND is_admin = 0")) {
+                ps.setString(1, tier);
+                ps.setLong(2, id);
+                return ps.executeUpdate();
+            }
+        });
+        if (n > 0) {
+            LOG.info("Konto #" + id + ": Art = " + tier);
+        }
+        return n > 0;
     }
 
     /** Gespeicherter Passwort-Hash (fuer "aktuelles Passwort" pruefen). */
