@@ -453,7 +453,15 @@ Fallback auf manuelles Klicken.
   Klickweg Electron → Server-Login → Lobby nur per Dev-Session simuliert (Cookie-Lesen aus der Electron-Session ist
   damit geprüft, der Login-Klickweg nicht); Setup-Upload auf fly erst beim nächsten `release.ps1 -Fly`
   (`upload-setup.ps1` noch nie gegen fly gelaufen); Resume nach fly-Neustart ohne Tisch nur per Code, nicht getestet.
-  **Nicht deployt** (fly), nicht committet.
+- **Release 0.1.6 (2026-10-08):** `release.ps1 -Fly` → Setup gebaut/installiert, Version committet; Deploy lief erst
+  im zweiten Anlauf (ein paralleler Edit machte den Baum „dirty“). **Live-Smoke-Test:** `RELAY_X=https://magelite.fly.dev
+  node scripts/e2e-relay.mjs` (lokale Engine als Host gegen fly) 59/60 grün – einzige Abweichung war der Negativtest
+  `/ws/host` ohne Cookie (live ohne Origin kein Close-Code binnen 5 s; Prüfung jetzt toleranter). Installierte App
+  0.1.6 mit `MAGELITE_DEV_SESSION` gegen fly: `hostLink:true` nach 12 s, nach App-Ende false.
+  Setup-Upload: erster Versuch brach bei 259 MB ab („connection lost“, Engine-Leerlauf-Exit während des Uploads) →
+  `upload-setup.ps1` hält die Engine per `/api/download/info` wach, lädt auf `.part`, prüft die Größe, bis zu 3 Versuche
+  (fly-ssh-stderr über `cmd /c … 2>&1`, Regel 9). Zweiter Lauf: 322.591.100 Bytes vollständig, Umbenennen von Hand
+  nachgeholt; **live:** `/api/download/info` = v0.1.6, `/api/download/file` liefert die ganze Datei (200).
 
 ## Ideen (nicht beauftragt)
 

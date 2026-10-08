@@ -43,13 +43,40 @@ $base = "https://$App.fly.dev"
 try { $null = Invoke-RestMethod -Uri "$base/api/health" -TimeoutSec 60 } catch { Write-Host "Health nicht erreichbar ($($_.Exception.Message)) - versuche trotzdem." }
 
 $size = [math]::Round((Get-Item $Setup).Length / 1MB)
-Write-Host "Lade $file ($size MB) nach /data/downloads auf $App ..."
-& $fly ssh sftp put $Setup "/data/downloads/$file" -a $App
-if ($LASTEXITCODE -ne 0) { Write-Error "Upload fehlgeschlagen (Exit $LASTEXITCODE)." }
+$expected = (Get-Item $Setup).Length
 
-# alte Setups entfernen (nur die neueste Datei bleibt)
-& $fly ssh console -a $App -C "sh -c 'cd /data/downloads && ls -t MageLite-Setup-*.exe | tail -n +2 | xargs -r rm -f; ls -la /data/downloads'"
-if ($LASTEXITCODE -ne 0) { Write-Host "Aufraeumen alter Setups fehlgeschlagen (Exit $LASTEXITCODE) - nicht kritisch." }
+# Waehrend des Uploads die Engine wach halten: ohne API-Anfragen beendet sie sich nach 10 min (Leerlauf-Exit),
+# die Maschine stoppt und die ssh-Verbindung reisst ("connection lost"). /api/health zaehlt nicht als Aktivitaet.
+$keep = Start-Job -ArgumentList $base {
+    param($b)
+    while ($true) {
+        try { $null = Invoke-RestMethod -Uri "$b/api/download/info" -TimeoutSec 20 } catch { }
+        Start-Sleep -Seconds 45
+    }
+}
+try {
+    # Upload auf .part (die Engine bietet nur *.exe an), danach umbenennen; bis zu 3 Versuche
+    $done = $false
+    for ($attempt = 1; $attempt -le 3 -and -not $done; $attempt++) {
+        Write-Host "Lade $file ($size MB) nach /data/downloads auf $App (Versuch $attempt) ..."
+        & $fly ssh sftp put $Setup "/data/downloads/$file.part" -a $App
+        if ($LASTEXITCODE -ne 0) { Write-Host "Upload abgebrochen (Exit $LASTEXITCODE)."; Start-Sleep -Seconds 10; continue }
+        # stderr ("Connecting to ...") ueber cmd umleiten: in PowerShell 5.1 bricht 2>&1 mit ErrorActionPreference=Stop ab
+        $check = (cmd /c "`"$fly`" ssh console -a $App -C `"sh -c 'stat -c %s /data/downloads/$file.part'`" 2>&1" |
+            Where-Object { $_ -match '^\d+\s*$' } | Select-Object -Last 1)
+        if ("$check".Trim() -ne "$expected") { Write-Host "Groesse stimmt nicht ($check statt $expected)."; continue }
+        cmd /c "`"$fly`" ssh console -a $App -C `"sh -c 'mv -f /data/downloads/$file.part /data/downloads/$file'`" 2>&1" | Out-Null
+        if ($LASTEXITCODE -eq 0) { $done = $true }
+    }
+    if (-not $done) { Write-Error "Upload nach 3 Versuchen fehlgeschlagen." }
+
+    # alte Setups und Reste entfernen (nur die neueste Datei bleibt)
+    cmd /c "`"$fly`" ssh console -a $App -C `"sh -c 'cd /data/downloads && rm -f *.part; ls -t MageLite-Setup-*.exe | tail -n +2 | xargs -r rm -f; ls -la /data/downloads'`" 2>&1"
+    if ($LASTEXITCODE -ne 0) { Write-Host "Aufraeumen alter Setups fehlgeschlagen (Exit $LASTEXITCODE) - nicht kritisch." }
+} finally {
+    Stop-Job $keep -ErrorAction SilentlyContinue
+    Remove-Job $keep -Force -ErrorAction SilentlyContinue
+}
 
 # Pruefen, was die Engine anbietet (Cache 60 s)
 $info = $null

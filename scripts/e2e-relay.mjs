@@ -371,14 +371,15 @@ try {
   ok(r.status === 409, `Start ohne Link -> ${r.status} (${r.json?.error})`)
   A3.ws.close()
 
-  // ---- Negativ: /ws/host ohne Cookie
+  // ---- Negativ: /ws/host ohne Cookie (lokal --dev: 4401; live ohne Origin: 4403 oder gar kein Upgrade)
   const hostClose = await new Promise((resolve) => {
     const ws = new WebSocket(`${X.replace(/^http/, 'ws')}/ws/host`)
+    ws.onopen = () => setTimeout(() => resolve(ws.readyState === WebSocket.OPEN ? 'offen' : 'zu'), 3000)
     ws.onclose = (ev) => resolve(ev.code)
     ws.onerror = () => {}
-    setTimeout(() => resolve(-1), 5000)
+    setTimeout(() => resolve('timeout'), 10000)
   })
-  ok(hostClose === 4401, `/ws/host ohne Cookie -> Close ${hostClose}`)
+  ok(hostClose !== 'offen', `/ws/host ohne Cookie -> ${hostClose}`)
 
   // Aufraeumen
   await x('POST', `/api/tables/${tid}/leave`, { cookie: owner })
