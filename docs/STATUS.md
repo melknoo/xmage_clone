@@ -523,6 +523,7 @@ Engine-Wechsel XMage 1.4.60 → Forge (Entscheidung und Plan: Memory `forge-migr
 | Phase | Stand |
 |---|---|
 | 0.0 Vorbereitung | ✅ Branch `forge`; `LICENSE` (GPL-3.0), `LICENSES/Forge-GPL-3.0.txt`; `brackets/infinite-combos.txt` aus `mage-1.4.60.jar` nach `engine/src/main/resources` (byte-identisch, MIT-Hinweis in `XMage-MIT.txt`); `gradlew test` 20/20 grün. **Offen:** Repo `melknoo/xmage_clone` ist privat (GitHub 404 ohne Login) – GPL-Quellangebot vor dem Forge-Release klären. |
+| 0.1 Forge holen | ✅ `vendor/forge/FORGE_COMMIT` = `d57b0cd` (master 2026-10-08, enthält PR #12091, Forge 2.0.16-SNAPSHOT); `scripts/import-forge.ps1` (Maven 3.9.16 wird selbst geladen, sparse Checkout, 4-Modul-Reactor, Zip mit Overrides). Lauf 120–220 s; `lib` 62 Jars/22 MB (jetty/servlet/slf4j/jupnp.support raus, `org.jupnp` bleibt – `IGuiBase`-Signatur); `res` 28 MB (34 074 Kartenskripte, 855 Token, 180 Precons). Boot-Smoke außerhalb des Repos: `FModel.initialize` 4,7 s warm, 33 533 Karten, 684 Editionen, Heap 284 MB. Befund für 0.3: `awaitNextInput`/`cancelAwaitNextInput` sind `final` (Timer + `invokeInEdtLater`). |
 
 ## Ideen (nicht beauftragt)
 
