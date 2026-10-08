@@ -31,3 +31,4 @@ Thumbs.db
 # Design: Vorher-Screenshots (lokal, gross) und Redesign-Aufnahmen
 design/claude-design/screenshots/*.png
 design/redesign-shots/
+.vite/
