@@ -6,6 +6,8 @@
 // -> Start laeuft auf Y, Spieler spielen ueber X -> Chat, Reconnect, Aufgeben -> gameOver mit Belohnung, Statistik nur
 // auf X -> Revanche: Link-Reconnect (hostLink false/true), Admin-Abbruch, Link weg -> Abbruch nach Frist.
 //   node scripts/e2e-relay.mjs            (RELAY_KEEP=1 laesst die Engines nach dem Test laufen)
+//   RELAY_X=https://magelite.fly.dev node scripts/e2e-relay.mjs   -> X ist der echte Server (nur Y wird gestartet;
+//   Owner-Code aus MAGELITE_OWNER_CODE oder engine/run/owner-code.txt; Frist 60 s statt 5 s)
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -16,10 +18,17 @@ const lib = path.join(root, 'engine', 'build', 'install', 'magelite-engine', 'li
 const vendor = path.join(root, 'vendor', 'xmage')
 const PORT_X = Number(process.env.RELAY_PORT_X ?? 7411)
 const PORT_Y = Number(process.env.RELAY_PORT_Y ?? 7412)
-const X = `http://127.0.0.1:${PORT_X}`
+const liveX = process.env.RELAY_X?.replace(/\/+$/, '') || null
+const X = liveX ?? `http://127.0.0.1:${PORT_X}`
 const Y = `http://127.0.0.1:${PORT_Y}`
-const ownerCode = 'DEV-OWNER-CODE'
-const graceMs = 5000
+const codeFile = path.join(root, 'engine', 'run', 'owner-code.txt')
+const ownerCode = process.env.MAGELITE_OWNER_CODE ?? (liveX ? (fs.existsSync(codeFile) ? fs.readFileSync(codeFile, 'utf8').trim() : '') : 'DEV-OWNER-CODE')
+if (liveX && !ownerCode) {
+  console.error('RELAY_X gesetzt, aber kein Owner-Code (MAGELITE_OWNER_CODE oder engine/run/owner-code.txt)')
+  process.exit(2)
+}
+// Frist, bis fly ein Spiel ohne Host aufgibt: lokal per -Dmagelite.hostGraceMs=5000, live 60 s
+const graceMs = liveX ? 60000 : 5000
 
 if (!fs.existsSync(path.join(lib, 'magelite-engine.jar'))) {
   console.error(`Engine fehlt: ${lib} - erst "cd engine; .\\gradlew.bat installDist"`)
@@ -93,10 +102,12 @@ function stopEngines() {
 }
 process.on('exit', stopEngines)
 
-console.log('Starte Engines X (fly) und Y (Host) ...')
+console.log(liveX ? `Starte Engine Y (Host) gegen ${X} ...` : 'Starte Engines X (fly) und Y (Host) ...')
 try {
-  await startEngine('fly', path.join(root, 'engine', 'run', 'relay-fly'), PORT_X, ['--server'],
-    { MAGELITE_OWNER_CODE: ownerCode, MAGELITE_OWNER_NAME: 'Owner' }, '768m')
+  if (!liveX) {
+    await startEngine('fly', path.join(root, 'engine', 'run', 'relay-fly'), PORT_X, ['--server'],
+      { MAGELITE_OWNER_CODE: ownerCode, MAGELITE_OWNER_NAME: 'Owner' }, '768m')
+  }
   await startEngine('host', path.join(root, 'engine', 'run', 'relay-host'), PORT_Y, [], {}, '2g')
 } catch (e) {
   console.error(`FEHLER ${e.message}`)
@@ -119,6 +130,8 @@ try {
   r = await x('GET', '/api/me', { cookie: owner })
   const ownerId = r.json?.user?.id
   ok(r.status === 200 && r.json?.hostLink === false, `Owner angemeldet, hostLink=${r.json?.hostLink}`)
+  const baseGames = (await x('GET', '/api/health')).json?.games ?? 0
+  const baseLinks = (await x('GET', '/api/admin/server', { cookie: owner })).json?.hostLinks ?? 0
   r = await x('POST', '/api/admin/invites', { cookie: owner, body: { name: 'Bob' } })
   const bobId = r.json?.id
   r = await x('POST', '/api/auth/login', { body: { code: r.json?.code } })
@@ -147,7 +160,7 @@ try {
   r = await x('GET', '/api/me', { cookie: owner })
   ok(r.json?.hostLink === true, `X: Owner hostLink=${r.json?.hostLink}`)
   r = await x('GET', '/api/admin/server', { cookie: owner })
-  ok(r.json?.hostLinks === 1, `Admin: hostLinks=${r.json?.hostLinks}`)
+  ok(r.json?.hostLinks === baseLinks + 1, `Admin: hostLinks=${r.json?.hostLinks}`)
 
   // ---- Tische
   r = await x('POST', '/api/tables', { cookie: carla, body: { hosting: 'REMOTE' } })
@@ -190,7 +203,7 @@ try {
   r = await y('GET', '/api/host/link')
   ok(r.json?.games?.length === 1 && r.json.games[0].gameId === gameId, `Y hostet ${r.json?.games?.length} Spiel`)
   r = await x('GET', '/api/health')
-  ok(r.json?.games === 1, `X health games=${r.json?.games} (Relay zaehlt)`)
+  ok(r.json?.games === baseGames + 1, `X health games=${r.json?.games} (Relay zaehlt)`)
   r = await x('GET', '/api/games/current', { cookie: bob })
   ok(r.status === 200 && r.json?.gameId === gameId, `X: Bobs aktuelles Spiel = Relay-Spiel`)
   r = await x('POST', '/api/games', { cookie: bob, body: { deck: sample(0), bots: [] } })
@@ -201,7 +214,7 @@ try {
   const yHistBefore = r.json?.length ?? -1
   r = await x('GET', '/api/admin/server', { cookie: owner })
   const adminGame = r.json?.games?.find((g) => g.id === gameId)
-  ok(adminGame?.remoteHost === 'Owner' && r.json?.running === 1, `Admin: Relay-Spiel mit remoteHost=${adminGame?.remoteHost}`)
+  ok(!!adminGame?.remoteHost && r.json?.running === baseGames + 1, `Admin: Relay-Spiel mit remoteHost=${adminGame?.remoteHost}`)
 
   // Y-WebSocket auf das Relay-Spiel -> 4403 (kein Sitz fuer Nutzer 1)
   const yClose = await new Promise((resolve) => {
@@ -302,7 +315,7 @@ try {
   r = await y('GET', '/api/host/link')
   ok(r.json?.games?.length === 0, `Y hostet nichts mehr (${r.json?.games?.length})`)
   r = await x('GET', '/api/health')
-  ok(r.json?.games === 0, `X health games=${r.json?.games}`)
+  ok(r.json?.games === baseGames, `X health games=${r.json?.games}`)
   A.ws.close()
   B.ws.close()
   C.ws.close()
