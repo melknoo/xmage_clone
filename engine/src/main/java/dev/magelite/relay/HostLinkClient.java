@@ -58,7 +58,16 @@ public final class HostLinkClient {
     public record GameInfo(UUID gameId, String tableName, int humans, int bots, int turn, int connected) {
     }
 
-    public record Status(boolean enabled, boolean connected, String server, long since, String error, List<GameInfo> games) {
+    /** Mein Tisch auf dem Server (aus {@code GET /api/tables/mine} mit der Session), null = keiner. */
+    public record TableInfo(String id, String name, String state, int humans, boolean host, String hosting, boolean locked) {
+    }
+
+    /**
+     * {@code userName}/{@code table}: Stand auf dem Server (nur solange verbunden; per Session abgefragt, 3 s Cache),
+     * damit die lokale App zeigt, dass online noch ein Tisch offen ist.
+     */
+    public record Status(boolean enabled, boolean connected, String server, long since, String error, List<GameInfo> games,
+                         String userName, TableInfo table) {
     }
 
     private final class Hosted {
@@ -175,7 +184,82 @@ public final class HostLinkClient {
             int connected = (int) h.host.seats().stream().filter(GameHost.HumanSeat::connected).count();
             list.add(new GameInfo(h.host.getId(), s.tableName(), s.humans(), s.seats().size() - s.humans(), h.host.currentTurn(), connected));
         }
-        return new Status(enabled, open, server, since, lastError, list);
+        Remote r = open ? remote() : null;
+        return new Status(enabled, open, server, since, lastError, list, r == null ? null : r.userName, r == null ? null : r.table);
+    }
+
+    private record Remote(String userName, TableInfo table, long at) {
+    }
+
+    private volatile Remote remoteCache;
+
+    /** Konto-Name und eigener Tisch auf dem Server (per REST mit der Session; 3 s Cache, Fehler -> leer). */
+    private Remote remote() {
+        Remote c = remoteCache;
+        long now = System.currentTimeMillis();
+        if (c != null && now - c.at < 3000) {
+            return c;
+        }
+        String name = null;
+        TableInfo table = null;
+        try {
+            JsonNode me = serverGet("/api/me");
+            if (me != null) {
+                name = me.path("user").path("name").asText(null);
+            }
+            JsonNode t = serverGet("/api/tables/mine");
+            if (t != null && t.hasNonNull("id")) {
+                int humans = 0;
+                for (JsonNode s : t.path("seats")) {
+                    if ("HUMAN".equals(s.path("kind").asText())) {
+                        humans++;
+                    }
+                }
+                table = new TableInfo(t.path("id").asText(), t.path("name").asText(), t.path("state").asText("LOBBY"), humans,
+                        t.path("host").asBoolean(false), t.path("hosting").asText("SERVER"), t.path("locked").asBoolean(false));
+            }
+        } catch (Exception e) {
+            LOG.debug("Server-Status: " + e);
+        }
+        Remote r = new Remote(name, table, now);
+        remoteCache = r;
+        return r;
+    }
+
+    /** GET am Server mit der Session; null bei 404/Fehler. */
+    private JsonNode serverGet(String path) throws Exception {
+        java.net.http.HttpResponse<String> res = HttpClient.newHttpClient().send(
+                java.net.http.HttpRequest.newBuilder(URI.create(server + path)).timeout(Duration.ofSeconds(8))
+                        .header("Cookie", "ml_sess=" + session).GET().build(),
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+        return res.statusCode() == 200 ? Json.MAPPER.readTree(res.body()) : null;
+    }
+
+    /** Eigenen Tisch auf dem Server verlassen/schliessen (lokale App: "Tisch schliessen"). @return Fehlertext oder null */
+    public String leaveTable() {
+        if (!enabled || server == null || session == null) {
+            return "Nicht mit dem Server verbunden";
+        }
+        try {
+            JsonNode t = serverGet("/api/tables/mine");
+            if (t == null || !t.hasNonNull("id")) {
+                remoteCache = null;
+                return null;
+            }
+            java.net.http.HttpResponse<String> res = HttpClient.newHttpClient().send(
+                    java.net.http.HttpRequest.newBuilder(URI.create(server + "/api/tables/" + t.path("id").asText() + "/leave"))
+                            .timeout(Duration.ofSeconds(8)).header("Cookie", "ml_sess=" + session)
+                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            remoteCache = null;
+            if (res.statusCode() != 200) {
+                JsonNode b = Json.MAPPER.readTree(res.body());
+                return b.path("error").asText("HTTP " + res.statusCode());
+            }
+            return null;
+        } catch (Exception e) {
+            return "Server nicht erreichbar: " + e.getMessage();
+        }
     }
 
     public boolean isOpen() {

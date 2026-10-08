@@ -463,6 +463,14 @@ Fallback auf manuelles Klicken.
   (fly-ssh-stderr über `cmd /c … 2>&1`, Regel 9). Zweiter Lauf: 322.591.100 Bytes vollständig, Umbenennen von Hand
   nachgeholt; **live:** `/api/download/info` = v0.1.6, `/api/download/file` liefert die ganze Datei (200).
 
+- **Nachtrag (Playtest 08.10.):** Online-Tische bleiben nach dem Spiel bestehen – in der lokalen App war das nach
+  einem Neustart nicht zu sehen. Jetzt fragt die lokale Engine mit der Session den Server (`/api/me`,
+  `/api/tables/mine`, 3 s Cache) und `GET /api/host/link` liefert `userName` + `table`; die Karte „Online spielen“
+  der lokalen Startseite zeigt „Dein Tisch „X“ ist noch offen · n/4 · auf diesem Rechner“ mit **Zum Tisch** und
+  **Tisch schließen** (`POST /api/host/table/leave`). „Tisch verlassen/schließen“ am Tisch ist jetzt ein sichtbarer
+  Secondary-Button mit Tooltip. Geprüft per `steps-relay-home.json` (`relay-08/09`) gegen Test-Engines; `tsc`, Build.
+  Live erst mit dem nächsten Release (0.1.7).
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

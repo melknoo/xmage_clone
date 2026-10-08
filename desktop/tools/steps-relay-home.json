@@ -1,0 +1,28 @@
+{
+ "url": "{{UI}}/?port=7412",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 300000,
+ "vars": {
+  "UI": "http://localhost:5176",
+  "OUT": "../../engine/run/relay-shots"
+ },
+ "steps": [
+  {"waitFor": "[data-testid=home-local]", "timeout": 60000},
+  {"js": "window.magelite = { openOnline: () => { window.__opened = true }, serverUrl: 'http://127.0.0.1:7411' }; window.__ml.nav.getState().go('play'); 'set'"},
+  {"wait": 500},
+  {"js": "window.__ml.nav.getState().go('home'); 'home'"},
+  {"waitFor": "[data-testid=home-online][data-connected=true]", "timeout": 20000},
+  {"waitFor": "[data-testid=home-online-table]", "timeout": 10000},
+  {"wait": 1500},
+  {"shot": "{{OUT}}/relay-08-home-online-table.png", "name": "Startseite lokal mit offenem Online-Tisch"},
+  {"click": "[data-testid=home-online-close]"},
+  {"wait": 400},
+  {"click": "[data-testid=home-online-close]", "optional": true},
+  {"waitGone": "[data-testid=home-online-table]", "timeout": 15000},
+  {"wait": 1000},
+  {"shot": "{{OUT}}/relay-09-home-online-closed.png", "name": "Startseite lokal nach Tisch schließen"}
+ ]
+}

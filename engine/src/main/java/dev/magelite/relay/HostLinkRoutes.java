@@ -36,6 +36,14 @@ public final class HostLinkRoutes implements HttpServer.Module {
             client.disconnect();
             ctx.json(Map.of("ok", true));
         });
+        // eigenen Tisch auf dem Server verlassen/schliessen (Karte "Online spielen" der lokalen Startseite)
+        app.post("/api/host/table/leave", ctx -> {
+            String err = client.leaveTable();
+            if (err != null) {
+                throw new IllegalArgumentException(err);
+            }
+            ctx.json(client.status());
+        });
         // Verbindung neu aufbauen, Spiele behalten (Test des Wiederanlaufs)
         app.post("/api/host/link/reconnect", ctx -> {
             client.reconnect();

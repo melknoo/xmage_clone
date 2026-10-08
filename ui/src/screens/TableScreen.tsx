@@ -315,13 +315,14 @@ export function TableScreen() {
       {/* Fuss */}
       <div className="flex items-center gap-3 border-t border-line-2 pt-3.5">
         <Button
-          variant="ghost"
+          variant="secondary"
           icon="logout"
-          style={{ padding: '0 12px' }}
+          style={{ height: 44, padding: '0 18px', fontSize: 16 }}
           disabled={busy}
           confirm={isHost && others > 0 ? 'Wirklich schließen?' : undefined}
           onClick={() => void leave()}
           testId="table-leave"
+          title={isHost ? 'Schließt den Tisch für alle – er bleibt sonst auch nach dem Spiel bestehen' : undefined}
         >
           {isHost ? 'Tisch schließen' : 'Tisch verlassen'}
         </Button>
