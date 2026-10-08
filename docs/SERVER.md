@@ -173,7 +173,9 @@ Monatsbudget (Standard 100 h ≈ 8,60 $) plus Laufzeit durch Freunde danach plus
 
 ## Öffentliche Registrierung
 
-Standard ist **geschlossen** (`MAGELITE_SIGNUP = "closed"` in `fly.toml`). Vor dem Öffnen:
+**Stand 2026-10-08: offen.** Absender `MageLite <noreply@schleiweb.de>` (Brevo, Domain `schleiweb.de` per DNS bei
+Cloudflare authentifiziert), Turnstile-Widget „MageLite“ im Cloudflare-Konto. Zum Schließen `MAGELITE_SIGNUP = "closed"`
+in `fly.toml` und deployen. Einrichtung (für einen neuen Server):
 
 1. **Impressum und Datenschutz** ausfüllen: `ui/public/impressum.html`, `ui/public/datenschutz.html` (Platzhalter,
    von der Startseite verlinkt).

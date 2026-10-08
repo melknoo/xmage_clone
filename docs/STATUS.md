@@ -471,7 +471,15 @@ Fallback auf manuelles Klicken.
   Secondary-Button mit Tooltip. Geprüft per `steps-relay-home.json` (`relay-08/09`) gegen Test-Engines; `tsc`, Build.
   Live erst mit dem nächsten Release (0.1.7).
 
-### Öffentliche Registrierung + Kostenbremsen (2026-10-08, nicht deployt)
+### Öffentliche Registrierung + Kostenbremsen (2026-10-08, live als 0.1.7)
+
+**Live seit 2026-10-08 (0.1.7):** Registrierung offen. Mail über Brevo (Domain `schleiweb.de` authentifiziert:
+DKIM `brevo1/2._domainkey`, `brevo-code`, `_dmarc` p=none bei Cloudflare-DNS; Absender `MageLite <noreply@schleiweb.de>`,
+Test-Mail per API angenommen), Captcha Turnstile-Widget „MageLite“ (`magelite.fly.dev`). Secrets
+`MAGELITE_MAIL_API_KEY`, `MAGELITE_TURNSTILE_SECRET` bei fly; Site-Key und Absender in `fly.toml`. Releases-Repo
+`melknoo/magelite-releases` (öffentlich) mit v0.1.7 angelegt, `/data/downloads` (308 MB) gelöscht. Server-Log:
+V8 angewendet, Budget 0/6000 min, „Registrierung: open“. **Offen:** Impressum/Datenschutz sind noch Platzhalter;
+echte Registrierung im Browser (Captcha) durch den Nutzer.
 
 Ziel: Jeder kann sich per E-Mail registrieren, ohne dass die fly-Kosten steigen (fly hat kein hartes
 Ausgabenlimit). Details und Einrichtung: `SERVER.md` → „Kostenbremsen“, „Öffentliche Registrierung“.
