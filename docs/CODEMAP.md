@@ -31,8 +31,15 @@ Electron (desktop/src/main.cjs)
 | `boot/CardDbManager`, `mage/cards/repository/DatabaseUtils` | Karten-DB bereitstellen; **lädt beim Start alle 9 Kartennamen-Listen vor** (`warmNames`, Demonic-Consultation-Absturz); Ersatz für XMages `DatabaseUtils` (H2-URL mit `retry:`-Dateisystem – `Thread.interrupt()` während eines DB-Zugriffs zerstört den Dateikanal nicht mehr; muss vor den XMage-Jars liegen, Prüfung `checkRetryFs`) |
 | `boot/CardDbManager` | Seed-DB kopieren (falls vorhanden), sonst/bei Bedarf `CardScanner.scan()`; setzt `CardScanner.scanned` |
 | `boot/LogConfig` | log4j-Konfiguration (KI-Logs auf WARN, Datei `logs/engine.log`) |
-| `api/HttpServer` | Javalin: Routen, Auth-Filter, `POST /api/games` (409 bei belegtem Tisch), WebSocket-Handling (Cookie/Origin, nur der Besitzer des Spiels), Sitzungen pro Nutzer schließen, Module |
-| `api/Outbox` | sendet pro WS-Verbindung auf eigenem Thread; aufeinanderfolgende States werden zusammengefasst |
+| `api/HttpServer` | Javalin: Routen, Auth-Filter, `POST /api/games` (409 bei belegtem Tisch oder laufendem Relay-Spiel), WebSocket-Handling (Cookie/Origin, nur der Besitzer des Spiels; Relay-Spiele → `RelaySession`, Verkehr 1:1 an den Host-Link), Sitzungen pro Nutzer schließen, Module; `runningGames()` = Server- + Relay-Spiele |
+| `api/GameMessages` | Client→Server-Spielnachrichten (`t`) auf einen `GameHost`-Sitz anwenden – gemeinsam für WebSocket und Host-Link |
+| `api/Outbox` | sendet pro Verbindung auf eigenem Thread über ein `Transport` (WebSocket oder Host-Link-Umschlag); aufeinanderfolgende States (auch `Raw`-JSON) werden zusammengefasst |
+| `api/DownloadRoutes` | Server-Modus, öffentlich: `/api/download/info` + `/api/download/file` – neuestes `MageLite-Setup-*.exe` aus `<data>/downloads` (fly-Volume, hochgeladen von `scripts/upload-setup.ps1`), 3 Downloads/min je IP |
+| `relay/RemoteGameSpec` | Beschreibung eines Spiels auf dem Rechner eines Gastgebers (Sitze mit `.dck`-Text in `start`, Spieler-ids ab `started`/`resume`) |
+| `relay/HostLinks` | fly-Seite des Host-Links: `/ws/host` (Cookie + Origin wie `/ws/game`, ein Link je Konto, 4000 ersetzt, 4408 ohne Ping), `start(userId, spec)` → Future, `send`/`sendIn` (Umschläge `attach/detach/in/abort`) |
+| `relay/RemoteGames` | fly-Seite: Relay-Spiele ohne `GameHost` (Sitze, Spieler-Outboxes, `turn` aus den States, `conceded` aus `leave`); `onFinished` verbucht XP je fly-Nutzer über `GameRecorder.record(GameResult, SeatResult)` und sendet das `gameOver` mit `reward` selbst; Host weg → `hostLink` an die Spieler, nach `-Dmagelite.hostGraceMs` (60 s) Abbruch mit Fehler (keine Statistik); `resume` baut Spiele nach fly-Neustart ohne Tisch neu auf |
+| `relay/HostLinkClient` | Host-Seite (lokale Engine): ausgehender JDK-WebSocket `wss://<server>/ws/host` mit `Cookie: ml_sess` + `Origin`, ein Sender-Thread, Fragmente puffern, Ping 20 s / Reconnect mit Backoff + `resume`; `start` lädt Decks aus `.dck`-Text und startet über die lokale `GameRegistry(1)` mit `RewardHook = null`; `finished` mit `GameRecorder.resultOf` (inkl. `StatsSink`-Daten); Wachen: Spiel ohne Spieler > 10 min, Link > 3 min weg → Abbruch |
+| `relay/RelaySink`, `HostLinkRoutes` | `GameHost.Sink` je Sitz → `out`-Umschlag (filtert `gameOver`); lokale Steuerung `GET/POST/DELETE /api/host/link`, `POST /api/host/link/reconnect` (Test) |
 | `api/Json` | gemeinsamer Jackson-`ObjectMapper` |
 | `game/GameHost` | **Herzstück**: ein Spiel (1–4 Menschen, Rest Bots), Spiel-Thread, CALL-Executor, Listener, Prompts, Antwort-Routing, Auto-Passen, Auto-Mana, Spielende, Belohnungs-Hook, Wachhund (XMage-Antwort-Race, Aktivität). Pro Mensch ein `HumanSeat` (Sink, eigener State, Auto-Pay-Zustand, gepasste Trigger, Aufgabe); der eine offene Prompt gehört `promptSeat`, nur der Besitzer darf antworten; `leave(seat)` = nur dieser Sitz gibt auf, ohne Menschen geben die Bots auf |
 | `game/PromptMapper` | `PlayerQueryEvent` → `PromptDto` (ASK, SELECT, PICK_TARGET, …) |
@@ -70,7 +77,7 @@ Electron (desktop/src/main.cjs)
 | `social/FriendStore` | SQL für `friendships` (Paar `a<b`, Anfrage → `accepted_at`, Gegenanfrage = Annehmen) und `users.lobby_chat` |
 | `social/SocialRoutes` | REST `/api/social`, `/api/friends`, `/api/tables/{id}/invite`; `SocialException` → 409 |
 | `admin/AdminService`, `AdminRoutes` | Server-Modus, nur Admins (`Auth.requireAdmin`): Nutzerliste mit Kennzahlen (SQL über alle Nutzer) und Status (`SocialService.presence`), Nutzer-Detail (Partien, Decks, Sessions ohne Token), Server-Übersicht (`GameHost.humanSeats/startedAt`, Tische, Heap) und Eingriffe (`AccountService.revokeSessions`, `GameHost.abort`, `TableManager.adminClose`) |
-| `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes |
+| `stats/GameRecorder` | Spiel pro menschlichem Sitz speichern (`games`/`game_card_stats` mit Schlüssel Spiel+Nutzer, `game_seats` einmal), XP/Meisterschaft an dessen Held/Deck → eigenes `Reward` im `gameOver` jedes Sitzes. Datenrein über `GameResult`/`SeatResult` (`resultOf(host, over)`), damit fly auch Relay-Spiele verbucht, die auf einem anderen Rechner liefen |
 | `stats/ProfileService`, `Progression` | Held (Name, XP, Level, Titel), Level-Kurve, Meisterschaftsstufen |
 | `stats/StatsRoutes` | `/api/profile`, `/api/stats/*`, `/api/history` |
 | `spike/BotSpike`, `HumanSpike` | headless Tests (4 Bots / automatischer Test-Spieler; `HumanSpike` prüft auch Zugfolge = Sitzordnung, zählt `events` und prüft, dass verdeckte Karten nie an Fremde gehen; `--scenario=swarm` misst Trigger-Ketten, testet Mehrfach-Angriff und „Angriff zurücksetzen“; `--scenario=dredge` prüft Ersatzeffekt-Gruppen; `--scenario=necro` „5-mal aktivieren“ (`GameHost.repeat`); `--scenario=gemstone` Starthand-Aktion vor dem Spiel; `--scenario=convoke` Weiter-Ziel, F10-Schutz, Blaze X=2 auf dem Stapel, Einberufen per Klick nach „Länder automatisch“, Main-2-Stopp) |
@@ -123,7 +130,15 @@ Server → Client:
 | `events` | `items[] {kind, objectId, name, card, from, to, playerId, ownerId, sourceId, sourceName, amount, token, combat, hidden, ts}` – Spielereignisse für Mini-Animationen/Ereignisleiste (`FxWatcher`), kommen vor dem State, der sie widerspiegelt; `hidden` nur an den Besitzer |
 | `chat` | `entries[] {ts, playerId, name, text}`; live eine Zeile, nach (Re-)Connect der Verlauf (≤ 100) als ein Bündel |
 | `gameOver` | `placements[]`, `winnerId`, `turns`, `durationMs`, `reward` (XP-Aufschlüsselung, Level, Meisterschaft), `error` |
+| `hostLink` | nur Relay-Spiele (Tisch auf dem Rechner des Gastgebers): `ok:false, sinceMs` = Verbindung zum Gastgeber weg (UI-Banner, Sockets bleiben offen, nach 60 s `gameOver` mit `error`), `ok:true` = wieder da (der Host spielt hello/state/prompt nach) |
 | `error`, `pong` | |
+
+**Host-Link** (`/ws/host`, Server-Modus; Gegenstelle `relay/HostLinkClient` in der lokalen Engine, Auth wie `/ws/game`):
+Host → fly `started{spec} | error{tableId,msg} | out{g,u,m} | finished{result} | resume{games[]} | ping`,
+fly → Host `start{spec} | attach{g,u} | detach{g,u} | in{g,u,m} | abort{g} | pong`. `m` ist die unveränderte Spielnachricht
+(oben), `g` = Spiel-id, `u` = fly-Konto. Spieler hängen weiter an `/ws/game/{id}`; fly packt nur um. `gameOver` kommt
+nie vom Host (fly baut es mit `reward` aus `finished`). Relay-Spiele zählen nicht gegen `--max-games`, aber in
+`/api/health games`, Präsenz, Admin und Leerlauf-Exit.
 
 **Zuschauen** (`/ws/game/{id}?spectate=1`, nur Server-Modus): `hello` mit `spectator:true`, `viewpointId`, `tableName`;
 öffentlicher `state` (`GameViewMapper.mapPublic`, viewer = null: keine Hand, kein `lookedAt`/`playable`/`actions`),
@@ -155,15 +170,17 @@ Client → Server:
 
 | Methode | Pfad | Zweck |
 |---|---|---|
-| GET | `/api/health` | Lebenszeichen `{ok, version, mode, games}`; im Server-Modus ohne Login |
-| GET | `/api/me` | `{mode: local\|server, user{id,name,admin,email,hasPassword}}` |
+| GET | `/api/health` | Lebenszeichen `{ok, version, mode, games}` (`games` inkl. Relay-Spiele); im Server-Modus ohne Login |
+| GET | `/api/me` | `{mode: local\|server, user{id,name,admin,email,hasPassword}, hostLink}` (`hostLink`: meine Engine ist angebunden → Tische auf dem eigenen Rechner) |
+| GET | `/api/download/info`, `/api/download/file` | Server-Modus, ohne Login: neuestes Setup `{available, version, bytes, file}` / Datei (3/min je IP) |
+| GET/POST/DELETE | `/api/host/link` | nur lokale Engine: Host-Link-Zustand / verbinden `{server, session}` (Electron meldet das `ml_sess`-Cookie) / trennen; `POST /api/host/link/reconnect` baut nur die Verbindung neu (Test) |
 | POST | `/api/auth/login`, `/api/auth/logout` | `{code}` **oder** `{email,password}` → Session-Cookie `ml_sess` (Server-Modus; 401 falsch, 429 Rate-Limit); Logout löscht die Session |
 | POST/PUT | `/api/auth/register`, `/api/auth/account` | Konto sichern `{email,password}` (eingeloggt, 409 wenn schon gesichert/E-Mail vergeben) / ändern `{current, email?, password?}` (Passwortwechsel beendet andere Sessions) |
 | GET/POST | `/api/admin/invites` | Admin: Konten auflisten / anlegen `{name}` → `{id,name,code}` (Code nur einmal) |
 | POST/DELETE | `/api/admin/invites/{id}/rotate`, `/api/admin/invites/{id}` | neuer Code / Konto entfernen (schließt dessen WebSockets, beendet sein Spiel) |
 | GET | `/api/admin/users`, `/api/admin/users/{id}` | Admin: Konten mit Level/Titel, Spiele/Siege, Decks, Sessions, Status `online\|table\|game\|offline` / Detail mit letzten 15 Partien, Decks, Sessions |
 | POST | `/api/admin/users/{id}/logout` | Admin: alle Sessions beenden, WebSockets schließen, Sitz aufgeben (Code bleibt gültig; nicht das eigene Konto) |
-| GET | `/api/admin/server` | Admin: Version, Laufzeit, Heap, `maxGames`, online, laufende Spiele (Sitze, Bots, Zug, Zuschauer), Tische |
+| GET | `/api/admin/server` | Admin: Version, Laufzeit, Heap, `maxGames`, online, laufende Spiele (Sitze, Bots, Zug, Zuschauer; `remoteHost` bei Relay-Spielen), Tische (`hosting`, `locked`), `hostLinks` |
 | POST/DELETE | `/api/admin/games/{id}/abort`, `/api/admin/tables/{id}` | Admin: Spiel beenden / Tisch schließen (laufendes Tischspiel wird abgebrochen); 404 `{error}` wenn weg |
 | GET | `/api/samples` | Sample-Decks (`id` = relativer Pfad) |
 | GET/DELETE | `/api/decks`, `/api/decks/{id}` | eigene Decks |
@@ -174,7 +191,10 @@ Client → Server:
 | POST | `/api/games` | Spiel starten `{deck, bots[], tempo, humans?: [{userId, name?, deck?}]}` (weitere Menschen bis zur Lobby nur in der Dev-Engine; freie Plätze bis 4 werden mit Bots gefüllt); Deck-Spec `{type:"user",id}` / `{type:"sample",id}` / `{type:"random"}` |
 | GET | `/api/games/current` | eigenes laufendes Spiel (für Reconnect); fremdes → 404 |
 | PUT | `/api/tables/{id}/seats/{n}` | Gastgeber, nur LOBBY: `{kind:'BOT'\|'OPEN', deck?}`; `OPEN` auf einem Menschenplatz = **entfernen** (nie der eigene Platz; gesperrt bis zur nächsten Einladung) |
-| GET | `/api/tables`, `/api/tables/{id}` | Tisch-Sicht: Plätze mit Deck-Infos, `mySeat`, `host`, `turn` (RUNNING), `spectators`, `canSpectate`, `chat[]` (nur Sitzende) |
+| POST | `/api/tables` | Tisch eröffnen `{name?, tempo?, hosting: SERVER\|REMOTE, password?}`; REMOTE nur mit angebundener Engine (409), Passwort = privater Tisch (Hash `tableId:pw`) |
+| POST | `/api/tables/{id}/join` | beitreten `{password?}`; privater Tisch ohne/mit falschem Passwort → 403 `{needPassword:true}` (5 Versuche/min), offene Einladung des Gastgebers ersetzt das Passwort |
+| POST | `/api/tables/{id}/start` | Gastgeber startet; REMOTE: Decks hier aufgelöst, Start auf dem Rechner des Gastgebers abgewartet (Tisch `starting`, max. 30 s), 409 mit Fehlertext des Hosts |
+| GET | `/api/tables`, `/api/tables/{id}` | Tisch-Sicht: Plätze mit Deck-Infos, `mySeat`, `host`, `turn` (RUNNING), `spectators`, `canSpectate` (REMOTE: false), `hosting`, `locked`, `starting`, `hostLinkOk`, `chat[]` (nur Sitzende) |
 | POST | `/api/tables/{id}/chat` | Tisch-Chat `{text}` (nur Sitzende, 409 sonst); die Zeilen (≤ 50) kommen in jeder Tisch-Antwort als `chat[]` mit |
 | GET | `/api/social?after=<seq>` | Server-Modus, ein Poll für alles: `{chatIn, seq, msgs[] (nur > after, leer wenn draußen), members[], friends[{id,name,status,tableId?,tableName?}], incoming[], outgoing[], invites[]}`; setzt die Präsenz |
 | POST/PUT | `/api/social/chat` | Lobby-Chat schreiben `{text}` (409 wenn draußen/Rate-Limit) / `{in: bool}` betreten/verlassen (pro Konto gespeichert) |
@@ -234,9 +254,10 @@ Design „Graphit & Glut“ (Handoff: `design/design_handoff_magelite_redesign/`
 
 | Datei | Aufgabe |
 |---|---|
-| `src/main.cjs` | Fenster, Splash, Engine starten/neu starten (max. 2×), Fehlerdialog, IPC `magelite:fetchText` (nur Moxfield/Archidekt), `MAGELITE_AUTOSHOT` |
+| `src/main.cjs` | Fenster, Splash, Engine starten/neu starten (max. 2×), Fehlerdialog, IPC `magelite:fetchText` (nur Moxfield/Archidekt), `MAGELITE_AUTOSHOT`; **Online im selben Fenster:** `settings.json` (`serverUrl`, Standard `https://magelite.fly.dev`, `MAGELITE_SERVER_URL`), IPC `magelite:openOnline`/`openLocal`, `will-navigate` nur lokal + Server (Rest → Browser); **Host-Link:** liest nach Login das HttpOnly-Cookie `ml_sess` der Server-URL aus der Electron-Session (`cookies.on('changed')`, `did-navigate`, alle 30 s) und meldet es der Engine (`POST/DELETE /api/host/link`); `MAGELITE_DEV_SESSION=<Token>` setzt das Cookie beim Start (Host-Link-Test ohne Klicks) |
 | `src/engine.cjs` | Pfade (Dev vs. gepackt), Java finden (`resources/jre`, `JAVA_HOME`, PATH), READY-Handshake (Timeout 10 min) |
-| `src/preload.cjs` | `window.magelite = {port, token, fetchText}` |
+| `src/preload.cjs` | lokale Origin: `window.magelite = {port, token, serverUrl, fetchText, openOnline}`; Server-Origin: nur `window.mageliteDesktop = {version, openLocal}` (nie Port/Token auf fremden Seiten) |
+| `tools/relay-seed.mjs`, `tools/steps-relay.json` | Relay-Screenshots: Testdaten (Bob bindet Engine Y an X, privater Tisch auf seinem Rechner, Setup-Dummy) + Aufnahmen Login/Download, Lobby, Tisch-eröffnen-Dialog, Passwort-Abfrage, Tisch |
 | `tools/shot.cjs`, `tools/autoplay.js`, `tools/steps-autoplay.json` | Screenshot-Automatisierung + In-Page-Autopilot für UI-Tests |
 | `tools/steps-swarm.json`, `tools/swarm-pilot.js` | Szenario `swarm` (Dev-Engine): Stapel ×N, Shift-Markieren, Mehrfach-Angriff, Pfeile, Verlauf ×N |
 | `tools/steps-dredge.json`, `tools/dredge-pilot.js` | Szenario `dredge` (Dev-Engine): Ersatzeffekt-Dialog mit Gruppen + Hover, „Keinen anwenden“, „merken“ + Toolbar-Knopf |
@@ -250,6 +271,6 @@ Design „Graphit & Glut“ (Handoff: `design/design_handoff_magelite_redesign/`
 `build.ps1` (alles bauen, prüft Java/Node) · `import-xmage.ps1` (XMage-Distribution → `vendor/xmage`) ·
 `bootstrap-gradle.ps1` (Wrapper neu erzeugen) · `e2e-flow.mjs` (REST+WS-Test) · `e2e-login.mjs` (Server-Modus:
 Konten, Sessions, E-Mail/Passwort, Nutzertrennung) · `e2e-online.mjs` (2 Menschen, Chat) · `e2e-tables.mjs` (Lobby,
-Tisch-Chat) · `e2e-social.mjs` (Lobby-Chat, Freunde, Einladungen, Systemzeilen) · `e2e-spectate.mjs` (Zuschauen: Sicht, Lecks, Close-Codes) · `deploy-fly.ps1` (Health prüfen, `fly deploy`).
+Tisch-Chat) · `e2e-social.mjs` (Lobby-Chat, Freunde, Einladungen, Systemzeilen) · `e2e-spectate.mjs` (Zuschauen: Sicht, Lecks, Close-Codes) · `e2e-relay.mjs` (startet selbst zwei Engines: Host-Link, privater Tisch auf dem eigenen Rechner, Relay-Spiel mit Belohnung, Reconnect, Admin-Abbruch, Host-Ausfall; `RELAY_ONLY_START=1` nur Engines) · `deploy-fly.ps1` (Health prüfen, `fly deploy`) · `upload-setup.ps1` (Setup per `fly ssh sftp put` nach `/data/downloads`, alte löschen, `/api/download/info` prüfen; von `release.ps1 -Fly` aufgerufen).
 Repo-Root: `Dockerfile` (UI → Engine `installDist` → JRE 17, Engine-Jar vor `lib/*`), `.dockerignore`, `fly.toml`
 (performance-2x/4 GB, Auto-Stop, Volume `/data`, Health-Grace 300 s). Betrieb: `docs/SERVER.md`.

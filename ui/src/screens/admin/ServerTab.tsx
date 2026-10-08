@@ -80,7 +80,10 @@ export function ServerTab({ info, onChanged }: { info: ServerInfo | null; onChan
             </TableHead>
             {info.games.map((g) => (
               <TableRow key={g.id} columns={GAME_COLUMNS} testId="admin-game-row">
-                <span className="truncate text-[14px] font-semibold text-fg-1">{g.table ?? 'Allein gegen Bots'}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[14px] font-semibold text-fg-1">{g.table ?? 'Allein gegen Bots'}</span>
+                  {g.remoteHost && <span className="truncate text-[12px] text-fg-3">auf dem Rechner von {g.remoteHost}</span>}
+                </span>
                 <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-[13px]">
                   {g.humans.map((h, i) => (
                     <span key={h.userId} className={h.conceded ? 'text-fg-4 line-through' : h.connected ? 'text-fg-1' : 'text-attack'} title={h.conceded ? 'aufgegeben' : h.connected ? 'verbunden' : 'getrennt'}>

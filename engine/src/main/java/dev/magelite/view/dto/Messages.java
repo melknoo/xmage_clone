@@ -141,6 +141,16 @@ public final class Messages {
         }
     }
 
+    /**
+     * Selbst gehosteter Tisch: Verbindung zum Rechner des Gastgebers weg ({@code ok=false}, {@code sinceMs} seit wann)
+     * bzw. wieder da ({@code ok=true}).
+     */
+    public record HostLink(String t, boolean ok, long sinceMs) {
+        public HostLink(boolean ok, long sinceMs) {
+            this("hostLink", ok, sinceMs);
+        }
+    }
+
     public record Error(String t, String message, boolean fatal) {
         public Error(String message, boolean fatal) {
             this("error", message, fatal);

@@ -421,6 +421,40 @@ Fallback auf manuelles Klicken.
 - Grenzen: Game-Changer-Liste ist XMages Stand (1.4.60), nicht automatisch aktuell. Tutor-/Extra-Zug-Erkennung per
   Regeltext (Heuristik).
 
+## Tisch auf dem eigenen Rechner, Host-Link, Setup-Download (2026-10-08)
+
+- **Host-Link:** lokale Engine hängt sich ausgehend an den Server (`relay/HostLinkClient` → `/ws/host`,
+  `relay/HostLinks`); Electron liest nach dem Login im Fenster das `ml_sess`-Cookie und meldet es der Engine
+  (`POST /api/host/link`). Tische haben `hosting` (SERVER/REMOTE) und optional ein Passwort (`locked`); REMOTE-Start
+  löst die Decks auf fly auf und schickt sie als `.dck`-Text an den Host (`RemoteGameSpec`), das Spiel läuft dort
+  (inkl. Bots), fly reicht nur durch (`relay/RemoteGames`, Umschläge `in/out`). Spielende: `finished` mit
+  `GameRecorder.GameResult` → fly verbucht XP je Konto und sendet `gameOver` mit `reward`. Host weg → `hostLink`
+  an die Spieler, 60 s Frist (`-Dmagelite.hostGraceMs`), `resume`/`attach` beim Wiederanlauf. Relay-Spiele zählen
+  in Health/Präsenz/Admin/Idle-Exit, nicht gegen `--max-games`. Refactors: `api/GameMessages` (Dispatch), `Outbox`
+  mit `Transport`/`Raw`, `LoadedDeck.dck`, `GameRecorder.record(GameResult, SeatResult)`.
+- **UI:** Lobby-Dialog „Tisch eröffnen“ (Name, Server/mein Rechner, privat + Passwort), Schloss + „auf Xs Rechner“
+  in der Zeile, Passwort-Abfrage beim Beitritt (403 `needPassword`), Tisch zeigt Ort/Privat/„App nicht verbunden“,
+  Banner im Spiel bei Host-Ausfall, Admin „auf dem Rechner von …“. Startseite (Login) mit Download-Karte
+  (`/api/download/info`). Lokale App: „Online spielen“ (lädt den Server im Fenster), dort „Zur App“.
+  `preload.cjs` injiziert `window.magelite` nur noch auf 127.0.0.1/localhost (Später-Punkt erledigt).
+- **Release:** `release.ps1 -Fly` lädt das Setup nach dem Deploy per `scripts\upload-setup.ps1` (`fly ssh sftp
+  put`) auf das Volume; Engine serviert es öffentlich (`api/DownloadRoutes`).
+- Geprüft: `gradlew test`, **`e2e-relay.mjs` alles grün** (zwei Engines: Link, 409 ohne Link, Passwort 403/200,
+  Einladung ohne Passwort, Start auf dem Host, hello/Prompts/Chat/Reconnect über das Relay, `gameOver` mit
+  Belohnung je Nutzer, Statistik nur auf X, Host-App sieht nichts (404/4403), Link-Reconnect mit `hostLink`
+  false/true, Admin-Abbruch, Link weg → Abbruch nach Frist, `/ws/host` ohne Cookie 4401), `tsc -b`.
+  `humanSpike --humans=4` 1/1 ohne Fehler (Dispatch-Refactor), `build.ps1`. Screenshots `tools\steps-relay.json`
+  (`engine/run/relay-shots/relay-01..06`: Login mit Download-Karte, Lobby-Zeile mit Schloss/„auf Bobs Rechner“,
+  Dialog „Tisch eröffnen“ offen/privat, Passwort falsch, Tisch-Kopf „auf Bobs Rechner · Privat“). **Electron echt:**
+  App mit `MAGELITE_SERVER_URL=http://127.0.0.1:7411` + `MAGELITE_DEV_SESSION=<Token>` gestartet → `desktop.log`
+  „Dev-Session gesetzt“ / „Host-Link … angefordert“, X meldet `hostLinks=1` und `/api/me hostLink:true` nach 10 s,
+  (Link-Abbau beim App-Ende deckt `e2e-relay` ab; `MAGELITE_AUTOSHOT` lieferte wie schon am 07.10. kein Bild).
+- Offen/Grenzen: kein Zuschauen an REMOTE-Tischen; Host kann während des Hostens kein lokales Solo-Spiel spielen;
+  Klickweg Electron → Server-Login → Lobby nur per Dev-Session simuliert (Cookie-Lesen aus der Electron-Session ist
+  damit geprüft, der Login-Klickweg nicht); Setup-Upload auf fly erst beim nächsten `release.ps1 -Fly`
+  (`upload-setup.ps1` noch nie gegen fly gelaufen); Resume nach fly-Neustart ohne Tisch nur per Code, nicht getestet.
+  **Nicht deployt** (fly), nicht committet.
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

@@ -62,7 +62,7 @@ public final class Auth {
             return;
         }
         String p = ctx.path();
-        if (p.equals("/api/health") || p.equals("/api/auth/login")) {
+        if (p.equals("/api/health") || p.equals("/api/auth/login") || p.equals("/api/download/info") || p.equals("/api/download/file")) {
             return;
         }
         String sess = ctx.cookie(SESSION_COOKIE);

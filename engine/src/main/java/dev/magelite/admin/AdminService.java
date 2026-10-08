@@ -4,6 +4,7 @@ import dev.magelite.auth.AccountService;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.game.TableManager;
+import dev.magelite.relay.RemoteGames;
 import dev.magelite.social.SocialService;
 import dev.magelite.stats.Db;
 import dev.magelite.stats.Progression;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.IntSupplier;
 
 /**
  * Admin-Uebersicht im Server-Modus: Nutzer mit Kennzahlen und Status, Nutzer-Detail (Partien, Decks, Sessions),
@@ -48,17 +50,21 @@ public final class AdminService {
     public record SeatInfo(long userId, String name, boolean connected, boolean conceded) {
     }
 
-    /** Laufendes Spiel; {@code table} = Tischname oder null (allein gegen Bots). */
+    /**
+     * Laufendes Spiel; {@code table} = Tischname oder null (allein gegen Bots); {@code remoteHost} = Name des Gastgebers,
+     * wenn das Spiel auf dessen Rechner laeuft (Host-Link), sonst null.
+     */
     public record GameInfo(String id, String table, String tempo, long startedAt, int turn, int bots, int spectators,
-                           List<SeatInfo> humans) {
+                           List<SeatInfo> humans, String remoteHost) {
     }
 
     public record TableInfo(String id, String name, String hostName, String state, int humans, int bots, int open,
-                            String gameId, long createdAt) {
+                            String gameId, long createdAt, String hosting, boolean locked) {
     }
 
+    /** {@code running} zaehlt Server- und Relay-Spiele, {@code maxGames} nur Server-Spiele; {@code hostLinks} = angebundene Engines. */
     public record ServerInfo(String version, long startedAt, long uptimeMs, long heapUsed, long heapMax, int maxGames,
-                             int running, int online, int tableCount, List<GameInfo> games, List<TableInfo> tables) {
+                             int running, int online, int tableCount, List<GameInfo> games, List<TableInfo> tables, int hostLinks) {
     }
 
     private static final String USER_SQL = """
@@ -78,14 +84,24 @@ public final class AdminService {
     private final TableManager tables;
     private final SocialService social;
     private final String version;
+    private final RemoteGames remoteGames;
+    private final IntSupplier hostLinks;
 
     public AdminService(Db db, AccountService accounts, GameRegistry games, TableManager tables, SocialService social, String version) {
+        this(db, accounts, games, tables, social, version, null, () -> 0);
+    }
+
+    /** @param remoteGames Relay-Spiele (Host-Link), null ohne; {@code hostLinks} = Anzahl angebundener Engines */
+    public AdminService(Db db, AccountService accounts, GameRegistry games, TableManager tables, SocialService social, String version,
+                        RemoteGames remoteGames, IntSupplier hostLinks) {
         this.db = db;
         this.accounts = accounts;
         this.games = games;
         this.tables = tables;
         this.social = social;
         this.version = version;
+        this.remoteGames = remoteGames;
+        this.hostLinks = hostLinks;
     }
 
     // ------------------------------------------------------------------ Nutzer
@@ -188,7 +204,16 @@ public final class AdminService {
             }
             int bots = (int) g.getSetup().seats().stream().filter(s -> !s.human()).count();
             gameInfos.add(new GameInfo(g.getId().toString(), tables.runningTableName(g.getId()).orElse(null),
-                    g.getSetup().tempo().name(), g.startedAt(), g.currentTurn(), bots, g.spectatorCount(), seats));
+                    g.getSetup().tempo().name(), g.startedAt(), g.currentTurn(), bots, g.spectatorCount(), seats, null));
+        }
+        if (remoteGames != null) {
+            for (RemoteGames.RemoteGame g : remoteGames.runningGames()) {
+                List<SeatInfo> seats = new ArrayList<>();
+                for (RemoteGames.SeatView s : g.seatViews()) {
+                    seats.add(new SeatInfo(s.userId(), s.name(), s.connected(), s.conceded()));
+                }
+                gameInfos.add(new GameInfo(g.id.toString(), g.tableName, g.tempo(), g.startedAt, g.turn(), g.bots(), 0, seats, g.hostName));
+            }
         }
         List<TableInfo> tableInfos = new ArrayList<>();
         for (TableManager.TableSnap t : tables.snapshots(0)) {
@@ -203,10 +228,10 @@ public final class AdminService {
                 }
             }
             tableInfos.add(new TableInfo(t.id(), t.name(), t.hostName(), t.state(), humans, bots, open,
-                    t.gameId() == null ? null : t.gameId().toString(), t.createdAt()));
+                    t.gameId() == null ? null : t.gameId().toString(), t.createdAt(), t.hosting().name(), t.locked()));
         }
         return new ServerInfo(version, started, System.currentTimeMillis() - started, rt.totalMemory() - rt.freeMemory(), rt.maxMemory(),
-                games.maxGames(), gameInfos.size(), social.onlineCount(), tableInfos.size(), gameInfos, tableInfos);
+                games.maxGames(), gameInfos.size(), social.onlineCount(), tableInfos.size(), gameInfos, tableInfos, hostLinks.getAsInt());
     }
 
     /** Laufendes Spiel beenden (alle geben auf). */
@@ -219,6 +244,9 @@ public final class AdminService {
         }
         Optional<GameHost> g = games.get(uuid).filter(GameHost::isRunning);
         g.ifPresent(GameHost::abort);
+        if (g.isEmpty() && remoteGames != null) {
+            return remoteGames.abort(uuid);
+        }
         return g.isPresent();
     }
 

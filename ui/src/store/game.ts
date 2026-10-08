@@ -96,6 +96,8 @@ interface GameStore {
   setMuted: (m: boolean) => void
   /** Zuschauer-Verbindung: keine Eingaben, keine Toene, kein Ungelesen-Zaehler */
   spectator: boolean
+  /** selbst gehosteter Tisch: Verbindung zum Gastgeber weg seit (ms-Zeitstempel); null = alles gut */
+  hostLost: number | null
 
   connect: (gameId: UUID, opts?: ConnectOptions) => void
   disconnect: () => void
@@ -267,7 +269,7 @@ export const useGame = create<GameStore>((set, get) => {
       case 'hello':
         // nach einem Reconnect schickt die Engine Verlauf, State, offenen Prompt und ggf. "seat" erneut
         afterHello = true
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0, hostLost: null })
         break
       case 'state': {
         const prev = get().state
@@ -341,8 +343,11 @@ export const useGame = create<GameStore>((set, get) => {
       case 'toast':
         pushToast(msg.level, msg.rich)
         break
+      case 'hostLink':
+        set({ hostLost: msg.ok ? null : Date.now() - (msg.sinceMs ?? 0) })
+        break
       case 'gameOver':
-        set({ gameOver: msg, prompt: null, thinking: null, activity: null })
+        set({ gameOver: msg, prompt: null, thinking: null, activity: null, hostLost: null })
         play(msg.placements.find((p) => p.playerId === get().hello?.myPlayerId)?.place === 1 ? 'win' : 'lose')
         break
       case 'error':
@@ -497,6 +502,7 @@ export const useGame = create<GameStore>((set, get) => {
     kick: (playerId) => send({ t: 'kick', playerId }),
     chat: [],
     unreadChat: 0,
+    hostLost: null,
     chatOpen: false,
     setChatOpen: (open) => set({ chatOpen: open, ...(open ? { unreadChat: 0 } : {}) }),
     sendChat: (text) => {

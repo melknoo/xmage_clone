@@ -415,6 +415,13 @@ export interface Reward {
   nextTitle?: { level: number; title: string } | null
 }
 
+/** Selbst gehosteter Tisch: Verbindung zum Rechner des Gastgebers weg (ok=false, seit sinceMs) bzw. wieder da */
+export interface HostLink {
+  t: 'hostLink'
+  ok: boolean
+  sinceMs: number
+}
+
 export interface GameOver {
   t: 'gameOver'
   winnerId?: UUID
@@ -449,6 +456,7 @@ export type ServerMessage =
   | Activity
   | { t: 'toast'; level: string; rich: RichSeg[] }
   | { t: 'error'; message: string; fatal: boolean }
+  | HostLink
   | { t: 'pong' }
   | { t: 'events'; items: FxEvent[] }
   | { t: 'chat'; entries: ChatEntry[] }

@@ -104,7 +104,9 @@ export function TableScreen() {
   const players = seats.filter((s) => s.kind !== 'OPEN').length
   const free = seats.filter((s) => s.kind === 'OPEN').length
   const unready = humans.filter((s) => !s.ready)
-  const canStart = !!table && isHost && lobby && players >= 2 && unready.length === 0
+  const remote = table?.hosting === 'REMOTE'
+  const hostLinkOk = !remote || table?.hostLinkOk !== false
+  const canStart = !!table && isHost && lobby && players >= 2 && unready.length === 0 && hostLinkOk
 
   const start = async () => {
     if (!table || !canStart || busy) return
@@ -138,8 +140,11 @@ export function TableScreen() {
   const others = humans.filter((s) => !s.me).length
   const link = tableLink(table.id)
 
+  const whose = isHost ? 'deinem' : `${table.hostName}s`
   let hint: string
-  if (!lobby) hint = 'Das Spiel läuft.'
+  if (!lobby) hint = remote ? `Das Spiel läuft auf ${whose} Rechner.` : 'Das Spiel läuft.'
+  else if (table.starting) hint = `Start auf ${whose} Rechner …`
+  else if (!hostLinkOk) hint = isHost ? 'Deine MageLite-App ist nicht verbunden – App starten und dort anmelden.' : `${table.hostName}s MageLite-App ist gerade nicht verbunden.`
   else if (mine && !mine.ready) hint = 'Wähle zuerst dein Deck.'
   else if (!isHost) hint = `Warten auf ${table.hostName} …${free > 0 ? ' · freie Plätze bleiben leer' : ''}`
   else if (players < 2) hint = 'Mindestens zwei Spieler – setze einen Bot oder lade Freunde ein.'
@@ -184,7 +189,10 @@ export function TableScreen() {
       {/* Kopf: Label + Titel, Einladungslink */}
       <div className="flex items-center gap-4">
         <div className="flex min-w-0 flex-col gap-1.5">
-          <span className="label">{isHost ? 'Tisch · Du bist Gastgeber' : `Tisch · Gastgeber ${table.hostName}`}</span>
+          <span className="label">
+            {isHost ? 'Tisch · Du bist Gastgeber' : `Tisch · Gastgeber ${table.hostName}`}
+            {remote ? ` · auf ${whose} Rechner` : ''}
+          </span>
           {isHost && nameEdit !== null ? (
             <input
               autoFocus
@@ -217,6 +225,16 @@ export function TableScreen() {
         {!lobby && (
           <Chip tone="outline" icon="play">
             {table.turn ? `Spiel läuft · Zug ${table.turn}` : 'Spiel läuft'}
+          </Chip>
+        )}
+        {table.locked && (
+          <Chip tone="outline" icon="lock" title="Privater Tisch – Beitritt nur mit Passwort oder Einladung">
+            Privat
+          </Chip>
+        )}
+        {remote && !hostLinkOk && lobby && (
+          <Chip tone="outline" icon="disconnected" title="Die MageLite-App des Gastgebers ist nicht verbunden">
+            App nicht verbunden
           </Chip>
         )}
         <span className="flex-1" />
@@ -313,7 +331,7 @@ export function TableScreen() {
         </span>
         {isHost && (
           <Button variant="primary" icon="start" kbd="Enter" disabled={!canStart || busy} onClick={() => void start()} testId="table-start" style={{ height: 48, padding: '0 22px', fontSize: 19 }}>
-            {starting ? 'Mische Decks …' : 'Spiel starten'}
+            {starting ? (remote ? 'Starte auf deinem Rechner …' : 'Mische Decks …') : 'Spiel starten'}
           </Button>
         )}
       </div>

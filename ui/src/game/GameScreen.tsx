@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import type { Card } from '../api/types'
 import { BoardModalRoot, viewerOpen } from '../components/BoardModal'
 import { Button, Wordmark } from '../components/ui'
+import { Icon } from '../lib/icons'
 import { DUR, EASE_OUT } from '../lib/motion'
 import { me as meOf, opponents as oppsOf, useGame } from '../store/game'
 import { useNav } from '../store/nav'
@@ -82,6 +83,7 @@ export function GameScreen() {
           <PromptBar inter={inter} layout={layout} />
 
           {me?.lost && !gameOver && !menuOpen && !spectator && <EliminatedBanner />}
+          {!gameOver && <HostLostBanner />}
           {/* Portal-Ziel der Brett-Dialoge: nur die linke Spalte, Kopf- und Seitenleiste bleiben bedienbar */}
           <div className="pointer-events-none absolute inset-0 z-20">
             <BoardModalRoot />
@@ -117,6 +119,32 @@ function Loading({ open }: { open: boolean }) {
 }
 
 /** Schwebende Karte oben mittig in der Brettspalte, wenn ich ausgeschieden bin (Spiel laeuft fuer andere weiter). */
+/** Selbst gehosteter Tisch: Verbindung zum Rechner des Gastgebers weg (store.hostLost); fly wartet bis zu 60 s. */
+function HostLostBanner() {
+  const since = useGame((s) => s.hostLost)
+  const [, tick] = useState(0)
+  useEffect(() => {
+    if (since === null) return
+    const iv = window.setInterval(() => tick((n) => n + 1), 1000)
+    return () => window.clearInterval(iv)
+  }, [since])
+  if (since === null) return null
+  const secs = Math.max(0, Math.round((Date.now() - since) / 1000))
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: DUR.d2, ease: EASE_OUT }}
+      className="absolute inset-x-0 top-0 z-[15] flex items-center justify-center gap-2.5 bg-bg-2 px-4 py-2.5 text-[13.5px] text-fg-1"
+      style={{ boxShadow: 'inset 0 -1px 0 var(--color-line-3)' }}
+      data-testid="host-lost"
+    >
+      <Icon name="disconnected" size={16} className="text-attack" />
+      <span>Verbindung zum Gastgeber unterbrochen · seit {secs} s – das Spiel wartet bis zu einer Minute</span>
+    </motion.div>
+  )
+}
+
 function EliminatedBanner() {
   const leave = useGame((s) => s.leave)
   const reset = useGame((s) => s.reset)

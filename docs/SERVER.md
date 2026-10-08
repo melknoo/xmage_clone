@@ -114,6 +114,35 @@ Text für Freunde:
 > kommt, kurz warten. Der erste Aufruf nach einer Pause dauert ein paar Sekunden (Server startet).
 > Dein Held, deine Decks und deine Statistik gehören nur dir. Bugs/Ideen gern direkt an mich.
 
+## Tisch auf dem eigenen Rechner (Host-Link)
+
+Der Server rechnet nur **ein Spiel** gleichzeitig. Wer mehr Tische will, hostet einen auf seinem PC – der Server
+bleibt Lobby, Konto und Vermittler und reicht das Spiel nur durch. Keine Portfreigabe, keine Zusatzsoftware.
+
+1. **Setup laden:** Die Startseite (vor dem Login) bietet `MageLite-Setup-<version>.exe` an (liegt auf dem Volume
+   unter `/data/downloads`, hochgeladen von `release.ps1 -Fly` bzw. `scripts\upload-setup.ps1`).
+2. **In der App „Online spielen“** (Startseite der App): das Fenster lädt `https://magelite.fly.dev`, dort wie im
+   Browser anmelden (Einladungscode oder E-Mail + Passwort). Die App merkt sich das Session-Cookie und bindet ihre
+   lokale Engine ausgehend an den Server (`/ws/host`). In der Lobby zeigt „Tisch eröffnen“ dann **„Auf meinem
+   Rechner“** (sonst ausgegraut mit Hinweis). „Zur App“ in der Navigation führt zurück zur lokalen App; Abmelden
+   trennt den Link.
+3. **Tisch:** Name, Ort (Server / mein Rechner), optional **privat** mit Passwort. Alle Angemeldeten sehen den Tisch
+   (Schloss-Symbol bei privaten); Beitritt mit Passwort oder per Einladung (Freunde einladen ersetzt das Passwort).
+   Decks kommen aus der Server-Bibliothek jedes Spielers, Bots setzt der Gastgeber wie gewohnt.
+4. **Spiel:** läuft in der Engine des Gastgebers (auch die Bots – seine CPU), die Spieler spielen über die
+   Server-Seite wie sonst, der Gastgeber selbst auch (sein Verkehr geht Browser → Server → eigene Engine, ~30 ms
+   Umweg). Jeder sieht nur seine eigene Hand – der Server und die Engine schicken jedem Sitz nur seine Sicht; die
+   lokale App des Gastgebers kann sich an das Spiel nicht anhängen (`/api/games/current` 404, WebSocket 4403).
+   Statistik und XP werden auf dem Server für jedes Konto verbucht wie bei Server-Spielen.
+5. **Verbindung weg:** Bricht der Link zum Gastgeber ab (App zu, Netz weg), sehen die Spieler ein Banner; kommt die
+   App binnen 60 s zurück, geht es weiter, sonst endet das Spiel mit Fehler (keine Statistik). Der Admin sieht
+   Relay-Spiele unter „Server“ mit „auf dem Rechner von …“ und kann sie beenden.
+
+Grenzen: kein Zuschauen an solchen Tischen; während ein Tisch auf dem eigenen Rechner läuft, geht dort kein lokales
+Solo-Spiel. Vertrauensmodell: der Gastgeber führt die Engine aus – in der UI sieht er nichts Fremdes, ein
+manipulierter Engine-Prozess könnte es (wie bei jedem selbst gehosteten Spiel). Für Freundesrunden gedacht.
+Relay-Spiele halten die fly-Maschine wach (Leerlauf-Exit zählt sie mit), kosten aber kaum CPU.
+
 ## Kosten (Preisliste 05.10.2026, Region fra)
 
 | Posten | Preis |
@@ -154,7 +183,11 @@ fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neu
 
 ## Sicherheit
 
-- Öffentlich ohne Code: nur Startseite, `/api/health`, `/api/auth/login` (Rate-Limit 10/min pro IP).
+- Öffentlich ohne Code: nur Startseite, `/api/health`, `/api/auth/login` (Rate-Limit 10/min pro IP),
+  `/api/download/info` und `/api/download/file` (Setup, 3/min pro IP).
+- Host-Link (`/ws/host`): nur mit gültigem Session-Cookie **und** passendem `Origin` (die App sendet ihn); ein
+  Link je Konto, geroutet werden nur Tische dieses Gastgebers. Die Host-Engine erfährt Konto-ids, Namen und
+  Decklisten der Mitspieler – nicht deren Sessions. Tisch-Passwörter nur als Hash (`tableId:pw`), 5 Versuche/min.
 - Cookie `HttpOnly`, `SameSite=Lax`, `Secure` hinter HTTPS. WebSocket-Upgrade prüft Cookie **und** `Origin`.
 - Owner-Code nur in den fly-Secrets; in der DB nur Hashes (Codes SHA-256, Passwörter PBKDF2-SHA256 mit 210k
   Iterationen und Salt, Session-Tokens SHA-256). Rotieren/Entfernen beendet alle Sessions sofort; Passwortwechsel
@@ -171,4 +204,10 @@ cd engine; .\gradlew.bat runServer     # Server-Modus auf 7317, Owner-Code DEV-O
 cd ui; npm run dev                     # http://localhost:5173/  (ohne ?port= -> Vite-Proxy, Cookies funktionieren)
 node scripts\e2e-login.mjs             # Konten, Cookie, Nutzertrennung, 409, Rotieren, Rate-Limit
 cd desktop; npx electron tools\shot.cjs tools\steps-server.json   # Screenshots Login/Home/Einladungen/Spiel
+node scripts\e2e-relay.mjs             # Host-Link: startet selbst zwei Engines (7411 = Server, 7412 = Host-App)
 ```
+
+Host-Link von Hand: `RELAY_ONLY_START=1 node scripts\e2e-relay.mjs` (Engines bleiben stehen), dann
+`node desktop\tools\relay-seed.mjs` (Bob hostet einen privaten Tisch), Vite `MAGELITE_ENGINE=http://127.0.0.1:7411
+npx vite --port 5174` und `tools\steps-relay.json`. Electron selbst gegen eine Test-Engine:
+`MAGELITE_SERVER_URL=http://127.0.0.1:7411` vor dem Start setzen (Standard `https://magelite.fly.dev`).

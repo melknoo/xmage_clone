@@ -30,6 +30,7 @@ import {
   LayoutGrid,
   Layers,
   Layers2,
+  Lock,
   Link,
   LogIn,
   LogOut,
@@ -38,6 +39,7 @@ import {
   MessageSquare,
   Minimize2,
   Minus,
+  Monitor,
   Moon,
   Orbit,
   Pencil,
@@ -128,6 +130,8 @@ export type IconName =
   | 'minimize'
   | 'concede'
   | 'spectate'
+  | 'lock'
+  | 'desktop'
   | 'logout'
   | 'close'
   | 'start'
@@ -215,6 +219,8 @@ export const ICONS: Record<IconName, LucideIcon> = {
   minimize: Minimize2,
   concede: Flag,
   spectate: Eye,
+  lock: Lock,
+  desktop: Monitor,
   logout: LogOut,
   close: X,
   start: Play,

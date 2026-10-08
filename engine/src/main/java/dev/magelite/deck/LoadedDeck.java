@@ -18,8 +18,20 @@ public record LoadedDeck(
         int mainCount,
         boolean valid,
         String validationErrors,
-        String importErrors
+        String importErrors,
+        /** Rohtext (.dck), um das Deck an eine andere Engine zu schicken (Host-Link); null bei alten Aufrufern */
+        String dck
 ) {
+
+    public LoadedDeck(String name, String source, DeckCardLists lists, List<String> commanders, int mainCount, boolean valid,
+                      String validationErrors, String importErrors) {
+        this(name, source, lists, commanders, mainCount, valid, validationErrors, importErrors, null);
+    }
+
+    public LoadedDeck withDck(String dck) {
+        return new LoadedDeck(name, source, lists, commanders, mainCount, valid, validationErrors, importErrors, dck);
+    }
+
 
     public Deck newDeck() throws GameException {
         Deck deck = Deck.load(lists, true, false);

@@ -4,7 +4,9 @@
 
 declare global {
   interface Window {
-    magelite?: { port: number; token: string | null; fetchText?: (url: string) => Promise<string> }
+    magelite?: { port: number; token: string | null; fetchText?: (url: string) => Promise<string>; openOnline?: () => void; serverUrl?: string }
+    /** Electron-Fenster zeigt eine fremde Seite (den Online-Server): zurueck zur lokalen App */
+    mageliteDesktop?: { version: string; openLocal: () => void }
   }
 }
 

@@ -12,6 +12,8 @@ import { RecentGames } from './RecentGames'
  */
 export function HomeLocal() {
   const go = useNav((s) => s.go)
+  const online = typeof window !== 'undefined' ? window.magelite?.openOnline : undefined
+  const serverHost = (typeof window !== 'undefined' && window.magelite?.serverUrl ? window.magelite.serverUrl : 'https://magelite.fly.dev').replace(/^https?:\/\//, '')
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin" data-testid="home-local">
@@ -35,6 +37,21 @@ export function HomeLocal() {
             </span>
           </button>
         </div>
+        {online && (
+          <button
+            type="button"
+            className="outline-panel flex cursor-pointer items-center gap-4 px-6 py-4 text-left text-fg-1 transition-colors duration-1 hover:bg-bg-3 board:px-8"
+            onClick={() => online()}
+            data-testid="home-online"
+          >
+            <Icon name="lobby" size={24} className="flex-none" />
+            <span className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="font-display text-[22px] font-semibold uppercase leading-none tracking-[.02em]">Online spielen · {serverHost}</span>
+              <span className="text-[13px] leading-[1.4] text-fg-3">Mit Freunden an einem Tisch. Einmal angemeldet, kannst du dort Tische auf diesem Rechner hosten – deine Decks hier bleiben lokal, online nutzt du deine Server-Bibliothek.</span>
+            </span>
+            <Icon name="chevronRight" size={22} className="flex-none text-fg-3" />
+          </button>
+        )}
         <div className="grid min-h-[180px] flex-1 gap-[18px] board:gap-7" style={{ gridTemplateColumns: 'minmax(0,1.5fr) minmax(0,1fr)' }}>
           <RecentGames limit={3} withArt variant="local" />
           <MasteryList limit={5} />

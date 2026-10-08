@@ -48,6 +48,8 @@ node scripts\e2e-tables.mjs         # Server-Modus: Lobby/Tische (eroeffnen, bei
 node scripts\e2e-social.mjs         # Server-Modus: Lobby-Chat, Freunde, Tisch-Einladungen
 node scripts\e2e-spectate.mjs       # Server-Modus: Zuschauen (braucht MAGELITE_URL + MAGELITE_OWNER_CODE)
 node scripts\e2e-admin.mjs          # Server-Modus: Admin-Bereich (Nutzer, Server-Uebersicht, Abmelden/Beenden/Schliessen)
+node scripts\e2e-relay.mjs          # Host-Link: startet selbst 2 Engines (7411 Server, 7412 Host-App), Tisch auf dem eigenen Rechner
+powershell -ExecutionPolicy Bypass -File scripts\upload-setup.ps1 -Setup desktop\dist\MageLite-Setup-<v>.exe   # Setup auf das fly-Volume
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md)
 cd engine; .\gradlew.bat test       # Parser-Tests gegen die echte Karten-DB
@@ -93,7 +95,10 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
 11. **Nutzerbezug:** Jede Route liest den Nutzer über `Auth.user(ctx).id()` (lokal immer 1, Server-Modus aus dem
     Cookie) und reicht ihn an `DeckStore`/`ProfileService`/Statistik durch. Neue SQL auf `decks`, `games`,
     `xp_ledger`, `profile` immer mit `user_id` filtern; ein Spiel gehört `GameSetup.userId()`.
-    Öffentlich ohne Login nur `/api/health` und `/api/auth/login` (Server-Modus). Betrieb: `docs/SERVER.md`.
+    Öffentlich ohne Login nur `/api/health`, `/api/auth/login` und `/api/download/*` (Server-Modus). Betrieb: `docs/SERVER.md`.
+12. **Host-Link (Tisch auf dem eigenen Rechner):** Spielnachrichten laufen unverändert durch Umschläge `in/out`
+    (`relay/`); neue WS-Nachrichten gehören in `api/GameMessages.dispatch`, nicht nur in `HttpServer`. Der Host sendet
+    nie `gameOver` (fly baut es mit `reward` aus `finished`), seine lokale DB bleibt unberührt (`RewardHook = null`).
 
 ## Verifizieren, bevor du „fertig“ sagst
 

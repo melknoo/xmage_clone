@@ -30,12 +30,16 @@ export interface MeResponse {
   user: Me
   /** nur Server-Modus mit Session-Cookie; sonst null */
   session?: SessionInfo | null
+  /** Server-Modus: meine MageLite-App ist angebunden (Host-Link) -> Tische auf dem eigenen Rechner moeglich */
+  hostLink?: boolean
 }
 
 interface AuthStore {
   /** null, bis /api/me einmal geantwortet hat */
   mode: ServerMode | null
   me: Me | null
+  /** Host-Link aktiv (Stand des letzten /api/me) */
+  hostLink: boolean
   /** 'login': Server-Modus ohne gueltiges Cookie */
   status: 'unknown' | 'ok' | 'login'
   error: string | null
@@ -73,10 +77,11 @@ export const useAuth = create<AuthStore>((set, get) => {
   setUnauthorizedHandler(() => {
     if (get().mode === 'server') set({ status: 'login', me: null })
   })
-  const apply = (r: MeResponse) => set({ mode: r.mode, me: { ...r.user, session: r.session ?? null }, status: 'ok', error: null, secureDismissed: loadDismissed(r.user.id) })
+  const apply = (r: MeResponse) => set({ mode: r.mode, me: { ...r.user, session: r.session ?? null }, hostLink: r.hostLink === true, status: 'ok', error: null, secureDismissed: loadDismissed(r.user.id) })
   return {
     mode: null,
     me: null,
+    hostLink: false,
     status: 'unknown',
     error: null,
     busy: false,

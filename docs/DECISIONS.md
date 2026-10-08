@@ -186,4 +186,22 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
   - **Entfernen** nur durch den Gastgeber, nur vor dem Start; die Person bleibt gesperrt, bis der Gastgeber sie neu
     einlädt oder der Tisch schließt.
   - **Login-Bild** lädt der Browser direkt von Scryfall (`art_crop`) – kein Binary im Repo.
+- **Tisch auf dem eigenen Rechner (Host-Link, 2026-10-08):**
+  - **Relay statt Zweitserver:** fly bleibt einzige Lobby und einziges Konto-System; die App des Gastgebers hängt
+    sich ausgehend per WebSocket an (`/ws/host`), fly packt Spielnachrichten nur in Umschläge um. Kein zweiter
+    Login, keine Portfreigabe, keine Zusatzsoftware – und die Spielnachrichten bleiben unverändert.
+  - **Der Gastgeber spielt über die fly-Seite** (Electron lädt sie im selben Fenster), nicht über seine lokale UI:
+    eine Lobby-UI, ein Konto, eine Deckbibliothek; der Umweg Browser → fly → eigene Engine kostet ~30 ms.
+  - **Spielende verbucht fly:** die Host-Engine schickt ein datenreines `GameResult` (inkl. `StatsSink`-Daten),
+    fly vergibt XP je Konto und sendet das `gameOver` mit `reward` selbst; der Host sendet nie `gameOver` und
+    schreibt nichts in seine lokale DB (`RewardHook = null`). Die lokale App des Hosts sieht das Spiel nicht
+    (Nutzer 1 hat keinen Sitz) – fremde Hände bleiben verdeckt.
+  - **Verbindung weg = warten, nicht sofort abbrechen:** Spieler-Sockets bleiben offen (`hostLink`-Banner), 60 s
+    Gnadenfrist, `resume` + `attach` spielen den Stand nach; danach Abbruch ohne Statistik.
+  - **Öffentlich = alle fly-Konten** (wie bisher), **privat = Tisch-Passwort**; eine Einladung ersetzt das
+    Passwort. Kein Gast-Zugang ohne Konto (hätte ein zweites Konto-System gebraucht).
+  - **Rechenlast lässt sich nicht auf 4 Spieler verteilen:** XMage ist ein autoritativer Spielprozess, die Bot-KI
+    läuft dort, wo das Spiel läuft. Gewinn ist, dass Bots eines gehosteten Tisches auf dem Host-PC rechnen.
+  - **Setup-Download vom fly-Volume** (`/data/downloads`, `fly ssh sftp put`), nicht GitHub Releases: das Repo
+    ist privat. Kein Zuschauen an Relay-Tischen (v1), kein lokales Solo-Spiel während des Hostens (eine Engine).
   - **Versalien per CSS** (`label`/`btn`/`chip`-Utilities), Text im JSX normal geschrieben; Tastenhinweise als `<kbd>`.

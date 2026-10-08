@@ -1,5 +1,6 @@
 package dev.magelite.stats;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameSetup;
 import dev.magelite.view.dto.Messages;
@@ -12,6 +13,7 @@ import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -19,6 +21,10 @@ import java.util.UUID;
 /**
  * Speichert ein beendetes Spiel pro menschlichem Sitz (einmalig je Nutzer) und vergibt XP an dessen Held und Deck.
  * Schluessel in {@code games}/{@code game_card_stats}: (Spiel-id, Nutzer); {@code game_seats} ist pro Spiel einmalig.
+ * <p>
+ * Die Daten kommen als {@link GameResult} (datenrein): lokal aus dem {@link GameHost} ({@link #resultOf}), beim
+ * selbst gehosteten Tisch von der Engine des Gastgebers ueber den Host-Link - dort gibt es den {@link StatsSink}
+ * (eigene Zuege, Kartenstatistik) nur, deshalb traegt {@link SeatResult} ihn mit.
  */
 public final class GameRecorder {
 
@@ -33,6 +39,22 @@ public final class GameRecorder {
                          int xpIntoLevelBefore, int xpForNextBefore, Progression.Title nextTitle) {
     }
 
+    /** Ein menschlicher Sitz am Spielende. {@code cards} aus dem {@link StatsSink} (leer, wenn keiner da war). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record SeatResult(long userId, String name, UUID playerId, Long deckId, String deckName, List<String> commanders,
+                             boolean conceded, int humanTurns, Map<String, StatsSink.CardStat> cards) {
+    }
+
+    /** Spielende, von jedem Prozess auswertbar. {@code deckNames}/{@code commanders} je Spieler-id (auch Bots). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record GameResult(String gameId, String tempo, UUID winnerId, String result, List<Messages.Placement> placements,
+                             int turns, long durationMs, String error, Map<UUID, String> deckNames,
+                             Map<UUID, List<String>> commanders, List<SeatResult> seats) {
+        public Messages.GameOver gameOver(Object reward) {
+            return new Messages.GameOver(winnerId, result, placements, turns, durationMs, reward, error);
+        }
+    }
+
     private final Db db;
     private final ProfileService profile;
 
@@ -41,14 +63,47 @@ public final class GameRecorder {
         this.profile = profile;
     }
 
+    /** Datenreines Ergebnis eines lokal gelaufenen Spiels (inkl. Sink-Daten aller menschlichen Sitze). */
+    public static GameResult resultOf(GameHost host, Messages.GameOver over) {
+        List<SeatResult> seats = new ArrayList<>();
+        for (GameHost.HumanSeat s : host.seats()) {
+            seats.add(seatResult(host, s));
+        }
+        GameSetup setup = host.getSetup();
+        return new GameResult(host.getId().toString(), setup.tempo().name(), over.winnerId(), over.result(), over.placements(),
+                over.turns(), over.durationMs(), over.error(), host.getDeckNames(), host.getCommanders(), seats);
+    }
+
+    private static SeatResult seatResult(GameHost host, GameHost.HumanSeat seat) {
+        StatsSink sink = StatsSink.of(host.getGame().getId(), seat.playerId());
+        return new SeatResult(seat.userId(), seat.name(), seat.playerId(), seat.deckId(), seat.deck().name(), seat.deck().commanders(),
+                seat.conceded(), sink == null ? 0 : sink.humanTurns(), sink == null ? Map.of() : new LinkedHashMap<>(sink.cards()));
+    }
+
     /**
+     * {@link GameHost.RewardHook} fuer lokal laufende Spiele.
+     *
      * @return Belohnung oder null (z.B. bei Fehlern)
      */
     public Reward record(GameHost host, GameHost.HumanSeat seat, Messages.GameOver over) {
         String gameId = host.getId().toString();
-        StatsSink sink = StatsSink.of(host.getGame().getId(), seat.playerId());
-        GameSetup setup = host.getSetup();
         boolean last = host.seats().stream().allMatch(s -> s == seat || exists(gameId, s.userId()));
+        try {
+            return record(resultOf(host, over), seatResult(host, seat));
+        } finally {
+            if (last) {
+                StatsSink.unregister(host.getGame().getId());
+            }
+        }
+    }
+
+    /**
+     * Speichert das Spiel fuer einen Sitz und vergibt XP. Einmalig je (Spiel, Nutzer); ein zweiter Aufruf gibt null.
+     *
+     * @return Belohnung oder null (schon gespeichert, Fehler)
+     */
+    public Reward record(GameResult r, SeatResult seat) {
+        String gameId = r.gameId();
         try {
             return db.tx(c -> {
                 long userId = seat.userId();
@@ -56,19 +111,19 @@ public final class GameRecorder {
                     return null;
                 }
                 ProfileService.ensure(c, userId, seat.name());
-                Messages.Placement me = over.placements().stream().filter(p -> p.playerId().equals(seat.playerId())).findFirst().orElse(null);
+                Messages.Placement me = r.placements().stream().filter(p -> p.playerId().equals(seat.playerId())).findFirst().orElse(null);
                 int place = me == null ? 4 : me.place();
-                boolean won = me != null && over.winnerId() != null && over.winnerId().equals(me.playerId());
-                int humanTurns = sink == null ? 0 : sink.humanTurns();
+                boolean won = me != null && r.winnerId() != null && r.winnerId().equals(me.playerId());
+                int humanTurns = seat.humanTurns();
                 boolean earlyConcede = seat.conceded() && humanTurns < 3;
                 Long deckId = seat.deckId();
-                String tempo = setup.tempo().name();
+                String tempo = r.tempo();
                 long now = System.currentTimeMillis();
 
                 // ---- XP
                 List<XpPart> parts = new ArrayList<>();
                 int xp = 0;
-                if (!earlyConcede && over.error() == null) {
+                if (!earlyConcede && r.error() == null) {
                     parts.add(new XpPart("base", "Teilnahme", 40));
                     int pl = Progression.placementXp(place);
                     if (pl > 0) {
@@ -101,30 +156,30 @@ public final class GameRecorder {
                 // ---- Spiel speichern
                 try (PreparedStatement ps = c.prepareStatement("INSERT INTO games (id, started_at, ended_at, duration_ms, turns, deck_id, deck_name, commander, result, placement, tempo, mulligans, xp_awarded, end_reason, user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
                     ps.setString(1, gameId);
-                    ps.setLong(2, now - over.durationMs());
+                    ps.setLong(2, now - r.durationMs());
                     ps.setLong(3, now);
-                    ps.setLong(4, over.durationMs());
-                    ps.setInt(5, over.turns());
+                    ps.setLong(4, r.durationMs());
+                    ps.setInt(5, r.turns());
                     if (deckId == null) {
                         ps.setNull(6, java.sql.Types.INTEGER);
                     } else {
                         ps.setLong(6, deckId);
                     }
-                    ps.setString(7, seat.deck().name());
-                    ps.setString(8, String.join(" & ", seat.deck().commanders()));
-                    ps.setString(9, won ? "win" : over.winnerId() == null ? "draw" : "loss");
+                    ps.setString(7, seat.deckName());
+                    ps.setString(8, String.join(" & ", seat.commanders() == null ? List.of() : seat.commanders()));
+                    ps.setString(9, won ? "win" : r.winnerId() == null ? "draw" : "loss");
                     ps.setInt(10, place);
                     ps.setString(11, tempo);
                     ps.setInt(12, me == null ? 0 : me.mulligans());
                     ps.setInt(13, xp);
-                    ps.setString(14, over.error() != null ? "error" : seat.conceded() ? "concede" : "normal");
+                    ps.setString(14, r.error() != null ? "error" : seat.conceded() ? "concede" : "normal");
                     ps.setLong(15, userId);
                     ps.executeUpdate();
                 }
                 int seatNo = 0;
-                Map<UUID, String> decks = host.getDeckNames();
-                Map<UUID, List<String>> cmds = host.getCommanders();
-                for (Messages.Placement p : over.placements()) {
+                Map<UUID, String> decks = r.deckNames() == null ? Map.of() : r.deckNames();
+                Map<UUID, List<String>> cmds = r.commanders() == null ? Map.of() : r.commanders();
+                for (Messages.Placement p : r.placements()) {
                     try (PreparedStatement ps = c.prepareStatement("INSERT OR IGNORE INTO game_seats (game_id, seat, name, is_human, deck_name, commander, placement, eliminated_turn, life_end, mulligans) VALUES (?,?,?,?,?,?,?,?,?,?)")) {
                         ps.setString(1, gameId);
                         ps.setInt(2, seatNo++);
@@ -143,8 +198,8 @@ public final class GameRecorder {
                         ps.executeUpdate();
                     }
                 }
-                if (sink != null) {
-                    for (Map.Entry<String, StatsSink.CardStat> e : sink.cards().entrySet()) {
+                if (seat.cards() != null) {
+                    for (Map.Entry<String, StatsSink.CardStat> e : seat.cards().entrySet()) {
                         try (PreparedStatement ps = c.prepareStatement("INSERT OR REPLACE INTO game_card_stats (game_id, user_id, deck_id, card_name, opening, drawn, cast, first_cast_turn) VALUES (?,?,?,?,?,?,?,?)")) {
                             StatsSink.CardStat s = e.getValue();
                             ps.setString(1, gameId);
@@ -206,17 +261,13 @@ public final class GameRecorder {
                     mNext = Progression.masteryNext(mXp);
                 }
                 return new Reward(xp, parts, lv.level(), lvBefore.level(), after, lv.xpIntoLevel(), lv.xpForNext(),
-                        Progression.titleOf(lv.level()), lv.level() > lvBefore.level(), deckId, seat.deck().name(),
+                        Progression.titleOf(lv.level()), lv.level() > lvBefore.level(), deckId, seat.deckName(),
                         mGained, mLevel, mBefore, mXp, mNext,
                         lvBefore.xpIntoLevel(), lvBefore.xpForNext(), Progression.nextTitle(lv.level()));
             });
         } catch (RuntimeException e) {
             LOG.error("Spiel konnte nicht gespeichert werden", e);
             return null;
-        } finally {
-            if (last) {
-                StatsSink.unregister(host.getGame().getId());
-            }
         }
     }
 

@@ -111,6 +111,8 @@ export interface AdminGame {
   bots: number
   spectators: number
   humans: AdminSeat[]
+  /** Name des Gastgebers, wenn das Spiel auf dessen Rechner laeuft (Host-Link); sonst null/fehlt */
+  remoteHost?: string | null
 }
 
 export interface AdminTable {
@@ -124,6 +126,8 @@ export interface AdminTable {
   open: number
   gameId: string | null
   createdAt: number
+  hosting?: 'SERVER' | 'REMOTE'
+  locked?: boolean
 }
 
 /** GET /api/admin/server */
@@ -139,4 +143,6 @@ export interface ServerInfo {
   tableCount: number
   games: AdminGame[]
   tables: AdminTable[]
+  /** angebundene Engines von Gastgebern (Host-Link) */
+  hostLinks?: number
 }

@@ -30,11 +30,17 @@ public final class AuthRoutes implements HttpServer.Module {
     private final HttpServer.Config config;
     private final Auth auth;
     private final AccountService accounts;
+    /** Server-Modus: hat der Nutzer gerade seine Engine angebunden (Host-Link)? */
+    private volatile java.util.function.LongPredicate hostLinked = uid -> false;
 
     public AuthRoutes(HttpServer.Config config, Auth auth, AccountService accounts) {
         this.config = config;
         this.auth = auth;
         this.accounts = accounts;
+    }
+
+    public void setHostLinked(java.util.function.LongPredicate p) {
+        this.hostLinked = p;
     }
 
     @Override
@@ -192,6 +198,7 @@ public final class AuthRoutes implements HttpServer.Module {
     private Map<String, Object> me(User u, String sessionHash) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("mode", config.server() ? "server" : "local");
+        m.put("hostLink", config.server() && hostLinked.test(u.id()));
         Map<String, Object> user = new LinkedHashMap<>();
         user.put("id", u.id());
         user.put("name", u.name());

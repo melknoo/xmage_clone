@@ -1,9 +1,11 @@
 package dev.magelite.game;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.auth.Passwords;
 import dev.magelite.auth.User;
 import dev.magelite.deck.DeckResolver;
 import dev.magelite.deck.LoadedDeck;
+import dev.magelite.relay.RemoteGameSpec;
 import org.apache.log4j.Logger;
 
 import java.security.SecureRandom;
@@ -43,7 +45,63 @@ public final class TableManager {
         }
     }
 
+    /** Falsches/fehlendes Tisch-Passwort (403). */
+    public static final class PasswordException extends RuntimeException {
+        public PasswordException(String message) {
+            super(message);
+        }
+    }
+
     public enum SeatKind { OPEN, HUMAN, BOT }
+
+    /** Wo das Spiel rechnet: auf diesem Server oder auf dem Rechner des Gastgebers (Host-Link). */
+    public enum Hosting { SERVER, REMOTE }
+
+    /** Anbindung an die Relay-Spiele (nur Server-Modus mit Host-Link; sonst {@link #NO_REMOTE}). */
+    public interface Remote {
+        /** Hat der Gastgeber gerade seine Engine angebunden? */
+        boolean linked(long hostUserId);
+
+        /** Spiel auf dem Rechner des Gastgebers starten (blockiert bis zur Antwort, max. ~30 s). @return Spiel-id */
+        UUID start(RemoteGameSpec spec) throws Exception;
+
+        /** Spielt der Nutzer gerade in einem Relay-Spiel mit? */
+        boolean inGame(long userId);
+
+        int turn(UUID gameId);
+
+        void abort(UUID gameId);
+    }
+
+    public static final Remote NO_REMOTE = new Remote() {
+        @Override
+        public boolean linked(long hostUserId) {
+            return false;
+        }
+
+        @Override
+        public UUID start(RemoteGameSpec spec) {
+            throw new TableException("Tische auf dem eigenen Rechner gibt es hier nicht");
+        }
+
+        @Override
+        public boolean inGame(long userId) {
+            return false;
+        }
+
+        @Override
+        public int turn(UUID gameId) {
+            return 0;
+        }
+
+        @Override
+        public void abort(UUID gameId) {
+        }
+    };
+
+    private static final int PASSWORD_MAX = 40;
+    private static final int PW_LIMIT = 5;
+    private static final long PW_WINDOW_MS = 60_000;
 
     /** Chat-Zeile am Tisch (ueberlebt Spiele dieses Tisches, weg mit dem Tisch). */
     public record ChatMsg(long ts, long userId, String name, String text) {
@@ -85,6 +143,11 @@ public final class TableManager {
         public final String hostName;
         public final Seat[] seats = new Seat[4];
         public TempoSettings.Preset tempo = TempoSettings.Preset.NORMAL;
+        public Hosting hosting = Hosting.SERVER;
+        /** Tisch-Passwort (privater Tisch), nur als Hash; null = oeffentlich */
+        public String passwordHash;
+        /** REMOTE: Startanfrage laeuft (Antwort des Hosts steht aus) */
+        public boolean starting;
         /** LOBBY | RUNNING */
         public String state = "LOBBY";
         public UUID gameId;
@@ -142,7 +205,7 @@ public final class TableManager {
      */
     public record TableSnap(String id, String name, long hostUserId, String hostName, TempoSettings.Preset tempo, String state,
                             UUID gameId, UUID lastGameId, long createdAt, long updatedAt, List<SeatSnap> seats,
-                            List<ChatMsg> chat, int turn, int spectators) {
+                            List<ChatMsg> chat, int turn, int spectators, Hosting hosting, boolean locked, boolean starting) {
         public int humans() {
             return (int) seats.stream().filter(s -> s.kind() == SeatKind.HUMAN).count();
         }
@@ -170,6 +233,9 @@ public final class TableManager {
      */
     private volatile BiConsumer<Long, String> onKicked = (u, t) -> {
     };
+    private volatile Remote remote = NO_REMOTE;
+    /** Fehlversuche beim Tisch-Passwort je Nutzer */
+    private final Map<Long, Deque<Long>> pwAttempts = new HashMap<>();
 
     public TableManager(GameRegistry games, DeckResolver decks) {
         this.games = games;
@@ -178,6 +244,10 @@ public final class TableManager {
 
     public void setOnKicked(BiConsumer<Long, String> cb) {
         this.onKicked = cb;
+    }
+
+    public void setRemote(Remote remote) {
+        this.remote = remote == null ? NO_REMOTE : remote;
     }
 
     // ------------------------------------------------------------------ Abfragen
@@ -239,15 +309,19 @@ public final class TableManager {
         int turn = 0;
         int spectators = 0;
         if ("RUNNING".equals(t.state) && t.gameId != null) {
-            // GameRegistry.get ist sperrfrei (ConcurrentHashMap), currentTurn()/spectatorCount() ohne Sperren
-            GameHost g = games.get(t.gameId).orElse(null);
-            if (g != null) {
-                turn = g.currentTurn();
-                spectators = g.spectatorCount();
+            if (t.hosting == Hosting.REMOTE) {
+                turn = remote.turn(t.gameId);
+            } else {
+                // GameRegistry.get ist sperrfrei (ConcurrentHashMap), currentTurn()/spectatorCount() ohne Sperren
+                GameHost g = games.get(t.gameId).orElse(null);
+                if (g != null) {
+                    turn = g.currentTurn();
+                    spectators = g.spectatorCount();
+                }
             }
         }
         return new TableSnap(t.id, t.name, t.hostUserId, t.hostName, t.tempo, t.state, t.gameId, t.lastGameId, t.createdAt,
-                t.updatedAt, List.copyOf(seats), chat, turn, spectators);
+                t.updatedAt, List.copyOf(seats), chat, turn, spectators, t.hosting, t.passwordHash != null, t.starting);
     }
 
     public synchronized List<Table> list() {
@@ -286,12 +360,27 @@ public final class TableManager {
     // ------------------------------------------------------------------ Lobby-Aktionen
 
     public synchronized Table create(User host, String name, TempoSettings.Preset tempo) {
+        return create(host, name, tempo, Hosting.SERVER, null);
+    }
+
+    /**
+     * @param hosting  REMOTE nur, wenn der Gastgeber gerade seine Engine angebunden hat (Host-Link)
+     * @param password Tisch-Passwort (privater Tisch); null/leer = oeffentlich
+     */
+    public synchronized Table create(User host, String name, TempoSettings.Preset tempo, Hosting hosting, String password) {
         prune();
         mine(host.id()).ifPresent(t -> {
             throw new TableException("Du sitzt schon am Tisch „" + t.name + "“");
         });
         if (tables.size() >= MAX_TABLES) {
             throw new TableException("Zu viele offene Tische");
+        }
+        if (hosting == Hosting.REMOTE && !remote.linked(host.id())) {
+            throw new TableException("Keine Verbindung zu deinem Rechner – MageLite-App starten und dort anmelden");
+        }
+        String pw = password == null ? "" : password.strip();
+        if (pw.length() > PASSWORD_MAX) {
+            throw new IllegalArgumentException("Passwort: höchstens " + PASSWORD_MAX + " Zeichen");
         }
         String id;
         do {
@@ -301,18 +390,43 @@ public final class TableManager {
         if (tempo != null) {
             t.tempo = tempo;
         }
+        t.hosting = hosting == null ? Hosting.SERVER : hosting;
+        t.passwordHash = pw.isEmpty() ? null : pwHash(id, pw);
         tables.put(id, t);
-        LOG.info("Tisch " + id + " eroeffnet von " + host.name());
+        LOG.info("Tisch " + id + " eroeffnet von " + host.name() + (t.hosting == Hosting.REMOTE ? " (auf seinem Rechner)" : "")
+                + (t.passwordHash != null ? ", privat" : ""));
         return t;
     }
 
     public synchronized Table join(User user, String id) {
+        return join(user, id, null, false);
+    }
+
+    /**
+     * @param password Tisch-Passwort (bei privatem Tisch), sonst egal
+     * @param invited  offene Einladung des Gastgebers -> kein Passwort noetig
+     */
+    public synchronized Table join(User user, String id, String password, boolean invited) {
         Table t = require(id);
         if (t.seatOf(user.id()).isPresent()) {
             return t;
         }
         if (t.kicked.contains(user.id())) {
             throw new TableException("Der Gastgeber hat dich von diesem Tisch entfernt");
+        }
+        if (t.passwordHash != null && !invited) {
+            Deque<Long> q = pwAttempts.computeIfAbsent(user.id(), k -> new ArrayDeque<>());
+            long now = System.currentTimeMillis();
+            while (!q.isEmpty() && now - q.peekFirst() > PW_WINDOW_MS) {
+                q.pollFirst();
+            }
+            if (q.size() >= PW_LIMIT) {
+                throw new PasswordException("Zu viele Versuche – kurz warten");
+            }
+            if (password == null || password.isBlank() || !t.passwordHash.equals(pwHash(t.id, password.strip()))) {
+                q.addLast(now);
+                throw new PasswordException(password == null || password.isBlank() ? "Dieser Tisch ist privat" : "Passwort falsch");
+            }
         }
         Optional<Table> other = mine(user.id());
         if (other.isPresent()) {
@@ -321,7 +435,7 @@ public final class TableManager {
             }
             leave(user, other.get().id);
         }
-        if (!"LOBBY".equals(t.state)) {
+        if (!"LOBBY".equals(t.state) || t.starting) {
             throw new TableException("Am Tisch läuft gerade ein Spiel");
         }
         for (Seat s : t.seats) {
@@ -388,7 +502,7 @@ public final class TableManager {
         if (kind == SeatKind.HUMAN) {
             throw new IllegalArgumentException("Menschen setzen sich selbst");
         }
-        if (!"LOBBY".equals(t.state)) {
+        if (!"LOBBY".equals(t.state) || t.starting) {
             throw new TableException("Während des Spiels lassen sich die Plätze nicht ändern");
         }
         Seat cur = t.seats[n];
@@ -420,13 +534,38 @@ public final class TableManager {
         return t;
     }
 
-    /** Gastgeber startet: offene Plaetze fallen weg, alle Menschen brauchen ein Deck, mindestens 2 Spieler. */
-    public synchronized Table start(User host, String id) throws Exception {
+    /**
+     * Gastgeber startet: offene Plaetze fallen weg, alle Menschen brauchen ein Deck, mindestens 2 Spieler.
+     * SERVER: Spiel hier. REMOTE: Decks hier aufloesen, Start auf dem Rechner des Gastgebers abwarten (ausserhalb der
+     * Sperre, der Tisch ist solange {@code starting}), dann RUNNING.
+     */
+    public Table start(User host, String id) throws Exception {
+        RemoteGameSpec spec = startLocked(host, id);
+        if (spec == null) {
+            return get(id).orElseThrow(() -> new TableException("Diesen Tisch gibt es nicht mehr"));
+        }
+        UUID gameId;
+        try {
+            gameId = remote.start(spec);
+        } catch (Exception e) {
+            startFailed(id);
+            String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+            throw new TableException(msg);
+        }
+        return markRunning(id, gameId);
+    }
+
+    /** @return null = Spiel laeuft schon hier (SERVER); sonst die Spec fuer den Rechner des Gastgebers */
+    private synchronized RemoteGameSpec startLocked(User host, String id) throws Exception {
         Table t = requireHost(host, id);
         if (!"LOBBY".equals(t.state)) {
             throw new TableException("Das Spiel läuft schon");
         }
+        if (t.starting) {
+            throw new TableException("Der Start läuft gerade");
+        }
         List<GameSetup.SeatSpec> specs = new ArrayList<>();
+        List<RemoteGameSpec.Seat> remoteSeats = new ArrayList<>();
         List<String> usedSamples = new ArrayList<>();
         for (Seat s : t.seats) {
             switch (s.kind) {
@@ -434,10 +573,19 @@ public final class TableManager {
                     if (s.deck == null) {
                         throw new TableException(s.name + " hat noch kein Deck gewählt");
                     }
+                    if (remote.inGame(s.userId)) {
+                        throw new TableException(s.name + " spielt gerade noch an einem anderen Tisch");
+                    }
                     LoadedDeck d = decks.resolve(s.userId, s.deck, usedSamples);
-                    specs.add(GameSetup.SeatSpec.human(s.userId, s.name, d, DeckResolver.userDeckId(s.deck)));
+                    Long deckId = DeckResolver.userDeckId(s.deck);
+                    specs.add(GameSetup.SeatSpec.human(s.userId, s.name, d, deckId));
+                    remoteSeats.add(new RemoteGameSpec.Seat(true, s.userId, s.name, deckId, d.name(), d.dck(), null, null));
                 }
-                case BOT -> specs.add(GameSetup.SeatSpec.bot(decks.resolve(host.id(), s.deck, usedSamples)));
+                case BOT -> {
+                    LoadedDeck d = decks.resolve(host.id(), s.deck, usedSamples);
+                    specs.add(GameSetup.SeatSpec.bot(d));
+                    remoteSeats.add(new RemoteGameSpec.Seat(false, 0, null, null, d.name(), d.dck(), null, null));
+                }
                 default -> {
                     // offen -> faellt weg
                 }
@@ -447,13 +595,67 @@ public final class TableManager {
             throw new TableException("Mindestens zwei Spieler (Mensch oder Bot)");
         }
         String tableId = t.id;
+        if (t.hosting == Hosting.REMOTE) {
+            if (!remote.linked(host.id())) {
+                throw new TableException("Keine Verbindung zu deinem Rechner – MageLite-App starten und dort anmelden");
+            }
+            for (RemoteGameSpec.Seat s : remoteSeats) {
+                if (s.dck() == null) {
+                    throw new TableException("Deck von " + (s.name() == null ? "Bot" : s.name()) + " lässt sich nicht übertragen");
+                }
+            }
+            // laufende Server-Spiele der Beteiligten enden (ein Tisch pro Nutzer, wie GameRegistry.start)
+            for (GameSetup.SeatSpec s : specs) {
+                if (s.human()) {
+                    games.abortOf(s.userId());
+                }
+            }
+            t.starting = true;
+            t.touch();
+            return new RemoteGameSpec(null, tableId, t.name, t.hostUserId, t.hostName, t.tempo.name(), 0, remoteSeats);
+        }
         // Tisch-Spiele sind zuschaubar: oeffentliche Sicht ab dem ersten State (vor host.start())
         GameHost game = games.start(new GameSetup(specs, t.tempo), h -> onGameFinished(tableId, h), h -> h.setSpectatable(true));
         t.state = "RUNNING";
         t.gameId = game.getId();
         t.touch();
         LOG.info("Tisch " + t.id + ": Spiel " + game.getId() + " mit " + specs.size() + " Spielern gestartet");
+        return null;
+    }
+
+    private synchronized Table markRunning(String id, UUID gameId) {
+        Table t = tables.get(normalize(id));
+        if (t == null) {
+            // Tisch waehrend des Starts geschlossen: Spiel auf dem Host beenden
+            remote.abort(gameId);
+            throw new TableException("Diesen Tisch gibt es nicht mehr");
+        }
+        t.starting = false;
+        t.state = "RUNNING";
+        t.gameId = gameId;
+        t.touch();
+        LOG.info("Tisch " + t.id + ": Spiel " + gameId + " auf dem Rechner von " + t.hostName + " gestartet");
         return t;
+    }
+
+    private synchronized void startFailed(String id) {
+        Table t = tables.get(normalize(id));
+        if (t != null) {
+            t.starting = false;
+            t.touch();
+        }
+    }
+
+    /** Relay-Spiel vorbei (fly-Seite): Tisch zurueck in die Lobby. */
+    public synchronized void onRemoteFinished(String tableId, UUID gameId) {
+        Table t = tableId == null ? null : tables.get(normalize(tableId));
+        if (t == null || !gameId.equals(t.gameId)) {
+            return;
+        }
+        t.state = "LOBBY";
+        t.lastGameId = t.gameId;
+        t.gameId = null;
+        t.touch();
     }
 
     /**
@@ -477,7 +679,11 @@ public final class TableManager {
         LOG.info("Tisch " + t.id + " vom Admin geschlossen");
         // ausserhalb der Sperre: onGameFinished findet den Tisch nicht mehr und tut nichts
         if (t.gameId != null) {
-            games.get(t.gameId).ifPresent(GameHost::abort);
+            if (t.hosting == Hosting.REMOTE) {
+                remote.abort(t.gameId);
+            } else {
+                games.get(t.gameId).ifPresent(GameHost::abort);
+            }
         }
         for (long userId : seated) {
             try {
@@ -568,6 +774,10 @@ public final class TableManager {
 
     private static String normalize(String id) {
         return id == null ? "" : id.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String pwHash(String tableId, String password) {
+        return Passwords.tokenHash(tableId + ":" + password);
     }
 
     private static String randomId() {

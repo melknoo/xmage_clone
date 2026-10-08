@@ -200,8 +200,23 @@ public final class SocialService {
         return presence(userId, System.currentTimeMillis());
     }
 
+    /** Server-Modus mit Host-Link: spielt der Nutzer in einem Relay-Spiel (laeuft nicht in {@code games})? */
+    private volatile java.util.function.LongPredicate alsoInGame = uid -> false;
+
+    public void setAlsoInGame(java.util.function.LongPredicate p) {
+        this.alsoInGame = p;
+    }
+
+    /** Offene Einladung des Nutzers an diesen Tisch (ersetzt beim Beitritt das Tisch-Passwort). */
+    public boolean hasInvite(long userId, String tableId) {
+        long now = System.currentTimeMillis();
+        synchronized (lock) {
+            return invites.values().stream().anyMatch(i -> i.toUserId() == userId && i.tableId().equalsIgnoreCase(tableId) && now <= i.expiresAt());
+        }
+    }
+
     private Presence presence(long userId, long now) {
-        if (games.currentOf(userId).isPresent()) {
+        if (games.currentOf(userId).isPresent() || alsoInGame.test(userId)) {
             return new Presence("game", null, null);
         }
         boolean on;

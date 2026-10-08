@@ -3,6 +3,7 @@ package dev.magelite;
 import dev.magelite.admin.AdminRoutes;
 import dev.magelite.admin.AdminService;
 import dev.magelite.api.Auth;
+import dev.magelite.api.DownloadRoutes;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import dev.magelite.api.TableRoutes;
@@ -22,6 +23,11 @@ import dev.magelite.game.BotTuning;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.images.ImageService;
+import dev.magelite.relay.HostLinkClient;
+import dev.magelite.relay.HostLinkRoutes;
+import dev.magelite.relay.HostLinks;
+import dev.magelite.relay.RemoteGameSpec;
+import dev.magelite.relay.RemoteGames;
 import dev.magelite.stats.Db;
 import dev.magelite.stats.GameRecorder;
 import dev.magelite.stats.ProfileService;
@@ -122,19 +128,33 @@ public final class Main {
         Auth auth = new Auth(cfg, accounts);
         HttpServer httpServer = new HttpServer(cfg, auth, games, deckStore, samples);
         accounts.setOnRevoke(httpServer::closeSessionsOf);
-        httpServer.addModule(new AuthRoutes(cfg, auth, accounts));
+        AuthRoutes authRoutes = new AuthRoutes(cfg, auth, accounts);
+        httpServer.addModule(authRoutes);
         httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
         DeckRoutes deckRoutes = new DeckRoutes(deckStore);
         httpServer.addModule(deckRoutes);
         deckRoutes.backfillBrackets();
         httpServer.addModule(new StatsRoutes(db, profile));
+        HostLinkClient hostLink = null;
         if (server) {
+            // Host-Link: Engines von Gastgebern haengen sich an (/ws/host); ihre Spiele laufen dort, fly reicht nur durch
+            HostLinks hostLinks = new HostLinks(auth, cfg, httpServer::touch);
+            RemoteGames remoteGames = new RemoteGames(hostLinks, recorder);
+            hostLinks.setListener(remoteGames);
+            httpServer.setRemoteGames(remoteGames);
+            httpServer.addModule(hostLinks);
+            authRoutes.setHostLinked(hostLinks::has);
             // Lobby/Tische: nur online sinnvoll (lokal startet man direkt)
             DeckResolver deckResolver = new DeckResolver(deckStore, samples);
             TableManager tableManager = new TableManager(games, deckResolver);
+            tableManager.setRemote(remoteTables(hostLinks, remoteGames));
+            remoteGames.setOnFinished(tableManager::onRemoteFinished);
             SocialService social = new SocialService(new FriendStore(db), tableManager, games);
+            social.setAlsoInGame(remoteGames::inGame);
             TableRoutes tableRoutes = new TableRoutes(tableManager, deckResolver);
             tableRoutes.setOnJoined(social::joined);
+            tableRoutes.setHostLinked(hostLinks::has);
+            tableRoutes.setInvited(social::hasInvite);
             tableManager.setOnKicked(social::kicked);
             // Zuschauen: nur laufende Tisch-Spiele (WS /ws/game/{id}?spectate=1)
             httpServer.setSpectatePolicy(tableManager::runningTableName, uid -> tableManager.mine(uid).isPresent());
@@ -142,7 +162,13 @@ public final class Main {
             // Lobby-Chat, Freunde, Einladungen
             httpServer.addModule(new SocialRoutes(social));
             // Admin-Bereich: Nutzer, Server-Uebersicht, Eingriffe
-            httpServer.addModule(new AdminRoutes(new AdminService(db, accounts, games, tableManager, social, VERSION)));
+            httpServer.addModule(new AdminRoutes(new AdminService(db, accounts, games, tableManager, social, VERSION, remoteGames, hostLinks::count)));
+            // Setup-Download fuer die Startseite (oeffentlich)
+            httpServer.addModule(new DownloadRoutes(data.resolve("downloads")));
+        } else {
+            // Host-Link: diese Engine haengt sich an einen Server (Electron meldet das Session-Cookie)
+            hostLink = new HostLinkClient(games);
+            httpServer.addModule(new HostLinkRoutes(hostLink));
         }
         int port = httpServer.start();
 
@@ -158,7 +184,11 @@ public final class Main {
         warmup.setPriority(Thread.MIN_PRIORITY);
         warmup.start();
 
+        HostLinkClient hostLinkRef = hostLink;
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (hostLinkRef != null) {
+                hostLinkRef.disconnect();
+            }
             games.shutdown();
             httpServer.stop();
             db.close();
@@ -222,8 +252,8 @@ public final class Main {
                     g.abort();
                 }
             }
-            if (games.running() > 0) {
-                return;
+            if (server.runningGames() > 0) {
+                return; // auch Relay-Spiele (Host-Link) halten die Maschine wach
             }
             long idle = System.currentTimeMillis() - server.lastActivity();
             if (idle < limitMs) {
@@ -233,6 +263,45 @@ public final class Main {
             server.closeAllSessions();
             System.exit(0);
         }, 1, 1, TimeUnit.MINUTES);
+    }
+
+    /** Anbindung der Tische an Host-Link und Relay-Spiele (Server-Modus). */
+    private static TableManager.Remote remoteTables(HostLinks hostLinks, RemoteGames remoteGames) {
+        return new TableManager.Remote() {
+            @Override
+            public boolean linked(long hostUserId) {
+                return hostLinks.has(hostUserId);
+            }
+
+            @Override
+            public java.util.UUID start(RemoteGameSpec spec) throws Exception {
+                RemoteGameSpec started;
+                try {
+                    started = hostLinks.start(spec.hostUserId(), spec).get(30, TimeUnit.SECONDS);
+                } catch (java.util.concurrent.TimeoutException e) {
+                    throw new IllegalStateException("Keine Antwort vom Rechner des Gastgebers");
+                } catch (java.util.concurrent.ExecutionException e) {
+                    Throwable c = e.getCause() == null ? e : e.getCause();
+                    throw new IllegalStateException(c.getMessage() == null ? c.toString() : c.getMessage());
+                }
+                return remoteGames.register(started).id;
+            }
+
+            @Override
+            public boolean inGame(long userId) {
+                return remoteGames.inGame(userId);
+            }
+
+            @Override
+            public int turn(java.util.UUID gameId) {
+                return remoteGames.turnOf(gameId);
+            }
+
+            @Override
+            public void abort(java.util.UUID gameId) {
+                remoteGames.abort(gameId);
+            }
+        };
     }
 
     private static String randomToken() {

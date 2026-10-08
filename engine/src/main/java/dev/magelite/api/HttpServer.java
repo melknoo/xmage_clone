@@ -10,6 +10,7 @@ import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.game.GameSetup;
 import dev.magelite.game.TempoSettings;
+import dev.magelite.relay.RemoteGames;
 import dev.magelite.spike.Scenarios;
 import io.javalin.Javalin;
 import io.javalin.http.Context;
@@ -67,9 +68,15 @@ public final class HttpServer {
      * Eine WebSocket-Verbindung: Sitz-Verbindung ({@code seat} gesetzt) oder Zuschauer ({@code spectator}, kein Sitz).
      * {@code lastPing}: letzter Ping des Clients (Zuschauer ohne Ping ueber {@link #SPECTATOR_PING_TIMEOUT_MS} fliegen raus).
      */
-    private record Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat, boolean spectator, AtomicLong lastPing) {
+    private record Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat, boolean spectator, AtomicLong lastPing,
+                           RemoteGames.RemoteGame remote) {
         Session(Outbox outbox, long userId, GameHost host, GameHost.HumanSeat seat) {
-            this(outbox, userId, host, seat, false, new AtomicLong(System.currentTimeMillis()));
+            this(outbox, userId, host, seat, false, new AtomicLong(System.currentTimeMillis()), null);
+        }
+
+        /** Sitz in einem Relay-Spiel (laeuft auf dem Rechner des Gastgebers, siehe {@link RemoteGames}) */
+        static Session remote(Outbox outbox, long userId, RemoteGames.RemoteGame g) {
+            return new Session(outbox, userId, null, null, false, new AtomicLong(System.currentTimeMillis()), g);
         }
     }
 
@@ -100,6 +107,8 @@ public final class HttpServer {
     private volatile Function<UUID, Optional<String>> spectatePolicy;
     /** sitzt der Nutzer an irgendeinem Tisch? Dann kein Zuschauen (sonst verpasst er den Start seines Tisches) */
     private volatile java.util.function.LongPredicate seatedAtTable = uid -> false;
+    /** Server-Modus: Spiele auf den Rechnern von Gastgebern (Host-Link); lokal null */
+    private volatile RemoteGames remoteGames;
     private ScheduledExecutorService spectatorWatch;
     private Javalin app;
 
@@ -133,9 +142,25 @@ public final class HttpServer {
         this.seatedAtTable = seatedAtTable;
     }
 
+    /** Server-Modus: Relay-Spiele (Host-Link) fuer {@code /ws/game}, {@code /api/games/current} und die Belegung. */
+    public void setRemoteGames(RemoteGames remoteGames) {
+        this.remoteGames = remoteGames;
+    }
+
     /** Zeitpunkt der letzten API-Anfrage (ohne Health-Checks); fuer den Leerlauf-Exit im Server-Modus. */
     public long lastActivity() {
         return lastActivity;
+    }
+
+    /** Aktivitaet melden (Host-Link-Verkehr zaehlt wie eine API-Anfrage). */
+    public void touch() {
+        lastActivity = System.currentTimeMillis();
+    }
+
+    /** Laufende Spiele hier plus Relay-Spiele. */
+    public int runningGames() {
+        RemoteGames rg = remoteGames;
+        return games.running() + (rg == null ? 0 : rg.running());
     }
 
     public int start() {
@@ -144,7 +169,11 @@ public final class HttpServer {
             cfg.jsonMapper(new JavalinJackson(Json.MAPPER, false));
             cfg.http.defaultContentType = "application/json";
             cfg.http.maxRequestSize = 2_000_000;
-            cfg.jetty.modifyWebSocketServletFactory(f -> f.setIdleTimeout(Duration.ofHours(2)));
+            cfg.jetty.modifyWebSocketServletFactory(f -> {
+                f.setIdleTimeout(Duration.ofHours(2));
+                // Host-Link: ganze States kommen inbound (zweistellige kB), Standard waeren 64 KiB
+                f.setMaxTextMessageSize(4_000_000);
+            });
             if (!config.server()) {
                 cfg.bundledPlugins.enableCors(cors -> cors.addRule(rule -> rule.anyHost()));
             }
@@ -173,7 +202,7 @@ public final class HttpServer {
         });
 
         app.get("/api/health", ctx -> ctx.json(Map.of("ok", true, "version", config.version(),
-                "mode", config.server() ? "server" : "local", "games", games.running())));
+                "mode", config.server() ? "server" : "local", "games", runningGames())));
         app.get("/api/samples", ctx -> ctx.json(samples.list()));
         app.get("/api/decks", ctx -> ctx.json(deckStore.list(Auth.user(ctx).id())));
         app.get("/api/decks/{id}", ctx -> {
@@ -189,9 +218,14 @@ public final class HttpServer {
 
         app.post("/api/games", this::createGame);
         app.get("/api/games/current", ctx -> {
-            var cur = games.currentOf(Auth.user(ctx).id());
+            long uid = Auth.user(ctx).id();
+            var cur = games.currentOf(uid);
+            RemoteGames rg = remoteGames;
+            var remote = rg == null ? Optional.<RemoteGames.RemoteGame>empty() : rg.currentOf(uid);
             if (cur.isPresent()) {
                 ctx.json(Map.of("gameId", cur.get().getId()));
+            } else if (remote.isPresent()) {
+                ctx.json(Map.of("gameId", remote.get().id));
             } else {
                 ctx.status(HttpStatus.NOT_FOUND).json(Map.of("error", "kein Spiel"));
             }
@@ -226,7 +260,21 @@ public final class HttpServer {
                 }
                 var host = games.get(id);
                 if (host.isEmpty()) {
-                    ctx.closeSession(4404, "game");
+                    RemoteGames rg = remoteGames;
+                    RemoteGames.RemoteGame remote = rg == null ? null : rg.get(id).orElse(null);
+                    if (remote == null) {
+                        ctx.closeSession(4404, "game");
+                        return;
+                    }
+                    // Relay-Spiel: kein Zuschauen (v1), Sitz nur fuer fly-Konten am Tisch; Verkehr geht 1:1 an den Host
+                    if (ctx.queryParam("spectate") != null || !remote.hasSeat(user.id())) {
+                        ctx.closeSession(4403, "seat");
+                        return;
+                    }
+                    lastActivity = System.currentTimeMillis();
+                    Outbox outbox = new Outbox(ctx);
+                    sockets.put(ctx, Session.remote(outbox, user.id(), remote));
+                    rg.attachPlayer(remote, user.id(), outbox);
                     return;
                 }
                 if (ctx.queryParam("spectate") != null) {
@@ -293,7 +341,7 @@ public final class HttpServer {
         }
         lastActivity = System.currentTimeMillis();
         Outbox outbox = new Outbox(ctx, true, () -> closeAsync(ctx, CLOSE_TOO_SLOW, "too slow"));
-        Session session = new Session(outbox, user.id(), host, null, true, new AtomicLong(System.currentTimeMillis()));
+        Session session = new Session(outbox, user.id(), host, null, true, new AtomicLong(System.currentTimeMillis()), null);
         // vor dem Anmelden eintragen: Nachrichten des Clients (Ping) finden die Session sofort
         sockets.put(ctx, session);
         GameHost.SpectateResult res = host.attachSpectator(user.id(), user.name(), outbox, tableName.get());
@@ -368,6 +416,10 @@ public final class HttpServer {
             }
         }
         games.abortOf(userId);
+        RemoteGames rg = remoteGames;
+        if (rg != null) {
+            rg.abortOf(userId);
+        }
     }
 
     /** Schliesst alle WebSockets (Leerlauf-Exit); die UI verbindet sich nach dem Neustart wieder. */
@@ -400,6 +452,12 @@ public final class HttpServer {
         String scenario = body.hasNonNull("scenario") ? body.get("scenario").asText() : null;
         if (scenario != null && (!config.dev() || !Scenarios.exists(scenario))) {
             throw new IllegalArgumentException("Szenario nicht erlaubt: " + scenario);
+        }
+        RemoteGames rg = remoteGames;
+        if (rg != null) {
+            rg.currentOf(user.id()).ifPresent(g -> {
+                throw new GameRegistry.BusyException("Du spielst gerade am Tisch „" + g.tableName + "“ auf dem Rechner von " + g.hostName);
+            });
         }
 
         List<GameSetup.SeatSpec> seatSpecs = new ArrayList<>();
@@ -484,90 +542,17 @@ public final class HttpServer {
                 }
                 return;
             }
-            GameHost host = s.host();
-            GameHost.HumanSeat seat = s.seat();
-            switch (m.path("t").asText()) {
-                case "respond" -> host.respond(seat, m.path("id").asLong(), parseResponse(m));
-                case "action" -> host.action(seat, m.path("action").asText(), m.hasNonNull("data") ? m.get("data").asText() : null);
-                case "tempo" -> {
-                    if (seat.isHost()) {
-                        host.setTempo(TempoSettings.Preset.valueOf(m.path("preset").asText("NORMAL").toUpperCase(Locale.ROOT)));
-                    }
+            if (s.remote() != null) {
+                RemoteGames rg = remoteGames;
+                if (rg != null) {
+                    rg.in(s.remote(), s.userId(), text, m);
                 }
-                case "autoPass" -> host.setAutoPass(seat, m.path("on").asBoolean(true));
-                case "autoPay" -> host.autoPayNow(seat);
-                case "combat" -> {
-                    List<UUID> ids = new ArrayList<>();
-                    m.path("ids").forEach(n -> ids.add(UUID.fromString(n.asText())));
-                    UUID target = m.hasNonNull("target") ? UUID.fromString(m.get("target").asText()) : null;
-                    if (!host.combat(seat, ids, target)) {
-                        LOG.info("Mehrfach-Kampf abgelehnt (kein passender Prompt)");
-                    }
-                }
-                case "repeat" -> {
-                    UUID ability = m.hasNonNull("uuid") ? UUID.fromString(m.get("uuid").asText()) : null;
-                    if (!host.repeat(seat, m.path("id").asLong(), ability, m.path("times").asInt(1))) {
-                        LOG.info("Mehrfach-Aktivierung abgelehnt (kein passender Prompt)");
-                    }
-                }
-                case "specialPay" -> {
-                    UUID perm = m.hasNonNull("uuid") ? UUID.fromString(m.get("uuid").asText()) : null;
-                    if (!host.specialPay(seat, m.path("id").asLong(), perm)) {
-                        LOG.info("Einberufen abgelehnt (kein passender Prompt)");
-                    }
-                }
-                case "combatReset" -> {
-                    if (!host.combatReset(seat)) {
-                        LOG.info("Angriff zuruecksetzen abgelehnt (kein passender Prompt)");
-                    }
-                }
-                case "settings" -> {
-                    if (m.has("autoPay")) {
-                        host.setAutoPayDefault(seat, m.get("autoPay").asBoolean(true));
-                    }
-                    if (m.has("autoPass")) {
-                        host.setAutoPass(seat, m.get("autoPass").asBoolean(true));
-                    }
-                    host.setStops(seat, m.has("stopOppUpkeep") ? m.get("stopOppUpkeep").asBoolean() : null,
-                            m.has("stopOnTargeted") ? m.get("stopOnTargeted").asBoolean() : null);
-                }
-                case "replacement" -> host.replacement(seat, m.path("mode").asText(),
-                        m.hasNonNull("key") ? m.get("key").asText() : null, m.path("always").asBoolean(false));
-                case "replReset" -> host.resetReplacementDeclines(seat);
-                case "chat" -> host.chat(seat, m.path("text").asText(""));
-                case "leave" -> host.leave(seat);
-                case "kick" -> {
-                    if (!host.kick(seat, UUID.fromString(m.path("playerId").asText()))) {
-                        LOG.info("Aufgeben-lassen abgelehnt (nicht lange genug getrennt oder nicht erlaubt)");
-                    }
-                }
-                case "ping" -> ctx.send("{\"t\":\"pong\"}");
-                default -> LOG.debug("Unbekannte Nachricht: " + text);
+                return;
             }
+            GameMessages.dispatch(s.host(), s.seat(), m, () -> ctx.send("{\"t\":\"pong\"}"));
         } catch (Exception e) {
             LOG.warn("WS-Nachricht fehlerhaft: " + text, e);
         }
-    }
-
-    private static GameHost.Response parseResponse(JsonNode m) {
-        if (m.hasNonNull("uuid")) {
-            return GameHost.Response.ofUuid(UUID.fromString(m.get("uuid").asText()));
-        }
-        if (m.hasNonNull("bool")) {
-            return GameHost.Response.ofBool(m.get("bool").asBoolean());
-        }
-        if (m.hasNonNull("int")) {
-            return GameHost.Response.ofInt(m.get("int").asInt());
-        }
-        if (m.hasNonNull("str")) {
-            return GameHost.Response.ofString(m.get("str").asText());
-        }
-        if (m.hasNonNull("mana")) {
-            JsonNode mana = m.get("mana");
-            UUID pid = mana.hasNonNull("playerId") ? UUID.fromString(mana.get("playerId").asText()) : null;
-            return GameHost.Response.ofMana(pid, ManaType.valueOf(mana.path("type").asText().toUpperCase(Locale.ROOT)));
-        }
-        return GameHost.Response.ofBool(false);
     }
 
     private static final Map<String, String> PONG = Map.of("t", "pong");
@@ -577,7 +562,12 @@ public final class HttpServer {
         if (s != null) {
             s.outbox().close();
             try {
-                if (s.spectator()) {
+                if (s.remote() != null) {
+                    RemoteGames rg = remoteGames;
+                    if (rg != null) {
+                        rg.detachPlayer(s.remote(), s.userId(), s.outbox());
+                    }
+                } else if (s.spectator()) {
                     s.host().detachSpectator(s.outbox());
                 } else {
                     s.host().detach(s.seat(), s.outbox());

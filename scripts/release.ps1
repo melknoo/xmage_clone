@@ -150,6 +150,11 @@ if ($Fly) {
     if ($AllowDirty) { $flyArgs.AllowDirty = $true }
     & (Join-Path $PSScriptRoot 'deploy-fly.ps1') @flyArgs
     if (-not $?) { Fail 'deploy-fly.ps1 fehlgeschlagen' }
+
+    # Setup auf das Volume: die Startseite bietet es zum Download an (Tische auf dem eigenen Rechner hosten)
+    Step 'Setup auf fly hochladen (upload-setup.ps1)'
+    & (Join-Path $PSScriptRoot 'upload-setup.ps1') -Setup $setup
+    if (-not $?) { Fail 'upload-setup.ps1 fehlgeschlagen' }
 }
 
 # ---------------------------------------------------------------- Zusammenfassung

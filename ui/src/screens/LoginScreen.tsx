@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { api } from '../api/client'
 import { Button, Segmented, TextField, Wordmark } from '../components/ui'
 import { PasswordInput } from '../components/PasswordInput'
+import { Icon } from '../lib/icons'
 import { useAuth } from '../store/auth'
 import { useConn } from '../store/conn'
 
@@ -14,6 +16,13 @@ function prettify(raw: string): string {
 }
 
 type Tab = 'code' | 'email'
+
+/** GET /api/download/info (oeffentlich): neuestes Setup auf dem Server */
+interface DownloadInfo {
+  available: boolean
+  version?: string
+  bytes?: number
+}
 
 function loadTab(): Tab {
   try {
@@ -36,6 +45,16 @@ export function LoginScreen() {
   const [password, setPassword] = useState('')
   const [artOk, setArtOk] = useState(true)
   const [artLoaded, setArtLoaded] = useState(false)
+  const [download, setDownload] = useState<DownloadInfo | null>(null)
+  const inDesktop = typeof window !== 'undefined' && !!window.mageliteDesktop
+
+  useEffect(() => {
+    let alive = true
+    api.get<DownloadInfo>('/api/download/info').then((d) => alive && setDownload(d)).catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const setTab = (t: Tab) => {
     setTabState(t)
@@ -125,6 +144,26 @@ export function LoginScreen() {
             Server: {window.location.host}
             {version ? ` · v${version}` : ''}
           </span>
+
+          {download?.available && !inDesktop && (
+            <a
+              href="/api/download/file"
+              className="flex items-center gap-3.5 rounded-sm bg-bg-2 px-4 py-3.5 text-fg-1 no-underline transition-colors duration-1 hover:bg-bg-3"
+              style={{ boxShadow: 'inset 0 0 0 1px var(--color-line-2)' }}
+              data-testid="login-download"
+            >
+              <Icon name="desktop" size={22} className="flex-none text-fg-2" />
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="font-display text-[16px] font-semibold uppercase leading-none tracking-[.04em]">
+                  MageLite für Windows herunterladen
+                  {download.version ? ` · v${download.version}` : ''}
+                  {download.bytes ? ` · ${Math.round(download.bytes / 1048576)} MB` : ''}
+                </span>
+                <span className="text-[12.5px] leading-[1.45] text-fg-3">Offline gegen Bots spielen und mit der App eigene Tische auf deinem PC hosten – der Server reicht dann nur durch.</span>
+              </span>
+              <Icon name="import" size={18} className="flex-none text-fg-3" />
+            </a>
+          )}
         </form>
       </div>
 

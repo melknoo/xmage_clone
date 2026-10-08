@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.BiPredicate;
+import java.util.function.LongPredicate;
 
 /**
  * REST fuer Lobby und Tische (Server-Modus). Die Lobby synchronisiert sich per Polling auf
@@ -30,6 +32,10 @@ public final class TableRoutes implements HttpServer.Module {
     private final DeckResolver decks;
     private volatile BiConsumer<Long, String> onJoined = (userId, tableId) -> {
     };
+    /** hat der Gastgeber seine Engine angebunden (Host-Link)? */
+    private volatile LongPredicate hostLinked = uid -> false;
+    /** hat der Nutzer eine offene Einladung an den Tisch (ersetzt das Passwort)? */
+    private volatile BiPredicate<Long, String> invited = (uid, tableId) -> false;
 
     public TableRoutes(TableManager tables, DeckResolver decks) {
         this.tables = tables;
@@ -41,9 +47,18 @@ public final class TableRoutes implements HttpServer.Module {
         this.onJoined = cb;
     }
 
+    public void setHostLinked(LongPredicate p) {
+        this.hostLinked = p;
+    }
+
+    public void setInvited(BiPredicate<Long, String> p) {
+        this.invited = p;
+    }
+
     @Override
     public void register(Javalin app) {
         app.exception(TableManager.TableException.class, (e, ctx) -> ctx.status(HttpStatus.CONFLICT).json(Map.of("error", e.getMessage())));
+        app.exception(TableManager.PasswordException.class, (e, ctx) -> ctx.status(HttpStatus.FORBIDDEN).json(Map.of("error", e.getMessage(), "needPassword", true)));
 
         app.get("/api/tables", ctx -> {
             User u = Auth.user(ctx);
@@ -65,12 +80,20 @@ public final class TableRoutes implements HttpServer.Module {
         app.post("/api/tables", ctx -> {
             User u = Auth.user(ctx);
             JsonNode b = body(ctx);
-            reply(ctx, tables.create(u, b.path("name").asText(null), tempo(b)).id, u);
+            TableManager.Hosting hosting;
+            try {
+                hosting = TableManager.Hosting.valueOf(b.path("hosting").asText("SERVER").toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("hosting: SERVER oder REMOTE");
+            }
+            reply(ctx, tables.create(u, b.path("name").asText(null), tempo(b), hosting, b.path("password").asText(null)).id, u);
         });
         app.get("/api/tables/{id}", ctx -> reply(ctx, ctx.pathParam("id"), Auth.user(ctx)));
         app.post("/api/tables/{id}/join", ctx -> {
             User u = Auth.user(ctx);
-            String id = tables.join(u, ctx.pathParam("id")).id;
+            JsonNode b = body(ctx);
+            String tableId = ctx.pathParam("id");
+            String id = tables.join(u, tableId, b.path("password").asText(null), invited.test(u.id(), tableId)).id;
             onJoined.accept(u.id(), id);
             reply(ctx, id, u);
         });
@@ -153,6 +176,12 @@ public final class TableRoutes implements HttpServer.Module {
         m.put("lastGameId", t.lastGameId());
         m.put("createdAt", t.createdAt());
         m.put("updatedAt", t.updatedAt());
+        boolean remote = t.hosting() == TableManager.Hosting.REMOTE;
+        m.put("hosting", t.hosting().name());
+        m.put("locked", t.locked());
+        m.put("starting", t.starting());
+        // REMOTE: nur sinnvoll, solange die Engine des Gastgebers angebunden ist
+        m.put("hostLinkOk", !remote || hostLinked.test(t.hostUserId()));
         boolean running = "RUNNING".equals(t.state());
         if (running) {
             m.put("turn", t.turn());
@@ -195,7 +224,7 @@ public final class TableRoutes implements HttpServer.Module {
         m.put("seats", seats);
         m.put("mySeat", mySeat < 0 ? null : mySeat);
         // Zuschauen: laufendes Spiel, ich sitze an keinem Tisch, noch Platz (sonst 4409/4429 beim Verbinden)
-        m.put("canSpectate", running && t.gameId() != null && mySeat < 0 && t.spectators() < GameHost.MAX_SPECTATORS
+        m.put("canSpectate", running && !remote && t.gameId() != null && mySeat < 0 && t.spectators() < GameHost.MAX_SPECTATORS
                 && tables.mine(me.id()).isEmpty());
         m.put("host", t.hostUserId() == me.id());
         m.put("humans", t.humans());

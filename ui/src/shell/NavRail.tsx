@@ -45,6 +45,8 @@ export function NavRail() {
   const version = useConn((s) => s.version)
 
   const items = server && me?.admin ? [...NAV, ADMIN] : NAV
+  // Electron zeigt den Online-Server: zurueck zur lokalen App
+  const desktop = typeof window !== 'undefined' ? window.mageliteDesktop : undefined
   // Zum Tisch: laufendes Spiel -> Brett; sonst (Server) eigener Tisch
   const toTable: Screen | null = gameId ? 'game' : server && tableId ? 'table' : null
   const accountActive = screen === 'account'
@@ -76,6 +78,18 @@ export function NavRail() {
         )
       })}
       <span className="flex-1" />
+      {desktop && (
+        <button
+          type="button"
+          className="mb-2 flex w-[68px] cursor-pointer flex-col items-center gap-1.5 rounded-sm py-2.5 text-fg-tab transition-colors duration-1 hover:bg-bg-4 hover:text-fg-2"
+          onClick={() => desktop.openLocal()}
+          title="Zurück zur MageLite-App auf diesem Rechner (lokaler Held, lokale Decks)"
+          data-testid="nav-desktop-local"
+        >
+          <Icon name="desktop" size={19} />
+          <span className="font-display text-[11px] font-semibold uppercase leading-none tracking-[.1em]">Zur App</span>
+        </button>
+      )}
       {toTable && (
         <button
           type="button"

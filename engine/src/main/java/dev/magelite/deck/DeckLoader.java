@@ -27,7 +27,13 @@ public final class DeckLoader {
                 ? lists.getName()
                 : stripExtension(file.getFileName().toString());
         lists.setName(name);
-        return fromLists(lists, file.toString(), errors.toString());
+        String dck = null;
+        try {
+            dck = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            // nur fuer das Relay noetig
+        }
+        return fromLists(lists, file.toString(), errors.toString()).withDck(dck);
     }
 
     /**
@@ -40,7 +46,7 @@ public final class DeckLoader {
             StringBuilder errors = new StringBuilder();
             DeckCardLists lists = DeckImporter.importDeckFromFile(tmp.toString(), errors, false);
             lists.setName(name);
-            return fromLists(lists, source, errors.toString());
+            return fromLists(lists, source, errors.toString()).withDck(dck);
         } finally {
             Files.deleteIfExists(tmp);
         }

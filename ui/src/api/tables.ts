@@ -56,14 +56,33 @@ export interface Table {
   canSpectate?: boolean
   /** nur bei state=RUNNING: Anzahl Zuschauer (0-8) */
   spectators?: number
+  /** SERVER: Spiel rechnet auf dem Server; REMOTE: auf dem Rechner des Gastgebers (Host-Link) */
+  hosting: TableHosting
+  /** privater Tisch (Passwort beim Beitritt, Einladung ersetzt es) */
+  locked: boolean
+  /** REMOTE: Startanfrage laeuft gerade */
+  starting?: boolean
+  /** REMOTE: Engine des Gastgebers ist angebunden (sonst kein Start moeglich); SERVER immer true */
+  hostLinkOk: boolean
+}
+
+export type TableHosting = 'SERVER' | 'REMOTE'
+
+export interface CreateTableOptions {
+  name?: string
+  tempo?: Tempo
+  hosting?: TableHosting
+  /** privater Tisch */
+  password?: string
 }
 
 export const tablesApi = {
   list: () => api.get<Table[]>('/api/tables'),
   mine: () => api.get<Table>('/api/tables/mine'),
   get: (id: string) => api.get<Table>(`/api/tables/${encodeURIComponent(id)}`),
-  create: (name?: string, tempo?: Tempo) => api.post<Table>('/api/tables', { name, tempo }),
-  join: (id: string) => api.post<Table>(`/api/tables/${encodeURIComponent(id)}/join`),
+  create: (opts: CreateTableOptions = {}) => api.post<Table>('/api/tables', opts),
+  /** 403 mit data.needPassword: Tisch ist privat (Passwort fehlt/falsch) */
+  join: (id: string, password?: string) => api.post<Table>(`/api/tables/${encodeURIComponent(id)}/join`, password ? { password } : {}),
   leave: (id: string) => api.post<{ left: boolean; closed: boolean }>(`/api/tables/${encodeURIComponent(id)}/leave`),
   setMyDeck: (id: string, deck: DeckSpec | null) => api.put<Table>(`/api/tables/${encodeURIComponent(id)}/seat`, { deck }),
   setSeat: (id: string, n: number, kind: SeatKind, deck?: DeckSpec | null) => api.put<Table>(`/api/tables/${encodeURIComponent(id)}/seats/${n}`, { kind, deck: deck ?? null }),
