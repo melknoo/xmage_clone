@@ -515,6 +515,15 @@ Ausgabenlimit). Details und Einrichtung: `SERVER.md` → „Kostenbremsen“, �
 - **Vor dem Öffnen (Nutzer):** Brevo (API-Key, Absender, AV-Vertrag), Turnstile (Site-Key/Secret), öffentliches
   Releases-Repo + `gh auth login`, Impressum/Datenschutz ausfüllen, dann `MAGELITE_SIGNUP="open"` und deployen.
 
+## Forge-Umbau (Branch `forge`, ab 2026-10-08)
+
+Engine-Wechsel XMage 1.4.60 → Forge (Entscheidung und Plan: Memory `forge-migration.md`, Plan
+`ich-habe-mich-entschieden-reflective-clover.md` §7). `main` bleibt bis zum Merge XMage.
+
+| Phase | Stand |
+|---|---|
+| 0.0 Vorbereitung | ✅ Branch `forge`; `LICENSE` (GPL-3.0), `LICENSES/Forge-GPL-3.0.txt`; `brackets/infinite-combos.txt` aus `mage-1.4.60.jar` nach `engine/src/main/resources` (byte-identisch, MIT-Hinweis in `XMage-MIT.txt`); `gradlew test` 20/20 grün. **Offen:** Repo `melknoo/xmage_clone` ist privat (GitHub 404 ohne Login) – GPL-Quellangebot vor dem Forge-Release klären. |
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.
