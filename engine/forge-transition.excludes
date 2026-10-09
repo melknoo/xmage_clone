@@ -1,27 +1,10 @@
 # Forge-Umbau: voruebergehend nicht kompilierte Quellen (Ant-Muster relativ zu src/main/java bzw. "test:" + src/test/java).
 # Beim Portieren die jeweilige Zeile loeschen. Gelesen von build.gradle.kts.
-mage/**
+# haengen am Deck-Layer bzw. an api/relay (Phase 2)
 dev/magelite/Main.java
-# XMage-Kern (wird in Phase 1 geloescht bzw. portiert)
-dev/magelite/game/AutoPayer.java
-dev/magelite/game/BotTuning.java
-dev/magelite/game/FfaAttack.java
-dev/magelite/game/FxWatcher.java
-dev/magelite/game/HumanSettings.java
-dev/magelite/game/MageLiteBot.java
-dev/magelite/game/MageLiteHuman.java
-dev/magelite/game/MageLiteMatch.java
-dev/magelite/game/NextStop.java
-dev/magelite/game/PromptMapper.java
-dev/magelite/game/SpecialPay.java
-dev/magelite/game/StackSig.java
-dev/magelite/game/TargetCheck.java
-dev/magelite/game/TrackingLondonMulligan.java
 dev/magelite/game/TableManager.java
-dev/magelite/view/GameViewMapper.java
 dev/magelite/api/**
 dev/magelite/relay/**
-dev/magelite/stats/StatsWatcher.java
 # Deck-Layer (Phase 2)
 dev/magelite/deck/BracketAnalyzer.java
 dev/magelite/deck/CardNameSuggester.java
