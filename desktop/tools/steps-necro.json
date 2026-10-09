@@ -54,7 +54,7 @@
    "click": "[data-testid=ability-activate]"
   },
   {
-   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.stack.length>=5)){clearInterval(t);r('Stapel: '+s.stack.length)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},20000)})"
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;if(s&&(s.stack.length>=5||s.players.find(p=>p.me).exile.length>=5)){clearInterval(t);r('Stapel: '+s.stack.length+' Exil: '+s.players.find(p=>p.me).exile.length)}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Zustand\")},20000)})"
   },
   {
    "jsFile": "wait-images.js"

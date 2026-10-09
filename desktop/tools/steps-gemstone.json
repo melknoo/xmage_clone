@@ -26,7 +26,7 @@
    "expect": "started|already"
   },
   {
-   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='ASK'&&!p.mulligan&&/battlefield/.test(p.messageText||''))){clearInterval(t);r('Frage: '+p.messageText+' | step='+s.step)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},60000)})"
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='ASK'&&!p.mulligan&&/battlefield|ins Spiel/.test(p.messageText||''))){clearInterval(t);r('Frage: '+p.messageText+' | step='+s.step)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},60000)})"
   },
   {
    "wait": 1200

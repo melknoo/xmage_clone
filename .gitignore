@@ -1,8 +1,3 @@
-# XMage-Dateien: Jars, Sample-Decks und Sounds sind versioniert.
-# Die Karten-DB (104 MB, ueber GitHub-Limit) wird beim ersten Start neu aufgebaut.
-vendor/xmage/db/
-vendor/xmage/tools-lib/
-
 # Java / Gradle
 engine/.gradle/
 engine/build/

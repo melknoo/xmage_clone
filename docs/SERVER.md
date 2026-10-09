@@ -83,9 +83,8 @@ Den Code sicher aufbewahren (Passwort-Manager); er wird beim Login eingegeben un
 
 Es gibt keine Karten-DB und keinen langen Erststart mehr (unter XMage baute der erste Start 45–160 s lang die H2-DB
 auf). Forge liest die Kartenskripte aus dem Image bei **jedem** Start; gemessen im Docker-Container (2 CPU/4 GB):
-Kaltstart 16,8 s, Warmstart 6,7 s, Heap nach Boot 157 MB (RSS ca. 610 MB). Der Health-Check (`fly.toml`) hat für den
-ersten Forge-Deploy `grace_period = "420s"` (Migration + Kaltboot der Maschine); nach einer Messung auf fly kann er
-auf ca. 120 s sinken. `fly deploy` immer mit `--ha=false` (eine Maschine; das Deploy-Skript macht das).
+Kaltstart 16,8 s, Warmstart 6,7 s, Heap nach Boot 157 MB (RSS ca. 610 MB); auf fly beim ersten Forge-Start (0.2.0,
+inkl. Migration) bereit nach 7,4 s. Der Health-Check (`fly.toml`) hat deshalb `grace_period = "120s"`. `fly deploy` immer mit `--ha=false` (eine Maschine; das Deploy-Skript macht das).
 
 ## Deploy
 
@@ -103,13 +102,13 @@ mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --r
 Docker gebaut:** `vendor/forge/{lib,res}` entstehen lokal durch `scripts\import-forge.ps1` (`build.ps1` macht das bei
 Bedarf) und kommen aus dem Build-Kontext ins Image.
 
-### Erster Forge-Deploy
+### Erster Forge-Deploy (erledigt mit 0.2.0 am 2026-10-09: 5 Decks, 0 unbekannt, 0 Fehler, 286 MB alte DB entfernt)
 
 - Die Engine stellt beim Start alle Decks aller Konten von XMage-`.dck` auf Decktext v2 um (`DeckMigration`, Migration
   V9). Vorher legt sie **einmal** die Sicherung `magelite.db.xmage-backup` neben der DB auf dem Volume an (`/data`) –
   der einzige Weg zurück zu XMage; der alte Text jedes Decks bleibt zusätzlich in `decks.dck_legacy`. Danach löscht
   `LegacyCleanup` die alte Karten-DB `db/cards.h2*` (ca. 63 MB frei).
-- `fly.toml` behält dafür `grace_period = "420s"` (Migration + Kaltboot), bis die Startzeit auf fly gemessen ist.
+- `fly.toml` hatte dafür `grace_period = "420s"` (Migration + Kaltboot); seit 0.2.1 wieder 120 s.
 - Im `fly logs` prüfen: `Forge … Karten, … Editionen`, `Deck-Umstellung: N Decks, K mit unbekannten Karten (…), F Fehler`,
   `XMage-Karten-DB entfernt`, danach `GET /api/health` und `node scripts\e2e-tables.mjs` gegen den Live-Server. Decks mit
   Karten, die Forge nicht kennt, sind nach der Umstellung ungültig (`valid=0`, Hinweis „Nach dem Wechsel auf Forge

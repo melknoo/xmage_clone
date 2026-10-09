@@ -33,10 +33,9 @@ primary_region = "fra"
   min_machines_running = 0
 
   [[http_service.checks]]
-    # Forge laedt die Kartenskripte bei jedem Start neu (keine persistente Karten-DB mehr); der erste Forge-Start
-    # kommt dazu mit Daten-Migration V9 (Decks -> Decktext v2) und Kaltboot der Maschine. Nach Messung auf fly ~120 s
-    # (Docker lokal: Kaltstart 11-17 s, Warmstart 7 s).
-    grace_period = "420s"
+    # Forge laedt die Kartenskripte bei jedem Start neu (keine persistente Karten-DB mehr). Gemessen auf fly beim
+    # ersten Forge-Start (0.2.0, inkl. Migration V9): bereit nach 7,4 s; 120 s laesst Puffer fuer kalte Maschinen.
+    grace_period = "120s"
     interval = "30s"
     timeout = "5s"
     method = "GET"

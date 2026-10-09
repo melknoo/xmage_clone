@@ -1149,7 +1149,7 @@ public final class HumanSpike {
                     gemResult = "FEHLER: nach Zug 2 nicht auf dem Spielfeld";
                 }
             }
-            if (!gemAsked && "ASK".equals(p.kind) && p.messageText != null && p.messageText.startsWith("Put Gemstone Caverns")) {
+            if (!gemAsked && "ASK".equals(p.kind) && p.messageText != null && p.messageText.contains("Gemstone Caverns")) {
                 if (s != null && s.step != null) {
                     gemResult = "FEHLER: Frage kam nicht vor dem Spiel (step=" + s.step + ")";
                 }

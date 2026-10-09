@@ -280,12 +280,12 @@ public final class SeatGui extends AbstractGuiGame {
 
     @Override
     public void message(String message, String title) {
-        host.toast(seat, "info", message);
+        host.toast(seat, "info", dev.magelite.view.ForgeText.german(message));
     }
 
     @Override
     public void showErrorDialog(String message, String title) {
-        host.toast(seat, "error", message);
+        host.toast(seat, "error", dev.magelite.view.ForgeText.german(message));
     }
 
     @Override

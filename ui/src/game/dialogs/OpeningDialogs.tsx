@@ -1,5 +1,6 @@
 // Starthand: Mulligan-Frage und Starthand-Aktion (Gemstone Caverns, Leylines, Chancellors).
 import type { ReactNode } from 'react'
+import { OPENING_HAND_RE } from '../promptActions'
 import type { Card } from '../../api/types'
 import { BoardModal } from '../../components/BoardModal'
 import { CardView } from '../../components/CardView'
@@ -75,13 +76,14 @@ export function MulliganDialog({ p, onHover, layout }: DialogProps) {
 }
 
 /**
- * Starthand-Aktion vor dem ersten Zug: XMage fragt nur per Ja/Nein - in der Aktionsleiste leicht zu uebersehen
+ * Starthand-Aktion vor dem ersten Zug: die Engine fragt nur per Ja/Nein - in der Aktionsleiste leicht zu uebersehen
  * oder mit Esc wegzudruecken. Darum ein eigener Dialog mit der Hand (nicht minimierbar).
  */
 export function OpeningHandDialog({ p, onHover, layout }: DialogProps) {
   const answer = useGame((s) => s.answer)
   const hand = useGame((s) => s.state?.hand ?? EMPTY)
-  const name = /^Put (.+?) (?:onto|on) the battlefield\?$/i.exec(p.messageText ?? '')?.[1]
+  const m = OPENING_HAND_RE.exec(p.messageText ?? '')
+  const name = m?.[1] ?? m?.[2]
   const put = () => answer({ bool: true })
   return (
     <BoardModal

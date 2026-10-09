@@ -30,7 +30,7 @@
     switch (p.kind) {
       case 'ASK':
         if (p.mulligan) return ans({ bool: false })
-        if (hold.openingHand && !s.step && /^Put .+ battlefield\?$/i.test(p.messageText || '')) return
+        if (hold.openingHand && !s.step && /^(Put .+ battlefield|.+ ins Spiel bringen)\?$/i.test(p.messageText || '')) return
         return ans({ bool: true })
       case 'SELECT': {
         if (p.mode === 'attackers') return hold.attack ? undefined : ans({ bool: true })

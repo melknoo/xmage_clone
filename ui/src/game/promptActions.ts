@@ -18,7 +18,8 @@ export interface PromptButton {
 }
 
 /** Pregame-Frage zu einer Starthand-Aktion (Gemstone Caverns, Leylines, Chancellors): eigener Dialog, keine Leisten-Knoepfe */
-export const OPENING_HAND_RE = /^Put .+ onto? the battlefield\?$/i
+/** Starthand-Frage der Engine: "X ins Spiel bringen?" (bis 0.2.0 englisch "Put X onto the battlefield?") */
+export const OPENING_HAND_RE = /^(?:Put (.+?) onto? the battlefield|(.+?) ins Spiel bringen)\?$/i
 export function isOpeningHandAsk(p: { kind: string; messageText?: string } | null | undefined, step: string | undefined | null): boolean {
   return !!p && p.kind === 'ASK' && !step && OPENING_HAND_RE.test(p.messageText ?? '')
 }

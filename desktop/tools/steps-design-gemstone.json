@@ -21,7 +21,7 @@
       "jsFile": "scenario-pilot.js"
     },
     {
-      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='ASK'&&!p.mulligan&&/battlefield/.test(p.messageText||'')&&g.answeredPromptId!==p.id){clearInterval(t);r('Frage: '+p.messageText+' | step='+g.state.step)}},200);setTimeout(()=>{clearInterval(t);r('keine Starthand-Frage')},30000)})"
+      "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;if(p&&p.kind==='ASK'&&!p.mulligan&&/battlefield|ins Spiel/.test(p.messageText||'')&&g.answeredPromptId!==p.id){clearInterval(t);r('Frage: '+p.messageText+' | step='+g.state.step)}},200);setTimeout(()=>{clearInterval(t);r('keine Starthand-Frage')},30000)})"
     },
     {
       "wait": 1200

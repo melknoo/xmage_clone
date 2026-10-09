@@ -1355,6 +1355,9 @@ public final class GameHost {
         if (prompt == null || frame.done()) {
             return;
         }
+        // Forges Knopftexte ("Yes"/"No"/"Top" ...) auf Deutsch
+        prompt.leftBtn = dev.magelite.view.ForgeText.button(prompt.leftBtn);
+        prompt.rightBtn = dev.magelite.view.ForgeText.button(prompt.rightBtn);
         HumanSeat seat = frame.seat;
         PromptDto old = openPrompt.getAndSet(null);
         if (old != null && promptSeat != null) {
@@ -1678,7 +1681,8 @@ public final class GameHost {
             }
         }
         if (r == null) {
-            String name = message == null || message.isBlank() ? "Aufgedeckt" : message.replace('\n', ' ').trim();
+            String name = message == null || message.isBlank() ? "Aufgedeckt"
+                    : dev.magelite.view.ForgeText.german(message.replace('\n', ' ').trim());
             r = new Reveal(idSet, name.length() > 80 ? name.substring(0, 79) + "…" : name, owner, ph.getTurn(), ph.getPhase());
             reveals.add(r);
             while (reveals.size() > 20) {

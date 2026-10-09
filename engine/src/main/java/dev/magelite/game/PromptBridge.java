@@ -227,7 +227,8 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
     private static PromptDto prompt(String kind, String message) {
         PromptDto p = new PromptDto();
         p.kind = kind;
-        String text = message == null ? "" : message.trim();
+        // feste Forge-Saetze auf Deutsch, Objekt-Nummern/Kontext weg (eigene Texte bleiben unveraendert)
+        String text = message == null ? "" : dev.magelite.view.ForgeText.german(message.trim());
         p.message = RichText.parse(text.replace("\n", "<br>"));
         p.messageText = text.replace('\n', ' ');
         return p;
@@ -317,7 +318,7 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
                 PromptDto p = prompt("ASK", mulliganText(gui().message));
                 p.mulligan = true;
                 p.leftBtn = "Mulligan";
-                p.rightBtn = "Keep";
+                p.rightBtn = "Behalten";
                 p.mulligans = seat.mulligans;
                 p.freeMulligan = seat.mulligans == 0 && game().getPlayers().size() > 2;
                 return p;
@@ -1219,7 +1220,7 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
         Dialog<Integer> d = new Dialog<>(seat) {
             @Override
             PromptDto build() {
-                PromptDto p = prompt("CHOOSE_CHOICE", "Choose replacement effect to resolve first");
+                PromptDto p = prompt("CHOOSE_CHOICE", "Welcher Ersatzeffekt zuerst?");
                 PromptDto.ChoiceDto c = new PromptDto.ChoiceDto();
                 c.message = p.messageText;
                 c.required = true;
