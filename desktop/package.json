@@ -2,7 +2,8 @@
   "name": "magelite",
   "productName": "MageLite",
   "version": "0.1.7",
-  "description": "Commander-Goldfish gegen 3 Bots (XMage-Engine)",
+  "description": "Commander-Goldfish gegen 3 Bots (Forge-Engine)",
+  "license": "GPL-3.0-or-later",
   "author": "MageLite",
   "main": "src/main.cjs",
   "private": true,
@@ -37,17 +38,30 @@
         "to": "ui"
       },
       {
-        "from": "../vendor/xmage",
-        "to": "xmage",
+        "from": "../vendor/forge",
+        "to": "forge",
         "filter": [
-          "**/*",
-          "!db/**",
-          "!tools-lib/**"
+          "res/**",
+          "forge.profile.properties",
+          "manifest.json",
+          "LICENSE-Forge.txt"
         ]
       },
       {
         "from": "out/jre",
         "to": "jre"
+      },
+      {
+        "from": "../LICENSE",
+        "to": "LICENSE.txt"
+      },
+      {
+        "from": "../LICENSES",
+        "to": "licenses"
+      },
+      {
+        "from": "out/SOURCE.txt",
+        "to": "SOURCE.txt"
       }
     ],
     "win": {

@@ -10,6 +10,24 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
+# Forge-Wache: Forge wird nicht im Docker gebaut, vendor\forge kommt aus dem Arbeitsverzeichnis (scripts\import-forge.ps1).
+# Ohne passende Jars/Skripte startet der Server nicht (ForgeBoot bricht ab) - dann lieber hier abbrechen als nach dem Upload.
+$forgeDir = Join-Path "vendor" "forge"
+$forgeManifest = Join-Path $forgeDir "manifest.json"
+$forgeCommitFile = Join-Path $forgeDir "FORGE_COMMIT"
+$forgeCards = Join-Path $forgeDir "res\cardsfolder\cardsfolder.zip"
+$forgeHint = "scripts\import-forge.ps1 ausfuehren (powershell -ExecutionPolicy Bypass -File scripts\import-forge.ps1)."
+if (-not (Test-Path $forgeCommitFile)) { Write-Error "vendor\forge\FORGE_COMMIT fehlt - $forgeHint" }
+if (-not (Test-Path $forgeManifest)) { Write-Error "vendor\forge\manifest.json fehlt - $forgeHint" }
+$wantCommit = (Get-Content $forgeCommitFile -Raw).Trim()
+$haveCommit = ((Get-Content $forgeManifest -Raw | ConvertFrom-Json).commit | Out-String).Trim()
+if ($haveCommit -ne $wantCommit) {
+    Write-Error "vendor\forge ($haveCommit) passt nicht zu FORGE_COMMIT ($wantCommit) - $forgeHint"
+}
+if (-not (Test-Path $forgeCards)) { Write-Error "vendor\forge\res\cardsfolder\cardsfolder.zip fehlt - $forgeHint" }
+if (-not (Test-Path (Join-Path $forgeDir "lib"))) { Write-Error "vendor\forge\lib fehlt - $forgeHint" }
+Write-Host ("Forge: Commit {0}" -f $wantCommit.Substring(0, [Math]::Min(12, $wantCommit.Length)))
+
 # flyctl finden: PATH, sonst winget-Paket, sonst Installer-Skript (~\.fly\bin)
 $fly = $null
 foreach ($name in @("fly", "flyctl")) {
@@ -62,9 +80,10 @@ $want = (Get-Content (Join-Path "desktop" "package.json") -Raw | ConvertFrom-Jso
 & $fly deploy --app $App --ha=false
 if ($LASTEXITCODE -ne 0) { Write-Error "fly deploy fehlgeschlagen (Exit $LASTEXITCODE)." }
 
-# Neue Version abwarten (Start inkl. Karten-DB dauert einige Sekunden)
+# Neue Version abwarten: Kaltboot der Maschine + Forge-Boot (Kartenskripte laden bei jedem Start) + beim ersten Forge-Deploy
+# die Daten-Migration; 36 x 5 s = 3 min
 $live = $null
-for ($i = 0; $i -lt 24; $i++) {
+for ($i = 0; $i -lt 36; $i++) {
     try {
         $h = Invoke-RestMethod -Uri $url -TimeoutSec 20
         $live = $h.version

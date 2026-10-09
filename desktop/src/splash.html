@@ -19,8 +19,8 @@
       .mark, .label { font-family: "Barlow Condensed", "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif; text-transform: uppercase; line-height: 1; }
       .mark { font-weight: 700; font-size: 34px; letter-spacing: .08em; color: #ff7a3d; }
       .track { width: 240px; height: 2px; background: #2a2824; overflow: hidden; }
-      /* Pseudo-Fortschritt: einmalig 0 -> 90 % ueber 90 s (keine Endlosschleife) */
-      .fill { width: 0; height: 100%; background: #ff7a3d; animation: fill 90s cubic-bezier(.2,.8,.2,1) forwards; }
+      /* Pseudo-Fortschritt: einmalig 0 -> 90 % ueber 20 s (keine Endlosschleife; Forge-Start dauert ca. 5-10 s) */
+      .fill { width: 0; height: 100%; background: #ff7a3d; animation: fill 20s cubic-bezier(.2,.8,.2,1) forwards; }
       @keyframes fill { from { width: 0; } to { width: 90%; } }
       .label { font-weight: 600; font-size: 13px; letter-spacing: .12em; color: #9b958a; }
       .hint { margin: 0; font-size: 12.5px; line-height: 1.4; color: #6f6a62; }
@@ -30,7 +30,7 @@
   <body>
     <span class="mark">MageLite</span>
     <div class="track"><div class="fill"></div></div>
-    <span class="label">Engine startet – Kartendatenbank wird geladen …</span>
-    <p class="hint">Beim allerersten Start wird die Datenbank aufgebaut (ca. 1–2 Minuten).</p>
+    <span class="label">Engine startet – Karten werden geladen …</span>
+    <p class="hint">Die Kartenskripte werden bei jedem Start eingelesen (wenige Sekunden).</p>
   </body>
 </html>

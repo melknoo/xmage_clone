@@ -160,10 +160,8 @@ Die echte App einmal starten und nach X ms abfotografieren (beendet sich danach)
 ## 7. Release: Windows-Installer
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts
-elease.ps1          # Version +1, bauen, Setup, still installieren
-powershell -ExecutionPolicy Bypass -File scripts
-elease.ps1 -Fly     # dazu fly-Deploy (braucht committeten Stand)
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1          # Version +1, bauen, Setup, still installieren
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -Fly     # dazu fly-Deploy (braucht committeten Stand)
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1          # nur Setup bauen -> desktop\dist\MageLite-Setup-<version>.exe
 ```
 
@@ -176,12 +174,17 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1          # nur Setu
 
 - Braucht zum Bauen ein **JDK 17+** (wegen `jlink`/`jdeps`, ein JRE reicht nicht) und Node.js. Auf dem Ziel-PC
   muss nichts installiert sein.
-- Ablauf: `build.ps1` → Module per `jdeps` + feste Extraliste (`$extraModules` im Skript) → `jlink` nach
-  `desktop\out\jre` → `electron-builder` (Konfiguration im `build`-Block von `desktop/package.json`).
-- Gepackte App: `resources/{engine/lib, ui, xmage, jre}`; `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst.
-  Die Karten-DB wird nicht mitgeliefert, sondern beim ersten Start in `%APPDATA%\MageLite\engine\db` gebaut.
+- Ablauf: `build.ps1` (importiert Forge bei Bedarf) → Forge-Prüfung (`cardsfolder.zip`, `manifest.json`) →
+  `desktop\out\SOURCE.txt` (Repo-Commit, Forge-Commit, GPL-Hinweis; vorher committen, sonst steht dort
+  „UNCOMMITTETE AENDERUNGEN“) → Module per `jdeps -R` + Extraliste (`$extraModules`) → `jlink` nach `desktop\out\jre`
+  → **Smoke-Start** der Engine mit dieser JRE (wartet auf `MAGELITE_READY`, bricht sonst mit Log ab) →
+  `electron-builder` (Konfiguration im `build`-Block von `desktop/package.json`).
+- Gepackte App: `resources/{engine/lib, ui, forge, jre, licenses, LICENSE.txt, SOURCE.txt}`; `forge` = `vendor/forge`
+  ohne Jars (`res/**`, `manifest.json`, `forge.profile.properties`, `LICENSE-Forge.txt`), die Forge-Jars liegen in
+  `engine/lib`. `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst. Forge liest die Kartenskripte bei jedem
+  Start (wenige Sekunden), es gibt keine Karten-DB mehr.
 - Installer: NSIS, pro Nutzer (kein Admin), Zielordner wählbar, Desktop-/Startmenü-Verknüpfung.
-- Setup.exe ca. 320 MB; Ziel: Windows 10/11 x64, ≥ 8 GB RAM empfohlen (Engine `-Xmx3g`).
+- Setup.exe ca. 205 MB (entpackt ca. 500 MB); Ziel: Windows 10/11 x64, ≥ 8 GB RAM empfohlen (Engine `-Xmx3g`).
 - EXE ist **nicht signiert** → SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“. Signieren ginge über
   Azure Trusted Signing oder ein OV-Zertifikat (kostenpflichtig), aktuell nicht geplant.
 - Fehlt der Laufzeit ein Modul: `NoClassDefFoundError`/`ClassNotFoundException` in `%APPDATA%\MageLite\desktop.log`

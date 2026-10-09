@@ -1,7 +1,8 @@
 <#
   Neue Version bauen und installieren - ein Aufruf fuer alles:
     1. Version erhoehen (desktop/package.json = einzige Quelle; Engine, Installer und /api/health lesen sie)
-    2. package.ps1: build.ps1 (danach startet MageLite.cmd den neuen Stand) + Java-Laufzeit + Setup-EXE
+    2. package.ps1: build.ps1 (danach startet MageLite.cmd den neuen Stand; holt bei Bedarf Forge per import-forge.ps1)
+       + Java-Laufzeit + Smoke-Start der Engine (Forge-Boot) + Setup-EXE
     3. Setup still installieren (Benutzerdaten in %APPDATA%\MageLite bleiben) und installierte Version pruefen
     4. optional: Setup als GitHub-Release veroeffentlichen und auf fly.io deployen (-Fly)
 
@@ -102,7 +103,7 @@ if (-not $?) { Fail 'package.ps1 fehlgeschlagen' }
 $setup = Join-Path $desktop "dist\MageLite-Setup-$version.exe"
 if (-not (Test-Path $setup)) { Fail "Setup fehlt: $setup" }
 
-# alte Setups aufraeumen (je ~320 MB), die neuesten 2 bleiben
+# alte Setups aufraeumen (je ~205 MB), die neuesten 2 bleiben
 Get-ChildItem (Join-Path $desktop 'dist') -Filter 'MageLite-Setup-*.exe' | Sort-Object LastWriteTime -Descending |
     Select-Object -Skip 2 | ForEach-Object {
         Write-Host "Entferne altes Setup: $($_.Name)"

@@ -33,7 +33,9 @@ primary_region = "fra"
   min_machines_running = 0
 
   [[http_service.checks]]
-    # Der allererste Start baut die Karten-DB auf dem Volume (im Docker-Test 160 s), danach 2-6 s.
+    # Forge laedt die Kartenskripte bei jedem Start neu (keine persistente Karten-DB mehr); der erste Forge-Start
+    # kommt dazu mit Daten-Migration V9 (Decks -> Decktext v2) und Kaltboot der Maschine. Nach Messung auf fly ~120 s
+    # (Docker lokal: Kaltstart 11-17 s, Warmstart 7 s).
     grace_period = "420s"
     interval = "30s"
     timeout = "5s"

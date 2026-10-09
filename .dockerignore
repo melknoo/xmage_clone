@@ -10,8 +10,16 @@ ui/*.tsbuildinfo
 engine/run
 engine/build
 engine/.gradle
-vendor/xmage/db
-vendor/xmage/tools-lib
+# Forge: nur vendor/forge/{lib,res,...} gehoert in den Kontext (lokal gebaut, scripts\import-forge.ps1); Overrides sind
+# bereits im cardsfolder.zip, forge.tmp ist ein halbfertiger Import
+vendor/forge-overrides
+vendor/forge.tmp
+# Reste der XMage-Zeit (Karten-DB 104 MB, nicht mehr verwendet)
+vendor/xmage
 *.log
 design
 cloudflare_token
+# Zugangsdaten nie in den Kontext (engine/run ist oben schon ausgeschlossen)
+**/deploy-secrets.txt
+**/.env
+**/.env.*

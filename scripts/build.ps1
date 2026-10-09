@@ -26,8 +26,17 @@ if ($javaVersion -match 'version "(1\.)?(\d+)') {
 }
 Write-Host "Node: $(& node --version)"
 
-if (-not (Test-Path (Join-Path $root 'vendor\forge\res\cardsfolder\cardsfolder.zip'))) {
-    Write-Host '== Forge bauen und importieren (einmalig, braucht Git und JDK 17+)'
+# Forge neu importieren, wenn er fehlt oder nicht zum gepinnten Commit passt (vendor/forge/FORGE_COMMIT)
+$forgeOk = $false
+$manifest = Join-Path $root 'vendor\forge\manifest.json'
+if ((Test-Path $manifest) -and (Test-Path (Join-Path $root 'vendor\forge\res\cardsfolder\cardsfolder.zip'))) {
+    $want = (Get-Content (Join-Path $root 'vendor\forge\FORGE_COMMIT') -Raw).Trim()
+    $have = (Get-Content $manifest -Raw | ConvertFrom-Json).commit
+    $forgeOk = ($have -eq $want)
+    if (-not $forgeOk) { Write-Host "Forge-Stand $have passt nicht zu FORGE_COMMIT $want" }
+}
+if (-not $forgeOk) {
+    Write-Host '== Forge bauen und importieren (braucht Git und JDK 17+, Maven wird selbst geladen; erster Lauf einige Minuten)'
     & (Join-Path $PSScriptRoot 'import-forge.ps1')
 }
 
