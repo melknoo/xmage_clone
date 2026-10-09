@@ -323,6 +323,13 @@ public final class GameHost {
     private final List<Integer> eliminationOrder = new ArrayList<>();
     private final Map<Integer, Integer> eliminatedTurn = new LinkedHashMap<>();
     private volatile Player thinking;
+    /** Bot entscheidet gerade (seit wann); "denkt" wird erst nach 300 ms gemeldet */
+    private volatile Player deciding;
+    private volatile long decidingSince;
+    /** Pause vor der naechsten Entscheidung (nach einer sichtbaren Bot-Aktion), Spiel-Thread */
+    private int pendingPauseMs;
+    /** aufgedeckte/angesehene Karten (Spiel-Thread) */
+    private final List<Reveal> reveals = new ArrayList<>();
     private volatile int turn;
     private volatile Messages.GameOver gameOver;
     private volatile Consumer<GameHost> onFinished;
@@ -1237,6 +1244,7 @@ public final class GameHost {
 
     public void setTempo(TempoSettings.Preset preset) {
         tempo.apply(preset);
+        inbox.add(() -> game.AI_TIMEOUT = Math.max(1, tempo.thinkSecs()));
     }
 
     public void setAutoPayDefault(HumanSeat seat, boolean on) {
@@ -1372,6 +1380,12 @@ public final class GameHost {
             decisionTurn = t;
             decisionsThisTurn = 0;
         }
+        if (pendingPauseMs > 0) {
+            int ms = pendingPauseMs;
+            pendingPauseMs = 0;
+            sendState(null, PromptBridge.StateMode.NONE); // erst zeigen, dann warten
+            pause(ms);
+        }
         if (++decisionsThisTurn > MAX_DECISIONS_PER_TURN && !game.isGameOver()) {
             LOG.warn("Endlosschleife vermutet: " + decisionsThisTurn + " Entscheidungen in Zug " + t + " - Unentschieden");
             addLog("INFO", "Endlosschleife erkannt – das Spiel endet unentschieden.");
@@ -1380,12 +1394,38 @@ public final class GameHost {
         onUpdate();
     }
 
-    /** Bot denkt (Status an alle, wenn er wechselt). */
+    /** Bot beginnt/beendet eine Entscheidung; "denkt" meldet der Wachhund erst nach 300 ms. */
     void botThinking(Player bot, boolean on) {
-        if (on && thinking != bot) {
-            thinking = bot;
-            flushStateIfDirty();
-            emitPublic(new Messages.Status(ids.player(bot.getId()), false, bot.getName()));
+        if (on) {
+            decidingSince = System.currentTimeMillis();
+            deciding = bot;
+        } else {
+            deciding = null;
+            if (thinking == bot) {
+                thinking = null;
+            }
+        }
+    }
+
+    /** Pause vor der naechsten Entscheidung (Bot-Aktion sichtbar machen); Spiel-Thread. */
+    void requestPause(int ms) {
+        pendingPauseMs = Math.max(pendingPauseMs, ms);
+    }
+
+    /** Spiel-Thread wartet, arbeitet dabei Kommandos ab (Antworten, Aufgeben, Tempo). */
+    private void pause(int ms) {
+        long until = System.currentTimeMillis() + ms;
+        long left;
+        while ((left = until - System.currentTimeMillis()) > 0 && !aborting) {
+            try {
+                Runnable cmd = inbox.poll(left, TimeUnit.MILLISECONDS);
+                if (cmd != null) {
+                    run(cmd);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 
@@ -1452,6 +1492,7 @@ public final class GameHost {
                 s.pass.cachedActions = null;
             }
             StateDto st = mapper.map(s.player, seq, pl, thinking, deckNames);
+            addReveals(st, s.player);
             if (!s.replDeclineAlways.isEmpty()) {
                 st.replDeclines = new ArrayList<>(new java.util.LinkedHashSet<>(s.replDeclineAlways.values()));
             }
@@ -1484,6 +1525,7 @@ public final class GameHost {
             }
             HumanSeat vs = viewpoint == null ? null : humans.get(viewpoint);
             StateDto pub = mapper.mapPublic(vs == null ? null : vs.player, seq, thinking, deckNames);
+            addReveals(pub, null);
             synchronized (specLock) {
                 publicState = pub;
                 sendSpectators(pub);
@@ -1545,6 +1587,100 @@ public final class GameHost {
             seat.sink.send(msg);
         } catch (Throwable e) {
             LOG.warn("Senden fehlgeschlagen: " + e);
+        }
+    }
+
+    // ------------------------------------------------------------------ Aufgedeckte / angesehene Karten
+
+    /**
+     * Ein Aufdecken: Karten (je Empfaenger als DTO aus dessen Sicht, waehrend Forge sie ihm zeigt), Empfaenger und
+     * Zeitpunkt. Oeffentlich, wenn alle Spieler im Spiel (ggf. ohne den Besitzer) es gesehen haben.
+     */
+    private static final class Reveal {
+        final Set<Integer> cardIds;
+        final String name;
+        final Set<Player> recipients = new HashSet<>();
+        final Map<Player, List<dev.magelite.view.dto.CardDto>> dtos = new LinkedHashMap<>();
+        final Player owner;
+        final int turn;
+        final forge.game.phase.PhaseType phase;
+        List<dev.magelite.view.dto.CardDto> publicDtos;
+
+        Reveal(Set<Integer> cardIds, String name, Player owner, int turn, forge.game.phase.PhaseType phase) {
+            this.cardIds = cardIds;
+            this.name = name;
+            this.owner = owner;
+            this.turn = turn;
+            this.phase = phase;
+        }
+    }
+
+    /** Spiel-Thread: ein Spieler bekommt Karten gezeigt ({@code SeatGui.reveal} bzw. {@code ForgeBot.reveal}). */
+    void noteReveal(Player recipient, String message, java.util.Collection<forge.game.card.Card> cards, Player owner) {
+        if (cards == null || cards.isEmpty() || recipient == null) {
+            return;
+        }
+        Set<Integer> idSet = new HashSet<>();
+        for (forge.game.card.Card c : cards) {
+            idSet.add(c.getId());
+        }
+        forge.game.phase.PhaseHandler ph = game.getPhaseHandler();
+        Reveal r = null;
+        for (int i = reveals.size() - 1; i >= 0; i--) {
+            Reveal x = reveals.get(i);
+            if (x.cardIds.equals(idSet) && x.turn == ph.getTurn() && x.phase == ph.getPhase() && !x.recipients.contains(recipient)) {
+                r = x;
+                break;
+            }
+        }
+        if (r == null) {
+            String name = message == null || message.isBlank() ? "Aufgedeckt" : message.replace('\n', ' ').trim();
+            r = new Reveal(idSet, name.length() > 80 ? name.substring(0, 79) + "…" : name, owner, ph.getTurn(), ph.getPhase());
+            reveals.add(r);
+            while (reveals.size() > 20) {
+                reveals.remove(0);
+            }
+        }
+        r.recipients.add(recipient);
+        if (humans.containsKey(ids.player(recipient.getId()))) {
+            List<dev.magelite.view.dto.CardDto> dtos = new ArrayList<>();
+            for (forge.game.card.Card c : cards) {
+                dtos.add(mapper.card(c, recipient.getView()));
+            }
+            r.dtos.put(recipient, dtos);
+            if (r.publicDtos == null) {
+                r.publicDtos = dtos;
+            }
+        }
+    }
+
+    /** Aufgedeckte Karten in den State: oeffentlich -> revealed, nur fuer mich -> lookedAt. Alte verfallen. */
+    private void addReveals(StateDto st, Player viewer) {
+        forge.game.phase.PhaseHandler ph = game.getPhaseHandler();
+        reveals.removeIf(r -> (r.turn != ph.getTurn() || r.phase != ph.getPhase()) && game.getStack().isEmpty());
+        if (reveals.isEmpty()) {
+            return;
+        }
+        List<dev.magelite.view.dto.NamedCardsDto> pub = new ArrayList<>();
+        List<dev.magelite.view.dto.NamedCardsDto> mine = new ArrayList<>();
+        for (Reveal r : reveals) {
+            boolean everyone = true;
+            for (Player p : game.getPlayers()) {
+                if (p != r.owner && !r.recipients.contains(p)) {
+                    everyone = false;
+                    break;
+                }
+            }
+            if (everyone && r.publicDtos != null) {
+                List<dev.magelite.view.dto.CardDto> d = viewer != null && r.dtos.containsKey(viewer) ? r.dtos.get(viewer) : r.publicDtos;
+                pub.add(new dev.magelite.view.dto.NamedCardsDto(r.name, d));
+            } else if (viewer != null && r.dtos.containsKey(viewer)) {
+                mine.add(new dev.magelite.view.dto.NamedCardsDto(r.name, r.dtos.get(viewer)));
+            }
+        }
+        st.revealed = pub.isEmpty() ? null : pub;
+        if (viewer != null) {
+            st.lookedAt = mine.isEmpty() ? null : mine;
         }
     }
 
@@ -1637,6 +1773,11 @@ public final class GameHost {
             if (ticks % 4 == 0 && humans.size() > 1
                     && humans.values().stream().anyMatch(s -> !s.conceded && !s.connected())) {
                 broadcastSeats();
+            }
+            Player d = deciding;
+            if (d != null && thinking != d && now - decidingSince > 300) {
+                thinking = d;
+                emitPublic(new Messages.Status(ids.player(d.getId()), false, d.getName()));
             }
             if (!fx.isEmpty() && now - lastFxAt > FX_FLUSH_AFTER_MS) {
                 flushFx(); // kein State in Sicht (gedrosselt/wartend): Ereignisse trotzdem zeigen

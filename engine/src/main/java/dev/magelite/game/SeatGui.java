@@ -147,9 +147,24 @@ public final class SeatGui extends AbstractGuiGame {
         return host.bridge().choices(seat, message, Math.max(0, min), max < 0 ? choices.size() : max, choices, display);
     }
 
+    /** Forge zeigt dem Spieler Karten (aufdecken, ansehen): nie blockieren, fuer revealed/lookedAt merken. */
     @Override
     public <T> void reveal(String message, List<T> items) {
-        // nie blockieren; Anzeige der aufgedeckten Karten folgt in Phase 1 (revealed/lookedAt)
+        if (!onGameThread() || items == null || items.isEmpty()) {
+            return;
+        }
+        List<forge.game.card.Card> cards = new ArrayList<>();
+        forge.game.player.Player owner = null;
+        for (T t : items) {
+            if (t instanceof CardView cv) {
+                forge.game.card.Card c = host.game().findById(cv.getId());
+                if (c != null) {
+                    cards.add(c);
+                    owner = owner == null ? c.getOwner() : owner;
+                }
+            }
+        }
+        host.noteReveal(seat.player(), message, cards, owner);
     }
 
     @Override
@@ -245,10 +260,15 @@ public final class SeatGui extends AbstractGuiGame {
     @Override
     public List<CardView> manipulateCardList(String title, Iterable<CardView> cards, Iterable<CardView> manipulable, boolean toTop,
                                              boolean toBottom, boolean toAnywhere) {
-        host.bridge().auto(seat, "manipulateCardList", title);
-        List<CardView> out = new ArrayList<>();
-        cards.forEach(out::add);
-        return out;
+        List<CardView> all = new ArrayList<>();
+        cards.forEach(all::add);
+        List<CardView> movable = new ArrayList<>();
+        manipulable.forEach(movable::add);
+        if (movable.size() < 2 || movable.size() != all.size()) {
+            host.bridge().auto(seat, "manipulateCardList", title);
+            return all;
+        }
+        return host.bridge().order(seat, title, toTop ? "oben zuerst" : "", all);
     }
 
     @Override

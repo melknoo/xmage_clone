@@ -5,16 +5,17 @@ import forge.LobbyPlayer;
 import forge.ai.LobbyPlayerAi;
 import forge.ai.PlayerControllerAi;
 import forge.game.Game;
+import forge.game.card.CardCollectionView;
 import forge.game.combat.Combat;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
+import forge.game.zone.ZoneType;
 
 import java.util.List;
 
 /**
  * Forge-KI eines Bot-Sitzes (Profil {@link ForgeBoot#AI_PROFILE}). Vor jeder Entscheidung ein Safe-Point (inbox,
- * gedrosselter State, "denkt"-Status); nach Kampf-Erklaerungen der State fuer die Menschen. Pausen (Tempo) folgen in
- * Phase 1.
+ * gedrosselter State, "denkt"-Status); nach sichtbaren Aktionen eine Pause (Tempo) vor der naechsten Entscheidung.
  */
 public final class ForgeBot extends PlayerControllerAi {
 
@@ -32,17 +33,31 @@ public final class ForgeBot extends PlayerControllerAi {
             return null;
         }
         host.botThinking(getPlayer(), true);
+        List<SpellAbility> chosen;
         try {
-            return super.chooseSpellAbilityToPlay();
+            chosen = super.chooseSpellAbilityToPlay();
         } finally {
             host.botThinking(getPlayer(), false);
         }
+        if (chosen != null && chosen.stream().anyMatch(sa -> !sa.isManaAbility())) {
+            host.requestPause(host.getTempo().actionDelayMs()); // Aktion erst sichtbar machen, dann weiter
+        }
+        return chosen;
+    }
+
+    @Override
+    public void reveal(CardCollectionView cards, ZoneType zone, Player owner, String message, boolean addSuffix) {
+        host.noteReveal(getPlayer(), message, cards, owner);
+        super.reveal(cards, zone, owner, message, addSuffix);
     }
 
     @Override
     public void declareAttackers(Player attacker, Combat combat) {
         host.safePoint();
         super.declareAttackers(attacker, combat);
+        if (!combat.getAttackers().isEmpty()) {
+            host.requestPause(host.getTempo().combatDelayMs());
+        }
         host.onUpdate();
     }
 
@@ -50,6 +65,9 @@ public final class ForgeBot extends PlayerControllerAi {
     public void declareBlockers(Player defender, Combat combat) {
         host.safePoint();
         super.declareBlockers(defender, combat);
+        if (!combat.getAllBlockers().isEmpty()) {
+            host.requestPause(host.getTempo().combatDelayMs());
+        }
         host.onUpdate();
     }
 

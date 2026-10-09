@@ -7,6 +7,7 @@ import dev.magelite.deck.LoadedDeck;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameSetup;
 import dev.magelite.game.TempoSettings;
+import dev.magelite.stats.StatsSink;
 import dev.magelite.view.dto.CardDto;
 import dev.magelite.view.dto.Messages;
 import dev.magelite.view.dto.PermanentDto;
@@ -78,8 +79,8 @@ public final class HumanSpike {
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
         String scenario = opt.get("scenario");
         boolean spectate = opt.containsKey("spectate");
-        if (scenario != null) {
-            throw new IllegalArgumentException("Szenarien folgen in Phase 1 (Forge-Umbau): " + scenario);
+        if (scenario != null && !Scenarios.exists(scenario)) {
+            throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
         }
 
         // Forge-POC: Sample-Decks noch aus vendor/xmage (Phase 2: Classpath, Decktext v2)
@@ -173,6 +174,9 @@ public final class HumanSpike {
         host.getTempo().setActionDelayMs(0);
         host.getTempo().setCombatDelayMs(0);
         host.setTurnCap(turnCap);
+        if (scenario != null) {
+            host.setScenario(Scenarios.hooks(scenario));
+        }
 
         out("Spiel %d: Menschen=%s vs Bots=%s", nr, decks.subList(0, humans).stream().map(LoadedDeck::name).toList(),
                 decks.subList(humans, 4).stream().map(LoadedDeck::name).toList());
@@ -408,6 +412,13 @@ public final class HumanSpike {
             out("  Verlorene Antworten neu zugestellt (XMage-Race): %d", recovered.get());
         }
         out("  Ereignisse (events): %s%s", fxKinds.isEmpty() ? "KEINE" : fxKinds, fxLeaks > 0 ? " | FEHLER: " + fxLeaks + " verdeckte Karten an Fremde" : "");
+        StatsSink stats = StatsSink.of(host.getId(), firstSeat.playerId());
+        if (stats != null) {
+            out("  Statistik (Sitz 1): Zuege=%d | Laender=%d | Zauber=%d (Commander %d, erster in Zug %s) | gezogen=%d | Schaden=%d (Commander %d) | Startkarten=%d",
+                    stats.humanTurns(), stats.landsPlayed(), stats.spellsCast(), stats.commanderCasts(), stats.firstCommanderTurn(),
+                    stats.cardsDrawn(), stats.damageDealt(), stats.commanderDamageDealt(),
+                    stats.cards().values().stream().filter(c -> c.opening).count());
+        }
         chains.report();
         boolean specOk = foreignPrompts.get() == 0;
         host.awaitEnd(10_000);
@@ -850,6 +861,9 @@ public final class HumanSpike {
 
         /** Szenario convoke: F9 im Gegnerzug abbrechen (F3), erneut F9, per "Passen manuell" abbrechen. */
         void convokeState(StateDto s) {
+            if (cvX == null && s.stack != null && !s.stack.isEmpty() && "Blaze".equals(s.stack.get(0).name)) {
+                cvX = s.stack.get(0).x;
+            }
             PlayerDto me = me(s);
             if (me == null || s.turn == cvTurn) {
                 return;
@@ -954,10 +968,6 @@ public final class HumanSpike {
                         return true;
                     }
                     if ("PICK_TARGET".equals(p.kind) && p.targets != null && !p.targets.isEmpty()) {
-                        CardDto top = s.stack.isEmpty() ? null : s.stack.get(0);
-                        if (top != null && "Blaze".equals(top.name)) {
-                            cvX = top.x;
-                        }
                         UUID opp = s.players.stream().filter(pl -> !pl.me && !pl.lost && p.targets.contains(pl.id)).map(pl -> pl.id).findFirst().orElse(p.targets.get(0));
                         lastPrompt = p;
                         host.respond(seat, p.id, GameHost.Response.ofUuid(opp));
@@ -1001,29 +1011,36 @@ public final class HumanSpike {
                     }
                     cvNotes.add("Mana-Prompt: '" + p.specialBtn + "', " + n + " Kreaturen, " + lands + " Laender frei");
                     cvPhase = 3;
+                    // Forge fragt Einberufen vor dem Mana: erst die Kreaturen (Watchwolf zuerst), dann die Laender automatisch
+                    UUID pick = cvWolf != null && p.specialTargets != null && p.specialTargets.contains(cvWolf) ? cvWolf
+                            : p.specialTargets == null || p.specialTargets.isEmpty() ? null : p.specialTargets.get(0);
                     lastPrompt = p;
-                    host.autoPayNow(seat); // nur Laender (Teilzahlung)
+                    if (pick == null || !host.specialPay(seat, p.id, pick)) {
+                        cvFail("specialPay abgelehnt");
+                        cvPhase = 99;
+                        return false;
+                    }
+                    cvClicks++;
                     return true;
                 }
                 case 3 -> {
                     if ("PLAY_MANA".equals(p.kind)) {
-                        long lands = me.battlefield.stream().filter(c -> !c.tapped && c.types != null && c.types.contains("LAND")).count();
-                        if (cvClicks == 0 && lands != 0) {
-                            cvFail("nach Automatisch bezahlen noch " + lands + " Laender frei");
-                        }
-                        if (p.specialTargets == null || p.specialTargets.isEmpty()) {
-                            cvFail("Mana-Prompt ohne einberufbare Kreaturen: '" + p.messageText + "'");
-                            cvPhase = 99;
-                            return false;
-                        }
-                        UUID pick = cvClicks == 0 && cvWolf != null && p.specialTargets.contains(cvWolf) ? cvWolf : p.specialTargets.get(0);
-                        cvClicks++;
                         lastPrompt = p;
-                        if (!host.specialPay(seat, p.id, pick)) {
-                            cvFail("specialPay abgelehnt");
+                        if (cvClicks < 6 && p.specialTargets != null && !p.specialTargets.isEmpty()) {
+                            if (!host.specialPay(seat, p.id, p.specialTargets.get(0))) {
+                                cvFail("specialPay abgelehnt");
+                                cvPhase = 99;
+                                return false;
+                            }
+                            cvClicks++;
+                            return true;
+                        }
+                        if (cvClicks < 6) {
+                            cvFail("Mana-Prompt ohne einberufbare Kreaturen nach " + cvClicks + " Klicks: '" + p.messageText + "'");
                             cvPhase = 99;
                             return false;
                         }
+                        host.autoPayNow(seat); // Rest mit den Laendern
                         return true;
                     }
                     if ("CHOOSE_ABILITY".equals(p.kind) || "PICK_TARGET".equals(p.kind) || "CHOOSE_CHOICE".equals(p.kind)) {

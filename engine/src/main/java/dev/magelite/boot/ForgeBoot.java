@@ -97,6 +97,8 @@ public final class ForgeBoot {
             prefs.setPref(FPref.AUTO_UPDATE, "none");
             // Passen entscheidet MageLite je Sitz (AutoPassPolicy), nie Forges globale Pref
             prefs.setPref(FPref.YIELD_AUTO_PASS_NO_ACTIONS, false);
+            // sonst fragt Forge bei aufgedeckten Gegner-Haenden "OK / Zug beenden" und nutzt eigene Kartenlisten-Dialoge
+            prefs.setPref(FPref.UI_SELECT_FROM_CARD_DISPLAYS, false);
             return null;
         });
         Thread.setDefaultUncaughtExceptionHandler(previous);
