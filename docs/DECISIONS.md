@@ -224,3 +224,20 @@ Kurze Begründungen für die wichtigsten Weichenstellungen. Neue Entscheidungen 
     leer. Zählbasis ist `users.created_ip/created_at`.
   - **Keine Konto-Aufzählung:** Registrierung, „erneut senden“ und „Passwort vergessen“ antworten immer gleich;
     bestehende Konten bekommen eine Hinweis-Mail statt einer Fehlermeldung.
+
+- **Regel-Engine: Forge statt XMage (Go nach POC, 2026-10-09; Branch `forge`).** XMage 1.4.60 war zu langsam
+  (Ø ~5 s, bis 50 s pro Bot-Zug, Heap-OOM in 15–19 % der Blitz-Spiele), hatte eine Antwort-Race, Blocker-Rekursion,
+  eine H2-Karten-DB mit Interrupt-Bug und keine neuen Sets. Forge (GPL-3.0) ist gepflegt, hat ~33.500 Karten als
+  Textskripte und eine heuristische, schnelle KI.
+  - **POC-Ergebnis** (Kriterien und Zahlen in `docs/STATUS.md`): 60 Spike-Spiele ohne Hänger, Bots Ø 0,87 s/Zug,
+    Antwort→State p95 < 50 ms, Heap nach GC ~200 MB, Boot 3–4 s, 4 Menschen + Zuschauer ohne Lecks.
+  - **Lizenz:** MageLite wird GPL-3.0-or-later (Forge läuft im selben Prozess = abgeleitetes Werk); das Repo ist
+    deshalb öffentlich.
+  - **Gepinnter master-Commit, selbst gebaut** (`vendor/forge/FORGE_COMMIT`, `scripts/import-forge.ps1`): Forge-Releases
+    sind selten, die Front-End-Schnittstelle (PR #12091) gibt es nur auf master. Build-Ausgabe wird nicht getrackt.
+  - **Eigene GUI-Schicht statt `HostedMatch`/`ProtocolGuiGame`:** `SeatGui extends AbstractGuiGame` parkt den
+    Spiel-Thread in `awaitInput` und führt Client-Antworten dort aus (inbox) – keine Antwort-Threads, also keine
+    Race wie bei XMage. WS-Protokoll, DTOs und UI bleiben; die Engine emuliert die XMage-Wire-Namen.
+  - **Schutznetze, die Forge nicht hat:** ungültige Angriffe/Blocks werden aufgelöst statt endlos neu gefragt,
+    > 3000 Entscheidungen in einem Zug beenden das Spiel als Remis (Regel 104.4b), KI-Profil „MageLite“ ohne
+    Zufalls-Trades beim Blocken (sonst Minuten auf Token-Boards).
