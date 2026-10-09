@@ -583,12 +583,12 @@ public final class TableManager {
                     LoadedDeck d = decks.resolve(s.userId, s.deck, usedSamples);
                     Long deckId = DeckResolver.userDeckId(s.deck);
                     specs.add(GameSetup.SeatSpec.human(s.userId, s.name, d, deckId));
-                    remoteSeats.add(new RemoteGameSpec.Seat(true, s.userId, s.name, deckId, d.name(), d.dck(), null, null));
+                    remoteSeats.add(new RemoteGameSpec.Seat(true, s.userId, s.name, deckId, d.name(), d.text(), null, null));
                 }
                 case BOT -> {
                     LoadedDeck d = decks.resolve(host.id(), s.deck, usedSamples);
                     specs.add(GameSetup.SeatSpec.bot(d));
-                    remoteSeats.add(new RemoteGameSpec.Seat(false, 0, null, null, d.name(), d.dck(), null, null));
+                    remoteSeats.add(new RemoteGameSpec.Seat(false, 0, null, null, d.name(), d.text(), null, null));
                 }
                 default -> {
                     // offen -> faellt weg

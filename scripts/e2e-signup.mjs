@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const lib = path.join(root, 'engine', 'build', 'install', 'magelite-engine', 'lib')
-const vendor = path.join(root, 'vendor', 'xmage')
+const forge = path.join(root, 'vendor', 'forge')
 const PORT = Number(process.env.SIGNUP_PORT ?? 7421)
 const BASE = `http://127.0.0.1:${PORT}`
 const dataDir = path.join(root, 'engine', 'run', 'signup-e2e')
@@ -78,9 +78,9 @@ function startEngine({ fresh = false, args = [], env = {} } = {}) {
   }
   const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'java') : 'java'
   const jvm = [
-    '-Xmx768m', '-XX:+UseG1GC', '-Djava.awt.headless=true', '-Dfile.encoding=UTF-8', `-Dmagelite.vendor=${vendor}`,
+    '-Xmx1536m', '-XX:+UseG1GC', '-Djava.awt.headless=true', '-Dfile.encoding=UTF-8', `-Dmagelite.forge=${forge}`,
     '-cp', `${path.join(lib, 'magelite-engine.jar')}${path.delimiter}${path.join(lib, '*')}`,
-    'dev.magelite.Main', `--data=${dataDir}`, `--port=${PORT}`, `--vendor=${vendor}`, '--dev', '--server', ...args,
+    'dev.magelite.Main', `--data=${dataDir}`, `--port=${PORT}`, `--forge=${forge}`, '--dev', '--server', ...args,
   ]
   const fullEnv = {
     ...process.env,

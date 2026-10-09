@@ -26,9 +26,18 @@ if ($javaVersion -match 'version "(1\.)?(\d+)') {
 }
 Write-Host "Node: $(& node --version)"
 
-if (-not (Test-Path (Join-Path $root 'vendor\xmage\lib'))) {
-    Write-Host '== XMage-Dateien importieren'
-    & (Join-Path $PSScriptRoot 'import-xmage.ps1')
+# Forge neu importieren, wenn er fehlt oder nicht zum gepinnten Commit passt (vendor/forge/FORGE_COMMIT)
+$forgeOk = $false
+$manifest = Join-Path $root 'vendor\forge\manifest.json'
+if ((Test-Path $manifest) -and (Test-Path (Join-Path $root 'vendor\forge\res\cardsfolder\cardsfolder.zip'))) {
+    $want = (Get-Content (Join-Path $root 'vendor\forge\FORGE_COMMIT') -Raw).Trim()
+    $have = (Get-Content $manifest -Raw | ConvertFrom-Json).commit
+    $forgeOk = ($have -eq $want)
+    if (-not $forgeOk) { Write-Host "Forge-Stand $have passt nicht zu FORGE_COMMIT $want" }
+}
+if (-not $forgeOk) {
+    Write-Host '== Forge bauen und importieren (braucht Git und JDK 17+, Maven wird selbst geladen; erster Lauf einige Minuten)'
+    & (Join-Path $PSScriptRoot 'import-forge.ps1')
 }
 
 Write-Host '== UI'
@@ -59,4 +68,3 @@ try {
 
 Write-Host ''
 Write-Host 'Fertig. Start: MageLite.cmd (Doppelklick)' -ForegroundColor Green
-Write-Host 'Der allererste Start baut die Kartendatenbank auf und dauert 1-2 Minuten.'

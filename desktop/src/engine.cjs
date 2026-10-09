@@ -11,20 +11,19 @@ function resolvePaths(app) {
   const packaged = app.isPackaged
   const res = packaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
   const engineLib = packaged ? path.join(res, 'engine', 'lib') : path.join(res, 'engine', 'build', 'install', 'magelite-engine', 'lib')
-  const vendor = packaged ? path.join(res, 'xmage') : path.join(res, 'vendor', 'xmage')
+  const forge = packaged ? path.join(res, 'forge') : path.join(res, 'vendor', 'forge')
   const ui = packaged ? path.join(res, 'ui') : path.join(res, 'ui', 'dist')
   const jreCandidates = [
     path.join(res, 'jre', 'bin', process.platform === 'win32' ? 'java.exe' : 'java'),
     process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') : null,
   ].filter(Boolean)
   const java = jreCandidates.find((p) => fs.existsSync(p)) ?? 'java'
-  return { engineLib, vendor, ui, java }
+  return { engineLib, forge, ui, java }
 }
 
 /**
- * Engine-Jar explizit VOR lib/*: es enthaelt Ersatzklassen fuer XMage (mage.player.ai.score.GameStateEvaluator2),
- * die vor den gleichnamigen Klassen aus den XMage-Jars geladen werden muessen. Die Reihenfolge innerhalb von
- * lib/* ist nicht festgelegt.
+ * Engine-Jar explizit VOR lib/* (stammt aus der XMage-Zeit mit Ersatzklassen; mit Forge harmlos, bleibt als Absicherung
+ * gegen gleichnamige Klassen). Die Reihenfolge innerhalb von lib/* ist nicht festgelegt.
  */
 function engineClasspath(engineLib) {
   const all = path.join(engineLib, '*')
@@ -38,9 +37,11 @@ function engineClasspath(engineLib) {
 }
 
 class Engine {
-  constructor(app, log) {
+  /** @param seedDb echte DB, die beim ersten Start nur lesend ins eigene Datenverzeichnis kopiert wird (Test-App), sonst null */
+  constructor(app, log, seedDb) {
     this.app = app
     this.log = log
+    this.seedDb = seedDb
     this.proc = null
     this.ready = null
     this.info = null
@@ -49,7 +50,7 @@ class Engine {
   }
 
   start() {
-    const { engineLib, vendor, ui, java } = resolvePaths(this.app)
+    const { engineLib, forge, ui, java } = resolvePaths(this.app)
     const dataDir = path.join(this.app.getPath('userData'), 'engine')
     fs.mkdirSync(dataDir, { recursive: true })
     const args = [
@@ -62,10 +63,13 @@ class Engine {
       'dev.magelite.Main',
       '--port=0',
       `--data=${dataDir}`,
-      `--vendor=${vendor}`,
+      `--forge=${forge}`,
       `--ui=${ui}`,
       `--parent-pid=${process.pid}`,
     ]
+    if (this.seedDb && fs.existsSync(this.seedDb) && path.resolve(this.seedDb) !== path.resolve(dataDir, 'magelite.db')) {
+      args.push(`--seed-db=${this.seedDb}`)
+    }
     this.log(`Starte Engine: ${java} (${engineLib})`)
     this.stopping = false
     this.proc = spawn(java, args, { cwd: dataDir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })

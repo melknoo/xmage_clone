@@ -18,7 +18,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Eigene Decks eines Nutzers (SQLite); lokal ist das immer Nutzer 1. Gespeichert wird der .dck-Text (XMage-Format).
+ * Eigene Decks eines Nutzers (SQLite); lokal ist das immer Nutzer 1. Gespeichert wird MageLite-Text v2
+ * ({@code deck_format=2}); Altbestand im XMage-.dck-Format stellt {@link DeckMigration} beim Start um.
  */
 public final class DeckStore {
 
@@ -116,8 +117,8 @@ public final class DeckStore {
         return db.with(c -> {
             if (id == null) {
                 try (PreparedStatement ps = c.prepareStatement(
-                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, bracket_auto, bracket_info, created_at, updated_at, user_id) "
-                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS)) {
+                        "INSERT INTO decks (name, commanders, colors, commander_set, commander_num, source, source_url, dck, card_count, valid, validation, bracket_auto, bracket_info, created_at, updated_at, user_id, deck_format) "
+                                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,2)", Statement.RETURN_GENERATED_KEYS)) {
                     bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation, bracketAuto, info);
                     ps.setLong(14, now);
                     ps.setLong(15, now);
@@ -130,7 +131,7 @@ public final class DeckStore {
                 }
             }
             try (PreparedStatement ps = c.prepareStatement(
-                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, bracket_auto=?, bracket_info=?, updated_at=? WHERE id=? AND user_id=?")) {
+                    "UPDATE decks SET name=?, commanders=?, colors=?, commander_set=?, commander_num=?, source=?, source_url=?, dck=?, card_count=?, valid=?, validation=?, bracket_auto=?, bracket_info=?, updated_at=?, deck_format=2 WHERE id=? AND user_id=?")) {
                 bind(ps, name, commanders, colors, commanderSet, commanderNum, source, sourceUrl, dck, cardCount, valid, validation, bracketAuto, info);
                 ps.setLong(14, now);
                 ps.setLong(15, id);
@@ -211,6 +212,53 @@ public final class DeckStore {
                 ps.setString(1, t);
                 ps.setString(2, f);
                 ps.setLong(3, userId);
+                return ps.executeUpdate();
+            }
+        });
+    }
+
+    /** Deck im alten XMage-Format (vor Forge), {@code commanders} = gespeicherte Namen. */
+    public record LegacyDeck(long id, String name, List<String> commanders, String dck) {
+    }
+
+    /** Alle Decks mit {@code deck_format=1}, alle Nutzer (nur fuer {@link DeckMigration}). */
+    List<LegacyDeck> legacyDecks() {
+        return db.with(c -> {
+            List<LegacyDeck> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT id, name, commanders, dck FROM decks WHERE deck_format = 1 ORDER BY id");
+                 ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String cmds = rs.getString(3);
+                    out.add(new LegacyDeck(rs.getLong(1), rs.getString(2),
+                            cmds == null || cmds.isBlank() ? List.of() : Arrays.asList(cmds.split("\n")), rs.getString(4)));
+                }
+            }
+            return out;
+        });
+    }
+
+    /** Umgestelltes Deck schreiben; alter Text nach {@code dck_legacy}. {@code updated_at}, Ordner, Sortierung, Meisterschaft bleiben. */
+    void migrate(long id, DeckMigration.Converted cv) {
+        String info = infoJson(cv.bracket());
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE decks SET dck_legacy=dck, dck=?, commanders=?, colors=?, commander_set=?, commander_num=?, card_count=?, valid=?, validation=?, "
+                            + "bracket_auto=?, bracket_info=?, deck_format=2 WHERE id=? AND deck_format=1")) {
+                ps.setString(1, cv.text());
+                ps.setString(2, String.join("\n", cv.commanders()));
+                ps.setString(3, cv.colors() == null ? "" : cv.colors());
+                ps.setString(4, cv.commanderSet());
+                ps.setString(5, cv.commanderNum());
+                ps.setInt(6, cv.cardCount());
+                ps.setInt(7, cv.valid() ? 1 : 0);
+                ps.setString(8, cv.validation());
+                if (cv.bracket() == null) {
+                    ps.setNull(9, java.sql.Types.INTEGER);
+                } else {
+                    ps.setInt(9, cv.bracket().bracket());
+                }
+                ps.setString(10, info);
+                ps.setLong(11, id);
                 return ps.executeUpdate();
             }
         });

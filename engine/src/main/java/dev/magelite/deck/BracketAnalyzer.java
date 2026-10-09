@@ -1,6 +1,6 @@
 package dev.magelite.deck;
 
-import mage.cards.repository.CardInfo;
+import forge.item.PaperCard;
 import org.apache.log4j.Logger;
 
 import java.io.BufferedReader;
@@ -18,8 +18,8 @@ import java.util.regex.Pattern;
 
 /**
  * Vorschlag fuer die Commander-Bracket (WotC 1-5) aus der Deckliste. Grundlage wie XMages Bracket-Anzeige: Game Changers
- * ({@code /brackets/game-changers.txt}), fruehe 2-Karten-Combos ({@code /brackets/infinite-combos.txt} aus dem
- * XMage-Jar), Massen-Landzerstoerung und Extra-Zuege per Regeltext; dazu Tutoren. Brackets 1 und 5 sind Absicht
+ * ({@code /brackets/game-changers.txt}), fruehe 2-Karten-Combos ({@code /brackets/infinite-combos.txt}, aus XMage
+ * uebernommen, MIT), Massen-Landzerstoerung und Extra-Zuege per Regeltext; dazu Tutoren. Brackets 1 und 5 sind Absicht
  * (Thema bzw. cEDH) und werden nie vorgeschlagen.
  * <ul>
  *   <li>4: Massen-Landzerstoerung, 2-Karten-Combo oder mehr als 3 Game Changers</li>
@@ -56,6 +56,13 @@ public final class BracketAnalyzer {
     private BracketAnalyzer() {
     }
 
+    /** Commander + Hauptdeck eines geparsten Decks. */
+    public static Result analyze(TextDeckParser.Result r) {
+        List<TextDeckParser.Resolved> all = new ArrayList<>(r.commanders());
+        all.addAll(r.main());
+        return analyze(all);
+    }
+
     /** Karten des Decks (Commander + Hauptdeck, je Name einmal). Unbekannte Karten werden uebersprungen. */
     public static Result analyze(List<TextDeckParser.Resolved> cards) {
         Set<String> names = new LinkedHashSet<>();
@@ -70,16 +77,16 @@ public final class BracketAnalyzer {
             if (GAME_CHANGERS.contains(front(r.name()))) {
                 gc.add(r.name());
             }
-            CardInfo info;
+            PaperCard card;
             try {
-                info = TextDeckParser.resolve(r.name(), r.set(), r.number());
+                card = r.printing();
             } catch (RuntimeException e) {
-                info = null;
+                card = null;
             }
-            if (info == null) {
+            if (card == null) {
                 continue;
             }
-            String text = String.join(" ", info.getRules()).toLowerCase(Locale.ROOT);
+            String text = CardLookup.oracle(card);
             if (MLD.matcher(text).find()) {
                 mld.add(r.name());
             }

@@ -12,9 +12,11 @@ import java.util.UUID;
 public class CardDto {
     public UUID id;
     public String name;
+    /** Scryfall-Set (GROSS); bei Tokens das Scryfall-Token-Set (z. B. TC20), siehe {@code ForgeViewMapper.print} */
     public String set;
+    /** Sammlernummer; bei Tokens die Nummer im Token-Set (null = nur Namenssuche) */
     public String num;
-    /** XMage-Bilddateiname (Tokens) */
+    /** Token-Name fuer {@code /img/token} (nur Tokens) */
     public String image;
     public int imageNum;
     public String manaCost;

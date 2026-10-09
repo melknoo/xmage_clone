@@ -1,7 +1,5 @@
 package dev.magelite.deck;
 
-import mage.cards.repository.CardRepository;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -11,7 +9,7 @@ import java.util.Map;
 /**
  * "Meintest du ...?" fuer unbekannte Kartennamen in der Import-Vorschau (nie beim Speichern, nie auf dem Spiel-Thread).
  * <p>
- * Die Namensliste wird einmal (lazy) aus der Karten-DB geladen und nach erstem Buchstaben und Laenge gebuckelt;
+ * Die Namensliste wird einmal (lazy) aus Forges Karten-DB geladen ({@link CardLookup#allNames}) und nach erstem Buchstaben und Laenge gebuckelt;
  * verglichen wird per Damerau-Levenshtein (optimal string alignment) mit kleiner Hoechstdistanz und Abbruch,
  * sobald eine Zeile die Schranke ueberschreitet. Hoechstens {@link #MAX_LOOKUPS} Zeilen und {@link #BUDGET_MS} je Vorschau.
  */
@@ -49,8 +47,15 @@ public final class CardNameSuggester {
             }
             out.add(new TextDeckParser.Issue(i.line(), i.count(), i.name(), sug, i.kind()));
         }
-        return new TextDeckParser.Result(r.name(), r.main(), r.commanders(), r.unknown(), r.unfinished(), r.needsCommander(),
-                r.candidates(), r.cardCount(), out, r.types());
+        return r.withIssues(out);
+    }
+
+    /** Namensindex vorbauen (Warmup-Thread), damit die erste Vorschau mit unbekannter Karte nicht wartet. */
+    public static void warmup() {
+        Index idx = Holder.INDEX;
+        if (idx.buckets.isEmpty()) {
+            throw new IllegalStateException("Kartennamen fehlen");
+        }
     }
 
     /** Naechster bekannter Kartenname oder null (zu weit weg / nichts Passendes). */
@@ -153,6 +158,6 @@ public final class CardNameSuggester {
 
     /** Lazy: erst bei der ersten Vorschau mit unbekannter Karte (HTTP-Thread). */
     private static final class Holder {
-        static final Index INDEX = new Index(CardRepository.instance.getNames());
+        static final Index INDEX = new Index(CardLookup.allNames());
     }
 }

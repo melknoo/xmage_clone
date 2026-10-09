@@ -1,12 +1,15 @@
 # MageLite
 
 Commander-Decks gegen 3 Bots goldfishen – als schlanke Desktop-App.
-Regeln, Karten (≈43.000) und KI kommen unverändert aus der [XMage](https://github.com/magefree/mage)-Engine (MIT);
-Server, Client, Lobby, Draft und Turniere sind weggelassen. Neue Oberfläche in React, Kartenbilder von Scryfall.
+Regeln, Karten (≈33.500) und KI kommen aus der [Forge](https://github.com/Card-Forge/forge)-Engine (GPL-3.0), die
+ohne ihre eigene Oberfläche eingebettet läuft; Draft und Turniere sind weggelassen. Neue Oberfläche in React,
+Kartenbilder von Scryfall. MageLite steht unter **GPL-3.0-or-later** (siehe [Lizenzen](#lizenzen)).
 
 ## Schnellstart auf einem neuen Windows-PC
 
-Die nötigen XMage-Dateien liegen im Repo (`vendor\xmage\`). Eine eigene XMage-Installation brauchst du nicht.
+Voraussetzungen: **Git**, **JDK 17 oder neuer** (zum Bauen, nicht zum Spielen) und **Node.js**. Maven brauchst du
+nicht, `scripts\import-forge.ps1` lädt es bei Bedarf selbst. Eine Forge-Installation ebenso wenig: das Skript holt und
+baut den im Repo gepinnten Forge-Stand (`vendor\forge\FORGE_COMMIT`).
 
 **1. Programme installieren** (einmalig, in PowerShell oder Eingabeaufforderung):
 
@@ -20,7 +23,7 @@ Danach das Terminal **neu öffnen**, damit `git`, `java` und `npm` gefunden werd
 Ohne winget: [Git](https://git-scm.com/download/win), [Java 21 (Temurin)](https://adoptium.net/) und
 [Node.js LTS](https://nodejs.org/) einfach per Installer installieren.
 
-**2. Klonen und bauen** (einmalig, dauert ein paar Minuten, braucht Internet):
+**2. Klonen und bauen** (einmalig, braucht Internet):
 
 ```powershell
 git clone https://github.com/melknoo/xmage_clone.git
@@ -28,30 +31,44 @@ cd xmage_clone
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
+Beim ersten Lauf importiert `build.ps1` Forge: holt den gepinnten Commit, baut ihn mit Maven und legt Jars und
+Kartendaten nach `vendor\forge\` (**einige Minuten**; später nur noch, wenn sich `FORGE_COMMIT` ändert). Danach
+baut es UI, Engine und Desktop-Abhängigkeiten. Eine Karten-Datenbank gibt es nicht: Forge liest die Kartenskripte bei
+jedem Start neu (wenige Sekunden).
+
 **3. Starten:** `MageLite.cmd` im Ordner `xmage_clone` doppelklicken.
-Beim allerersten Start baut MageLite die Kartendatenbank auf (1–2 Minuten). Danach startet es in wenigen Sekunden.
+`MageLite.cmd` startet die **Test-App**: Fenstertitel „MageLite (Test)“, eigene Daten unter `%APPDATA%\MageLite-dev`.
+Beim ersten Start wird die Datenbank einer installierten App (`%APPDATA%\MageLite\engine\magelite.db`) nur lesend
+kopiert; die installierte App bleibt unberührt.
 
 **Aktualisieren:** im Ordner `git pull` ausführen, danach erneut `scripts\build.ps1`.
 
 **Probleme?**
 
 - *„java“ bzw. „npm“ nicht gefunden:* Terminal nach der Installation neu öffnen oder den PC neu starten.
-- *Engine startet nicht:* Log unter `%APPDATA%\MageLite\desktop.log` und `%APPDATA%\MageLite\engine\logs\engine.log`.
+- *Engine startet nicht:* Log unter `%APPDATA%\MageLite-dev\desktop.log` und
+  `%APPDATA%\MageLite-dev\engine\logs\engine.log` (installierte App: `%APPDATA%\MageLite\…`); Forge schreibt
+  zusätzlich `logs\forge.log`.
 - *Skripte gesperrt:* `scripts\build.ps1` immer mit `powershell -ExecutionPolicy Bypass -File …` aufrufen, wie oben.
+- *Forge-Import bricht ab:* Meldung des Skripts lesen (Git, JDK 17+ und Internet nötig); ein erneuter Aufruf von
+  `scripts\import-forge.ps1` setzt sauber neu auf.
 
-Benutzerdaten liegen unter `%APPDATA%\MageLite\engine\`:
-`magelite.db` (Decks, Statistik, Held), `db\` (Karten-DB), `cache\images\` (Scryfall-Bilder), `logs\`.
+Benutzerdaten der installierten App liegen unter `%APPDATA%\MageLite\engine\`:
+`magelite.db` (Decks, Statistik, Held), `cache\images\` (Scryfall-Bilder), `forge-data\` (Forge-Profil), `logs\`.
 
-### Andere XMage-Version verwenden (optional)
+### Forge-Stand importieren oder aktualisieren
 
-`powershell -ExecutionPolicy Bypass -File scripts\import-xmage.ps1 -XmageDir <pfad zu ...\xmage>`
-kopiert die nötigen Jars, die Karten-DB, die Commander-Sample-Decks und die Sounds aus einer XMage-Distribution
-nach `vendor\xmage\`. Danach `scripts\build.ps1` ausführen.
+`powershell -ExecutionPolicy Bypass -File scripts\import-forge.ps1` erzeugt `vendor\forge\` (Jars, Kartenskripte,
+Editionen, KI-Profile, `manifest.json`). Das Verzeichnis ist **nicht** im Repo; versioniert sind nur
+`vendor\forge\FORGE_COMMIT` (der gepinnte Forge-Commit) und `vendor\forge-overrides\` (eigene Karten-Fixes, werden beim
+Import ins Kartenskript-Archiv eingebacken). Optionen: `-Commit <sha>` (anderer Stand; nach Erfolg wird
+`FORGE_COMMIT` auf ihn gesetzt), `-FullRes` (komplettes `res\`), `-KeepScratch` (Arbeitskopie unter
+`%LOCALAPPDATA%\MageLite-build` behalten). Danach `scripts\build.ps1` ausführen.
 
 ## Funktionen
 
-- **Decks importieren:** Textliste einfügen (Moxfield, Archidekt, MTGA, MTGO, XMage `.dck`) oder Archidekt-/Moxfield-Link.
-  Commander wird erkannt oder per Klick gewählt; Legalitätsprüfung über XMage.
+- **Decks importieren:** Textliste einfügen (Moxfield, Archidekt, MTGA, MTGO, Forge/XMage `.dck`) oder Archidekt-/Moxfield-Link.
+  Commander wird erkannt oder per Klick gewählt; Legalitätsprüfung über Forge (inkl. Bannliste).
 - **Spielen:** dein Deck gegen 3 Bots (eigene oder 70 mitgelieferte Commander-Precons, auch zufällig), 40 Leben, London-Mulligan.
 - **Bot-Tempo:** Blitz / Normal / Bedacht / Max – auch während des Spiels umschaltbar.
 - **Auto-Mana:** Kosten werden automatisch mit passenden Quellen bezahlt (abschaltbar; Fallback auf manuelles Klicken).
@@ -91,7 +108,8 @@ Zum Weiterentwickeln nach einem Klon:
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Einrichten, Dev-Schleife, Tests, Debugging, typische Erweiterungen |
 | [`docs/CODEMAP.md`](docs/CODEMAP.md) | Wo welcher Code liegt, Protokoll, REST, DB-Schema |
 | [`docs/DECISIONS.md`](docs/DECISIONS.md) | Entscheidungen und Begründungen |
-| [`docs/architecture.md`](docs/architecture.md) | ursprüngliche Analyse mit XMage-Details |
+| [`docs/SERVER.md`](docs/SERVER.md) | Betrieb auf fly.io |
+| [`docs/archive/xmage-architecture.md`](docs/archive/xmage-architecture.md) | historisch: Analyse der XMage-Fassung bis 0.1.x |
 
 Kurzfassung:
 
@@ -101,32 +119,50 @@ cd ui;     npm run dev                # UI auf http://localhost:5173/?port=7317
 cd desktop; $env:MAGELITE_UI_DEV=1; npx electron .   # Desktop-Fenster mit Vite-UI
 ```
 
-- Tests: `cd engine; .\gradlew.bat test` (Decklisten-Parser gegen die echte Karten-DB)
+- Tests: `cd engine; .\gradlew.bat test` (Deck-Parser, Sample-Decks, Forge-Boot gegen die echten Forge-Daten;
+  bootet Forge einmal pro Testlauf)
+- Forge-Boot prüfen: `.\gradlew.bat forgeCheck` (Karten, Editionen, Boot-Zeit, Heap)
 - Headless-Spikes: `.\gradlew.bat spike -PspikeArgs="--games=3 --tempo=BLITZ"` (4 Bots),
-  `.\gradlew.bat humanSpike -PspikeArgs="--games=2 --verbose"` (Test-Mensch über die Prompt-API)
+  `.\gradlew.bat humanSpike -PspikeArgs="--games=2 --verbose"` (Test-Mensch über die Prompt-API),
+  `.\gradlew.bat botArena -PspikeArgs="--games=30 --turnCap=80"` (KI-Profile gegeneinander)
 - Hinweis: VS Code setzt `ELECTRON_RUN_AS_NODE` – vor Electron-Aufrufen entfernen (macht `MageLite.cmd` automatisch).
 
 ### Aufbau
 
 ```
-desktop/  Electron: startet die Engine (java), lädt die UI, Moxfield-Abruf über Chromium
-engine/   Java 17: bettet XMage ein (GameHost ersetzt den XMage-Server), REST + WebSocket (Javalin), SQLite
-ui/       React 19 + TypeScript + Tailwind 4 + Zustand
-vendor/   importierte XMage-Jars/DB/Decks (nicht versioniert)
-docs/     architecture.md – Protokoll, Threading, verifizierte XMage-Details
+desktop/   Electron: startet die Engine (java), lädt die UI, Moxfield-Abruf über Chromium
+engine/    Java 17: bettet Forge ein (GameHost + SeatGui/PromptBridge ersetzen Forges Oberfläche), REST + WebSocket (Javalin), SQLite
+ui/        React 19 + TypeScript + Tailwind 4 + Zustand
+scripts/   build.ps1, import-forge.ps1, package.ps1, release.ps1, deploy-fly.ps1, e2e-*.mjs
+vendor/    forge/ = Build-Ausgabe von import-forge.ps1 (nicht versioniert, außer FORGE_COMMIT), forge-overrides/ = Karten-Fixes
+docs/      STATUS, DEVELOPMENT, CODEMAP, DECISIONS, SERVER; archive/ = XMage-Zeit
+LICENSE, LICENSES/   GPL-3.0, Forge-GPL-3.0, THIRD-PARTY.md, XMage-MIT.txt
 ```
 
-Wichtig: Die XMage-Jars werden unverändert eingebunden (nie neu packen – die Karten-DB prüft die Build-Zeit im Manifest).
-Referenz-Quellcode: Git-Tag `xmage_1.4.60V3`.
+Wichtig: `vendor/forge/` entsteht nur durch `scripts\import-forge.ps1`; Jars und Daten immer vom selben Commit, nie von
+Hand. Karten-Fixes nur als Datei unter `vendor/forge-overrides/`. Referenz-Quellcode ist Forge am Commit aus
+`vendor/forge/FORGE_COMMIT`.
 
 ## Grenzen
 
-- Die XMage-KI ist bei großen Boards (40+ Permanents) langsam – „Blitz“ begrenzt die Denkzeit auf 2 s.
-  In „Blitz“/„Normal“ reagieren Bots in fremden Zügen nur auf Zauber auf dem Stapel.
+- Die Forge-KI ist heuristisch und schnell (Ø etwa 1 s pro Bot-Zug); „Blitz“ begrenzt die Denkzeit je Entscheidung
+  auf 2 s.
+- Einige Forge-Texte (Prompts, Spielverlauf) sind noch englisch.
 - Moxfield blockt automatische Abrufe teilweise – dann in Moxfield „Export → Text“ kopieren und einfügen.
 - Kein Undo/Rollback (bewusst).
 
 ## Lizenzen
 
-XMage: MIT (`LICENSES/XMage-MIT.txt`). Kartenbilder: Scryfall (nicht verändert, nur lokal zwischengespeichert).
-Mana-Symbole: [Mana](https://github.com/andrewgioia/mana) (SIL OFL / MIT).
+MageLite steht unter der **GNU General Public License, Version 3 oder (nach Wahl) neuer** (GPL-3.0-or-later), Text in
+[`LICENSE`](LICENSE). Grund: Die Regel-Engine [Forge](https://github.com/Card-Forge/forge) (GPL-3.0, Text
+`LICENSES/Forge-GPL-3.0.txt`) läuft im selben Prozess.
+
+**Quellcode:** Dieses Repo ist der vollständige Quellcode. Zu jedem Installer gehört eine `SOURCE.txt` mit dem
+Repo-Commit, aus dem er gebaut wurde; den Forge-Stand nennt `vendor/forge/FORGE_COMMIT`
+([Card-Forge/forge](https://github.com/Card-Forge/forge) am genannten Commit). Den Quellcode eines Setups findet man
+also über diese beiden Commits.
+
+Weitere Komponenten und ihre Lizenzen: [`LICENSES/THIRD-PARTY.md`](LICENSES/THIRD-PARTY.md). Aus XMage 1.4.60
+übernommene Listen (Brackets, Sample-Decks): MIT, `LICENSES/XMage-MIT.txt`. Kartenbilder: Scryfall (nicht verändert,
+nur lokal zwischengespeichert). Mana-Symbole: [Mana](https://github.com/andrewgioia/mana) (SIL OFL / MIT).
+Magic: The Gathering ist eine Marke von Wizards of the Coast; MageLite steht in keiner Verbindung zu Wizards of the Coast.

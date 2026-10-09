@@ -1,45 +1,42 @@
 package dev.magelite.deck;
 
-import mage.cards.Card;
-import mage.cards.decks.Deck;
-import mage.cards.decks.DeckCardLists;
-import mage.game.GameException;
+import forge.deck.Deck;
+import forge.deck.DeckSection;
+import forge.item.PaperCard;
 
 import java.util.List;
 
 /**
- * Geparstes Deck. {@link #newDeck()} erzeugt pro Spiel frische Kartenobjekte (Karten werden an ein Spiel gebunden).
+ * Geparstes Commander-Deck (Forge). {@link #newDeck()} liefert pro Spiel eine eigene Kopie; die Spiel-Karten erzeugt
+ * Forge daraus erst beim Anlegen des Spiels.
+ *
+ * @param text Decktext (Host-Link, Speichern); null, wenn nicht bekannt
  */
 public record LoadedDeck(
         String name,
         String source,
-        DeckCardLists lists,
+        Deck deck,
         List<String> commanders,
         int mainCount,
         boolean valid,
         String validationErrors,
         String importErrors,
-        /** Rohtext (.dck), um das Deck an eine andere Engine zu schicken (Host-Link); null bei alten Aufrufern */
-        String dck
+        String text
 ) {
 
-    public LoadedDeck(String name, String source, DeckCardLists lists, List<String> commanders, int mainCount, boolean valid,
-                      String validationErrors, String importErrors) {
-        this(name, source, lists, commanders, mainCount, valid, validationErrors, importErrors, null);
+    public LoadedDeck withText(String text) {
+        return new LoadedDeck(name, source, deck, commanders, mainCount, valid, validationErrors, importErrors, text);
     }
 
-    public LoadedDeck withDck(String dck) {
-        return new LoadedDeck(name, source, lists, commanders, mainCount, valid, validationErrors, importErrors, dck);
-    }
-
-
-    public Deck newDeck() throws GameException {
-        Deck deck = Deck.load(lists, true, false);
-        deck.setName(name);
-        return deck;
+    /** Frische Kopie fuer ein Spiel. */
+    public Deck newDeck() {
+        return new Deck(deck, name);
     }
 
     public static List<String> commanderNames(Deck deck) {
-        return deck.getSideboard().stream().map(Card::getName).sorted().toList();
+        if (!deck.has(DeckSection.Commander)) {
+            return List.of();
+        }
+        return deck.get(DeckSection.Commander).toFlatList().stream().map(PaperCard::getName).sorted().toList();
     }
 }

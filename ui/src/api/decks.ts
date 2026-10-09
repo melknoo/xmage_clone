@@ -56,8 +56,8 @@ export interface DeckIssue {
   name: string
   /** "Meintest du ...?" - fehlt ohne guten Treffer */
   suggestion?: string
-  /** unknown = Karte unbekannt; unfinished = in XMage noch nicht umgesetzt */
-  kind: 'unknown' | 'unfinished'
+  /** unknown = Karte unbekannt */
+  kind: 'unknown'
 }
 
 /** Ergebnis von POST /api/decks/parse bzw. /api/decks/url */
@@ -67,14 +67,13 @@ export interface DeckPreview {
   cardCount: number
   /** "1 Name" je unbekannter Zeile (bleibt fuer alte Aufrufer; neu: issues) */
   unknown: string[]
-  unfinished: string[]
   /** mit Zeilennummer und Vorschlag; fehlt bei alten Engines */
   issues?: DeckIssue[]
   needsCommander: boolean
   candidates: string[]
   cards: { name: string; set: string; num: string; count: number; type?: DeckCardType }[]
   valid: boolean
-  /** XMage-Validierung (englisch) */
+  /** Forge-Validierung (englisch) */
   validation?: string
   colors?: string
   commanderSet?: string

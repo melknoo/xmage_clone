@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Wandelt XMage-HTML (Log, Prompts) in sichere Segmente um. Die UI rendert nie rohes HTML.
+ * Wandelt Engine-HTML (Log, Prompts) in sichere Segmente um. Die UI rendert nie rohes HTML.
  * Segment: {@code {text}} | {@code {obj, text, color}} | {@code {br:true}}. Mana-Symbole wie {G} bleiben im Text.
  */
 public final class RichText {

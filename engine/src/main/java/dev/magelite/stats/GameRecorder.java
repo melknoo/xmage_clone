@@ -75,7 +75,7 @@ public final class GameRecorder {
     }
 
     private static SeatResult seatResult(GameHost host, GameHost.HumanSeat seat) {
-        StatsSink sink = StatsSink.of(host.getGame().getId(), seat.playerId());
+        StatsSink sink = StatsSink.of(host.getId(), seat.playerId());
         return new SeatResult(seat.userId(), seat.name(), seat.playerId(), seat.deckId(), seat.deck().name(), seat.deck().commanders(),
                 seat.conceded(), sink == null ? 0 : sink.humanTurns(), sink == null ? Map.of() : new LinkedHashMap<>(sink.cards()));
     }
@@ -92,7 +92,7 @@ public final class GameRecorder {
             return record(resultOf(host, over), seatResult(host, seat));
         } finally {
             if (last) {
-                StatsSink.unregister(host.getGame().getId());
+                StatsSink.unregister(host.getId());
             }
         }
     }

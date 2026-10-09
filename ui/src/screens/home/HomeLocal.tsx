@@ -118,7 +118,7 @@ function OnlineCard({ open }: { open: () => void }) {
         <span className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="font-display text-[22px] font-semibold uppercase leading-none tracking-[.02em]">Online spielen · {serverHost}</span>
           <span className="text-[13px] leading-[1.4] text-fg-3">
-            {st?.enabled && st.error
+            {st?.error
               ? `Verbindung zum Server: ${st.error}`
               : 'Mit Freunden an einem Tisch. Einmal angemeldet, kannst du dort Tische auf diesem Rechner hosten – deine Decks hier bleiben lokal, online nutzt du deine Server-Bibliothek.'}
           </span>

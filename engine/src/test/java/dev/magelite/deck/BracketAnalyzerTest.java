@@ -1,22 +1,21 @@
 package dev.magelite.deck;
 
-import dev.magelite.boot.CardDbManager;
+import dev.magelite.ForgeTestSupport;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** Bracket-Vorschlag gegen die echte Karten-DB. */
+/** Bracket-Vorschlag gegen Forges Karten-DB (Regeltext aus den Kartenskripten). */
 class BracketAnalyzerTest {
 
     @BeforeAll
-    static void db() throws Exception {
-        CardDbManager.ensure(Path.of(System.getProperty("magelite.vendor"), "db", "cards.h2.mv.db"));
+    static void boot() {
+        ForgeTestSupport.boot();
     }
 
     private static BracketAnalyzer.Result of(String... cards) {
@@ -24,7 +23,9 @@ class BracketAnalyzerTest {
         for (String c : cards) {
             text.append("1 ").append(c).append('\n');
         }
-        return DeckRoutes.bracketOf(TextDeckParser.parse(text.toString(), "Test", null));
+        TextDeckParser.Result parsed = TextDeckParser.parse(text.toString(), "Test", null);
+        assertTrue(parsed.unknown().isEmpty(), "unbekannt: " + parsed.unknown());
+        return BracketAnalyzer.analyze(parsed);
     }
 
     private static List<String> kinds(BracketAnalyzer.Result r) {
@@ -71,5 +72,14 @@ class BracketAnalyzerTest {
         assertFalse(BracketAnalyzer.isTutor("search your library for up to two basic land cards"));
         assertFalse(BracketAnalyzer.isTutor("search your library for a forest card and a plains card"));
         assertTrue(BracketAnalyzer.isTutor("search your library for a creature card, reveal it"));
+    }
+
+    /** Der Regeltext kommt aus den Forge-Skripten: Tutoren und Rampe werden dort richtig unterschieden. */
+    @Test
+    void tutorsFromForgeOracleText() {
+        BracketAnalyzer.Result r = of("Diabolic Tutor", "Sylvan Tutor", "Idyllic Tutor", "Merchant Scroll");
+        assertTrue(kinds(r).contains("tutor"), "Tutoren erwartet: " + r.reasons());
+        assertEquals(3, r.bracket());
+        assertFalse(kinds(of("Cultivate", "Kodama's Reach", "Rampant Growth", "Farseek")).contains("tutor"));
     }
 }

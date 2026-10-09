@@ -1,86 +1,125 @@
 package dev.magelite.deck;
 
-import mage.cards.decks.Deck;
-import mage.cards.decks.DeckCardLists;
-import mage.cards.decks.importer.DeckImporter;
-import mage.deck.Commander;
-import mage.game.GameException;
+import forge.deck.CardPool;
+import forge.deck.Deck;
+import forge.deck.DeckFormat;
+import forge.deck.DeckSection;
+import forge.item.PaperCard;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.stream.Stream;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
- * Laedt XMage-Decks (.dck etc.) ueber die XMage-Importer und validiert sie als Commander-Deck.
+ * Baut aus Decktext ein spielbares Forge-Commander-Deck ({@link LoadedDeck}) und prueft es mit
+ * {@code DeckFormat.Commander.getDeckConformanceProblem} (Groesse, Farbidentitaet, Partner, Bans, Kopienzahl).
+ * <p>
+ * {@link #fromText} versteht alle Formate des {@link TextDeckParser} (MageLite-Decktext v2, Forge-.dck, altes XMage-.dck,
+ * MTGA/Moxfield/Archidekt-Listen). {@link LoadedDeck#text()} ist immer der normalisierte Decktext v2.
  */
 public final class DeckLoader {
 
     private DeckLoader() {
     }
 
-    public static LoadedDeck loadFile(Path file) throws GameException {
-        StringBuilder errors = new StringBuilder();
-        DeckCardLists lists = DeckImporter.importDeckFromFile(file.toString(), errors, false);
-        String name = lists.getName() != null && !lists.getName().isBlank()
-                ? lists.getName()
-                : stripExtension(file.getFileName().toString());
-        lists.setName(name);
-        String dck = null;
-        try {
-            dck = Files.readString(file, java.nio.charset.StandardCharsets.UTF_8);
-        } catch (IOException ignored) {
-            // nur fuer das Relay noetig
+    /**
+     * Laedt ein Deck aus Text (gespeicherte eigene Decks, Sample-Decks, Host-Link, Import).
+     * Unbekannte Karten werden ausgelassen: {@code valid=false}, Validierungstext "Unbekannte Karten: ...".
+     *
+     * @param name   Anzeigename; null/leer = im Text hinterlegter Name bzw. Commander
+     * @param source Herkunft fuers Log ({@code "user:12"}, {@code "sample:..."}, ...)
+     */
+    public static LoadedDeck fromText(String text, String name, String source) {
+        TextDeckParser.Result r = TextDeckParser.parse(text == null ? "" : text, name, null);
+        return fromParsed(r, source);
+    }
+
+    /** Alias fuer {@link #fromText} (Aufrufer aus der Zeit des XMage-.dck). */
+    public static LoadedDeck fromDckText(String text, String name, String source) {
+        return fromText(text, name, source);
+    }
+
+    /** Aus einem schon geparsten Deck (Import-Vorschau/Speichern, ohne erneut zu parsen). */
+    public static LoadedDeck fromParsed(TextDeckParser.Result r, String source) {
+        Deck deck = toForgeDeck(r);
+        String problem = null;
+        if (r.commanders().isEmpty()) {
+            problem = "Kein Commander gewählt";
+        } else {
+            try {
+                String p = DeckFormat.Commander.getDeckConformanceProblem(deck);
+                problem = p == null ? null : prettyProblem(p);
+            } catch (RuntimeException e) {
+                problem = "Prüfung fehlgeschlagen: " + e;
+            }
         }
-        return fromLists(lists, file.toString(), errors.toString()).withDck(dck);
+        String banned = bannedProblem(deck);
+        String unknownText = r.unknown().isEmpty() ? "" : "Unbekannte Karten: " + String.join(", ", r.unknown());
+        StringBuilder validation = new StringBuilder(unknownText);
+        for (String p : new String[]{problem, banned}) {
+            if (p != null) {
+                if (validation.length() > 0) {
+                    validation.append('\n');
+                }
+                validation.append(p);
+            }
+        }
+        boolean valid = problem == null && banned == null && r.unknown().isEmpty();
+        int mainCount = deck.getMain().countAll();
+        return new LoadedDeck(r.name(), source, deck, LoadedDeck.commanderNames(deck), mainCount, valid,
+                valid ? "" : validation.toString(), unknownText, r.toText());
+    }
+
+    /** Forge-Deck: Hauptdeck in {@code Main}, Commander in {@code DeckSection.Commander}. */
+    public static Deck toForgeDeck(TextDeckParser.Result r) {
+        Deck deck = new Deck(r.name());
+        CardPool main = deck.getMain();
+        for (TextDeckParser.Resolved c : r.main()) {
+            PaperCard pc = c.printing();
+            if (pc != null) {
+                main.add(pc, c.count());
+            }
+        }
+        if (!r.commanders().isEmpty()) {
+            CardPool cmd = deck.getOrCreate(DeckSection.Commander);
+            for (TextDeckParser.Resolved c : r.commanders()) {
+                PaperCard pc = c.printing();
+                if (pc != null) {
+                    cmd.add(pc, c.count());
+                }
+            }
+        }
+        return deck;
     }
 
     /**
-     * Laedt ein Deck aus .dck-Text (gespeicherte eigene Decks).
+     * Commander-Bannliste: {@code getDeckConformanceProblem} prueft sie nicht (nur Groesse, Farbidentitaet, Partner,
+     * Kopien); Forge fragt sie ueber {@code DeckFormat.isLegalCard} ab (Commander-Praedikat aus {@code res/formats}).
      */
-    public static LoadedDeck fromDckText(String dck, String name, String source) throws GameException, IOException {
-        Path tmp = Files.createTempFile("magelite-", ".dck");
+    private static String bannedProblem(Deck deck) {
+        Set<String> illegal = new TreeSet<>();
         try {
-            Files.writeString(tmp, dck, java.nio.charset.StandardCharsets.UTF_8);
-            StringBuilder errors = new StringBuilder();
-            DeckCardLists lists = DeckImporter.importDeckFromFile(tmp.toString(), errors, false);
-            lists.setName(name);
-            return fromLists(lists, source, errors.toString()).withDck(dck);
-        } finally {
-            Files.deleteIfExists(tmp);
+            for (DeckSection section : new DeckSection[]{DeckSection.Commander, DeckSection.Main}) {
+                if (!deck.has(section)) {
+                    continue;
+                }
+                for (var e : deck.get(section)) {
+                    if (!DeckFormat.Commander.isLegalCard(e.getKey())) {
+                        illegal.add(e.getKey().getName());
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            return "Prüfung der Bannliste fehlgeschlagen: " + e;
         }
+        return illegal.isEmpty() ? null : "Deck contains cards banned in Commander: " + String.join(", ", illegal);
     }
 
-    public static LoadedDeck fromLists(DeckCardLists lists, String source, String importErrors) throws GameException {
-        Deck deck = Deck.load(lists, true, false);
-        Commander validator = new Commander();
-        boolean valid = validator.validate(deck);
-        String validation = valid ? "" : validator.getErrorsListInfo();
-        return new LoadedDeck(lists.getName(), source, lists, LoadedDeck.commanderNames(deck),
-                deck.getMaindeckCards().size(), valid, validation, importErrors);
-    }
-
-    /**
-     * Alle Deck-Dateien unterhalb von {@code dir} (rekursiv).
-     */
-    public static List<Path> listDeckFiles(Path dir) throws IOException {
-        if (!Files.isDirectory(dir)) {
-            return List.of();
+    /** Forges Meldungen lesen sich als Satzfortsetzung ("should have at least 99 cards"): "Deck " voranstellen. */
+    private static String prettyProblem(String p) {
+        String s = p.strip();
+        if (s.isEmpty()) {
+            return "Deck ungültig";
         }
-        try (Stream<Path> s = Files.walk(dir)) {
-            return s.filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String n = p.getFileName().toString().toLowerCase();
-                        return n.endsWith(".dck") || n.endsWith(".txt") || n.endsWith(".dec");
-                    })
-                    .sorted()
-                    .toList();
-        }
-    }
-
-    private static String stripExtension(String fileName) {
-        int i = fileName.lastIndexOf('.');
-        return i > 0 ? fileName.substring(0, i) : fileName;
+        return Character.isUpperCase(s.charAt(0)) ? s : "Deck " + s;
     }
 }

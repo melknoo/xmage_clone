@@ -8,6 +8,9 @@ import dev.magelite.api.DownloadRoutes;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import dev.magelite.api.TableRoutes;
+import dev.magelite.deck.CardLookup;
+import dev.magelite.deck.CardNameSuggester;
+import dev.magelite.deck.DeckMigration;
 import dev.magelite.deck.DeckResolver;
 import dev.magelite.game.TableManager;
 import dev.magelite.social.FriendStore;
@@ -19,12 +22,11 @@ import dev.magelite.auth.Mailer;
 import dev.magelite.auth.SignupRoutes;
 import dev.magelite.auth.SignupService;
 import dev.magelite.auth.Turnstile;
-import dev.magelite.boot.CardDbManager;
+import dev.magelite.boot.ForgeBoot;
 import dev.magelite.boot.LogConfig;
 import dev.magelite.deck.DeckRoutes;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.SampleDeckCatalog;
-import dev.magelite.game.BotTuning;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.images.ImageService;
@@ -57,11 +59,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus), auf fly im Server-Modus.
  * <p>
- * Args: {@code --port=0 --data=<dir> --vendor=<dir> --ui=<dist> --parent-pid=<pid> --dev}
+ * Args: {@code --port=0 --data=<dir> --forge=<dir> --ui=<dist> --parent-pid=<pid> --dev [--seed-db=<magelite.db>]}
  * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10 --anon-exit-min=3}; Owner-Konto aus
  * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}; Monatsbudget {@code MAGELITE_BUDGET_HOURS} (Standard 100,
  * Test: {@code --budget-min}), Preis fuer die Anzeige {@code MAGELITE_PRICE_PER_HOUR}.
- * Das Arbeitsverzeichnis muss {@code <data>} sein (XMage oeffnet {@code ./db/cards.h2}).
+ * Das Arbeitsverzeichnis muss {@code <data>} sein (Forge-Profil mit relativen {@code forge-data/}-Pfaden).
  * Meldet sich auf stdout mit {@code MAGELITE_READY {"port":..,"token":..}}.
  */
 public final class Main {
@@ -92,7 +94,7 @@ public final class Main {
         long t0 = System.currentTimeMillis();
         Map<String, String> opt = parseArgs(args);
         Path data = Path.of(opt.getOrDefault("data", ".")).toAbsolutePath().normalize();
-        Path vendor = Path.of(opt.getOrDefault("vendor", System.getProperty("magelite.vendor", "../../vendor/xmage"))).toAbsolutePath().normalize();
+        Path forge = Path.of(opt.getOrDefault("forge", System.getProperty("magelite.forge", "../../vendor/forge"))).toAbsolutePath().normalize();
         boolean dev = opt.containsKey("dev");
         boolean server = opt.containsKey("server");
         String host = opt.getOrDefault("host", "127.0.0.1");
@@ -103,17 +105,20 @@ public final class Main {
         LogConfig.configure(data.resolve("logs"), dev || server); // Server: INFO auf stdout fuer `fly logs`
         Logger log = Logger.getLogger(Main.class);
 
-        Path cwd = Path.of("").toAbsolutePath().normalize();
-        if (!cwd.equals(data)) {
-            log.warn("Arbeitsverzeichnis (" + cwd + ") != data (" + data + ") - Karten-DB liegt unter " + cwd.resolve("db"));
+        ForgeBoot.init(forge, data); // prueft auch Arbeitsverzeichnis == data
+
+        if (opt.containsKey("seed-db")) {
+            // Test-App (nicht gepackt): echte Daten der installierten App einmalig nur lesend uebernehmen
+            try {
+                Db.seedIfMissing(Path.of(opt.get("seed-db")), data.resolve("magelite.db"));
+            } catch (Exception e) {
+                log.warn("Test-Daten nicht uebernommen: " + e.getMessage());
+            }
         }
-
-        CardDbManager.ensure(vendor.resolve("db/cards.h2.mv.db"));
-        BotTuning.checkFfaEvaluator();
-
         Db db = new Db(data.resolve("magelite.db"));
         DeckStore deckStore = new DeckStore(db);
-        SampleDeckCatalog samples = new SampleDeckCatalog(vendor.resolve("sample-decks"));
+        DeckMigration.run(db, data);
+        SampleDeckCatalog samples = new SampleDeckCatalog();
         GameRegistry games = new GameRegistry(server ? maxGames : 1);
         ProfileService profile = new ProfileService(db);
         GameRecorder recorder = new GameRecorder(db, profile);
@@ -188,10 +193,12 @@ public final class Main {
         }
         int port = httpServer.start();
 
-        // Sample-Katalog im Hintergrund vorbereiten
+        // Sample-Katalog und Kartenindizes (Set-Codes, Namen fuer "Meintest du ...?") im Hintergrund vorbereiten
         Thread warmup = new Thread(() -> {
             try {
                 samples.list();
+                CardLookup.warmup();
+                CardNameSuggester.warmup();
             } catch (Exception e) {
                 log.warn("Warmup fehlgeschlagen: " + e);
             }

@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.magelite.game.GameHost;
-import dev.magelite.view.GameViewMapper;
+import dev.magelite.view.ForgeViewMapper;
 import dev.magelite.view.dto.CardDto;
 import dev.magelite.view.dto.CommandDto;
 import dev.magelite.view.dto.Messages;
@@ -13,12 +13,13 @@ import dev.magelite.view.dto.NamedCardsDto;
 import dev.magelite.view.dto.PlayerDto;
 import dev.magelite.view.dto.PromptDto;
 import dev.magelite.view.dto.StateDto;
-import mage.cards.Card;
-import mage.game.Game;
-import mage.players.Player;
-import mage.util.ThreadUtils;
+import forge.game.card.Card;
+import forge.game.player.Player;
+import forge.game.zone.ZoneType;
+import forge.util.ThreadUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -46,10 +47,10 @@ final class SpectatorCheck implements GameHost.Sink {
 
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern UUID_RE = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
-    private static final Set<String> HIDDEN_REF_NAMES = Set.of("verdeckte Karte", "verdecktes Permanent", GameViewMapper.FACE_DOWN_SPELL);
+    private static final Set<String> HIDDEN_REF_NAMES = Set.of("verdeckte Karte", "verdecktes Permanent", ForgeViewMapper.FACE_DOWN_SPELL);
     private static final int MAX_ERRORS = 30;
 
-    private final Game game;
+    private final GameHost host;
     private final Map<Long, Set<UUID>> seatPrivate = new ConcurrentHashMap<>();
     final List<String> errors = new ArrayList<>();
     int errorCount;
@@ -64,8 +65,8 @@ final class SpectatorCheck implements GameHost.Sink {
     UUID viewpointId;
     Messages.GameOver over;
 
-    SpectatorCheck(Game game) {
-        this.game = game;
+    SpectatorCheck(GameHost host) {
+        this.host = host;
     }
 
     /** Sitz-State (synchron auf dem Thread, der ihn sendet): private ids dieser seq merken. */
@@ -75,8 +76,25 @@ final class SpectatorCheck implements GameHost.Sink {
             st.hand.forEach(c -> ids.add(c.id));
         }
         if (st.lookedAt != null) {
+            // angesehene Karten bleiben bis Phasenende in lookedAt; liegen sie inzwischen offen (z. B. "schau dir die
+            // obersten N an, lege eine aufs Spielfeld"), sind sie nicht mehr geheim (verdeckte zaehlen weiter)
+            Set<UUID> open = new HashSet<>();
+            for (PlayerDto p : st.players) {
+                if (p.battlefield != null) {
+                    p.battlefield.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+                if (p.graveyard != null) {
+                    p.graveyard.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+                if (p.exile != null) {
+                    p.exile.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+            }
+            if (st.stack != null) {
+                st.stack.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+            }
             for (NamedCardsDto n : st.lookedAt) {
-                n.cards().forEach(c -> ids.add(c.id));
+                n.cards().stream().filter(c -> !open.contains(c.id)).forEach(c -> ids.add(c.id));
             }
         }
         for (PlayerDto p : st.players) {
@@ -210,26 +228,27 @@ final class SpectatorCheck implements GameHost.Sink {
                 it.remove();
             }
         }
-        if (ThreadUtils.isRunGameThread()) {
+        Map<UUID, String> names = new HashMap<>();
+        if (ThreadUtil.isGameThread()) {
             // direkt aus dem Spiel: alle Haende (auch Bots) und Bibliotheken
             deepChecked++;
-            for (Player pl : game.getState().getPlayers().values()) {
-                for (Card c : pl.getHand().getCards(game)) {
-                    secret.add(c.getId());
-                }
-                for (Card c : pl.getLibrary().getCards(game)) {
-                    secret.add(c.getId());
+            for (Player pl : host.getGame().getRegisteredPlayers()) {
+                for (ZoneType z : new ZoneType[] {ZoneType.Hand, ZoneType.Library}) {
+                    for (Card c : pl.getCardsIn(z)) {
+                        UUID id = host.wireCardId(c.getId());
+                        secret.add(id);
+                        names.put(id, c.getName() + " (" + z + ")");
+                    }
                 }
             }
         }
         secret.retainAll(present);
         if (!secret.isEmpty()) {
-            List<String> names = new ArrayList<>();
+            List<String> list = new ArrayList<>();
             for (UUID id : secret) {
-                Card c = ThreadUtils.isRunGameThread() ? game.getCard(id) : null;
-                names.add(c == null ? id.toString() : c.getName() + " (" + game.getState().getZone(id) + ")");
+                list.add(names.getOrDefault(id, id.toString()));
             }
-            fail("verdeckte ids im Zuschauer-State (seq " + s.seq + "): " + names + " in " + where(tree, secret));
+            fail("verdeckte ids im Zuschauer-State (seq " + s.seq + "): " + list + " in " + where(tree, secret));
         }
     }
 

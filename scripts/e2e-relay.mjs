@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const lib = path.join(root, 'engine', 'build', 'install', 'magelite-engine', 'lib')
-const vendor = path.join(root, 'vendor', 'xmage')
+const forge = path.join(root, 'vendor', 'forge')
 const PORT_X = Number(process.env.RELAY_PORT_X ?? 7411)
 const PORT_Y = Number(process.env.RELAY_PORT_Y ?? 7412)
 const liveX = process.env.RELAY_X?.replace(/\/+$/, '') || null
@@ -63,7 +63,7 @@ const y = (m, p, o) => call(Y, m, p, o)
 const procs = []
 function startEngine(name, dataDir, port, extraArgs, env, xmx) {
   fs.mkdirSync(dataDir, { recursive: true })
-  // frische Nutzerdaten, Karten-DB bleibt (wird sonst aus vendor kopiert)
+  // frische Nutzerdaten
   for (const f of ['magelite.db', 'magelite.db-journal', 'magelite.db-wal', 'magelite.db-shm']) {
     try {
       fs.rmSync(path.join(dataDir, f))
@@ -72,9 +72,9 @@ function startEngine(name, dataDir, port, extraArgs, env, xmx) {
   const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'java') : 'java'
   const args = [
     `-Xmx${xmx}`, '-XX:+UseG1GC', '-Djava.awt.headless=true', '-Dfile.encoding=UTF-8',
-    `-Dmagelite.vendor=${vendor}`, `-Dmagelite.hostGraceMs=${graceMs}`, '-Dmagelite.kickAfterMs=5000',
+    `-Dmagelite.forge=${forge}`, `-Dmagelite.hostGraceMs=${graceMs}`, '-Dmagelite.kickAfterMs=5000',
     '-cp', `${path.join(lib, 'magelite-engine.jar')}${path.delimiter}${path.join(lib, '*')}`,
-    'dev.magelite.Main', `--data=${dataDir}`, `--port=${port}`, `--vendor=${vendor}`, '--dev', ...extraArgs,
+    'dev.magelite.Main', `--data=${dataDir}`, `--port=${port}`, `--forge=${forge}`, '--dev', ...extraArgs,
   ]
   const p = spawn(java, args, { cwd: dataDir, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
   procs.push(p)

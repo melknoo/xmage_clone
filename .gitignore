@@ -35,3 +35,9 @@ design/redesign-shots/
 
 # lokale Zugangsdaten (nie committen/deployen)
 cloudflare_token
+
+# Forge: nur FORGE_COMMIT ist getrackt; Jars + res entstehen durch scripts/import-forge.ps1
+vendor/forge/*
+!vendor/forge/FORGE_COMMIT
+vendor/forge.tmp/
+vendor/forge.old/

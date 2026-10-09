@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
  * Kartenbilder von Scryfall mit lokalem Disk-Cache.
  * <ul>
  *   <li>{@code GET /img/card/{set}/{num}?size=&face=&name=}</li>
- *   <li>{@code GET /img/token?name=&set=&n=&size=}</li>
+ *   <li>{@code GET /img/token?name=&set=&num=&n=&size=} ({@code set} = Scryfall-Token-Set, {@code num} optional)</li>
  *   <li>{@code GET /img/named?name=&size=}</li>
  * </ul>
  * Scryfall-API max. ~10 Anfragen/s (wir: 1 Anfrage pro 110 ms), CDN-Downloads ohne Limit.
@@ -82,8 +82,12 @@ public final class ImageService implements HttpServer.Module {
                 return;
             }
             String clean = cleanTokenName(name);
-            String key = "tokens/" + safe(set == null ? "_" : set.toLowerCase(Locale.ROOT)) + "/" + safe(clean) + "_" + size + ".jpg";
-            serve(ctx, key, () -> fetchToken(clean, set, size));
+            // Token-Set + Nummer (Forge-PaperToken): exakter Druck; Cache-Key bekommt "_n<num>", Keys ohne num bleiben wie sie waren
+            String num = ctx.queryParam("num");
+            boolean exact = set != null && !set.isBlank() && num != null && !num.isBlank();
+            String key = "tokens/" + safe(set == null ? "_" : set.toLowerCase(Locale.ROOT)) + "/" + safe(clean)
+                    + (exact ? "_n" + safe(num) : "") + "_" + size + ".jpg";
+            serve(ctx, key, () -> fetchToken(clean, set, exact ? num : null, size));
         });
         app.get("/img/named", ctx -> {
             String name = ctx.queryParam("name");
@@ -178,7 +182,84 @@ public final class ImageService implements HttpServer.Module {
         return apiGetBytes(API + "/cards/named?exact=" + enc(n) + "&format=image&version=" + size);
     }
 
-    private byte[] fetchToken(String name, String set, String size) throws Exception {
+    /**
+     * Token: mit Nummer zuerst der exakte Druck {@code /cards/<token-set>/<num>} (Scryfall-Token-Sets heissen {@code t} +
+     * Set-Code, z. B. {@code tc20}; die UI schickt sie schon so). Stimmt der Name dort nicht (Nummer weicht ab) oder gibt es
+     * den Druck nicht, bleibt die Namenssuche wie bisher.
+     */
+    private byte[] fetchToken(String name, String set, String num, String size) throws Exception {
+        if (num != null && set != null && !set.isBlank()) {
+            String s = set.toLowerCase(Locale.ROOT);
+            byte[] exact = fetchTokenPrint(name, s, num, size);
+            if (exact == null && !s.startsWith("t")) {
+                // Altaufrufer mit dem Haupt-Set-Code ("c20" statt "tc20")
+                exact = fetchTokenPrint(name, "t" + s, num, size);
+            }
+            if (exact != null) {
+                return exact;
+            }
+        }
+        return fetchTokenByName(name, set, size);
+    }
+
+    private byte[] fetchTokenPrint(String name, String tset, String num, String size) throws Exception {
+        String json = apiGetString(API + "/cards/" + enc(tset) + "/" + enc(transformNumber(num)));
+        if (json == null) {
+            return null;
+        }
+        JsonNode card = Json.MAPPER.readTree(json);
+        if (!tokenNameMatches(name, card)) {
+            return null;
+        }
+        return cardImage(card, size);
+    }
+
+    /**
+     * Scryfall-Karte passt zum Forge-Token-Namen (ohne Akzente/Gross-Klein): Name gleich (bei zweiseitigen Tokens "A // B"
+     * jede Seite), oder Forges Name endet auf ihn ("Phyrexian Wurm Token" bei Scryfall nur "Wurm": Forge fuehrt den
+     * vollen Untertyp, die Karte nur den letzten).
+     */
+    static boolean tokenNameMatches(String name, JsonNode card) {
+        String want = fold(name);
+        if (want.isEmpty()) {
+            return false;
+        }
+        if (faceMatches(want, card)) {
+            return true;
+        }
+        for (JsonNode f : card.path("card_faces")) {
+            if (faceMatches(want, f)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean faceMatches(String want, JsonNode face) {
+        for (String part : face.path("name").asText().split(" // ")) {
+            String f = fold(part);
+            if (!f.isEmpty() && (want.equals(f) || want.endsWith(" " + f))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String fold(String s) {
+        String n = java.text.Normalizer.normalize(s == null ? "" : s, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        return cleanTokenName(n).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
+    }
+
+    private byte[] cardImage(JsonNode card, String size) throws Exception {
+        String img = card.path("image_uris").path(size).asText(null);
+        if (img == null && card.path("card_faces").isArray() && !card.path("card_faces").isEmpty()) {
+            img = card.path("card_faces").get(0).path("image_uris").path(size).asText(null);
+        }
+        return img == null ? null : cdnGet(img);
+    }
+
+    private byte[] fetchTokenByName(String name, String set, String size) throws Exception {
         String q = "t:token !\"" + name.replace("\"", "") + "\"";
         String url = API + "/cards/search?unique=art&order=released&q=" + enc(q);
         String json = apiGetString(url);
@@ -204,11 +285,7 @@ public final class ImageService implements HttpServer.Module {
                 }
             }
         }
-        String img = pick.path("image_uris").path(size).asText(null);
-        if (img == null && pick.path("card_faces").isArray() && !pick.path("card_faces").isEmpty()) {
-            img = pick.path("card_faces").get(0).path("image_uris").path(size).asText(null);
-        }
-        return img == null ? null : cdnGet(img);
+        return cardImage(pick, size);
     }
 
     private byte[] apiGetBytes(String url) throws Exception {

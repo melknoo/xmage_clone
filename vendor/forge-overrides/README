@@ -1,0 +1,20 @@
+vendor/forge-overrides - gepatchte Forge-Kartenskripte (MageLite)
+
+Zweck
+  Karten-Fixes gegen die Forge-Skripte am gepinnten Commit (vendor/forge/FORGE_COMMIT).
+  Jede Datei hier ersetzt beim Import (scripts/import-forge.ps1) die gleichnamige Datei
+  im cardsfolder.zip. Es gibt keine losen .txt neben dem Zip und keine Shadow-Klassen.
+
+Layout
+  vendor/forge-overrides/cardsfolder/<buchstabe>/<datei>.txt
+  Beispiel: cardsfolder/t/the_mighty_thor.txt (gleicher Pfad wie in forge-gui/res/cardsfolder)
+  Liegt die Originaldatei woanders (z. B. upcoming/), ersetzt der Import sie per Dateiname.
+
+Regeln
+  - Erste Zeile bzw. eine Kommentarzeile: "# MageLite: <Grund>" (Pflicht, sonst bricht der Import ab).
+  - Datei = komplettes Kartenskript (nicht nur ein Diff), UTF-8, LF.
+  - Nach jeder Aenderung neu importieren: powershell -File scripts\import-forge.ps1
+  - Die angewendeten Overrides stehen in vendor/forge/manifest.json unter "overrides".
+  - Dieses Verzeichnis ist getrackt; vendor/forge/ (Build-Ausgabe) nicht.
+
+Das Verzeichnis darf leer sein (Normalfall, solange kein Fix noetig ist).

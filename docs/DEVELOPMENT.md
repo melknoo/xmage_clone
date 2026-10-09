@@ -17,10 +17,45 @@ git config user.email "melknoo@users.noreply.github.com"   # Git-Identität gilt
 powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-`build.ps1` installiert die npm-Pakete in `ui/` und `desktop/`, lädt beim ersten Mal Gradle und baut alles.
-Die Karten-DB ist nicht im Repo; die Dev-Engine baut sie beim ersten Start in `engine/run/db` auf (ca. 40 s), die
-App in `%APPDATA%\MageLite\engine\db`. Wer die vorgefertigte DB hat, legt sie als
-`vendor\xmage\db\cards.h2.mv.db` ab – dann wird sie beim Erststart nur kopiert.
+`build.ps1` importiert beim ersten Lauf **Forge** (`scripts\import-forge.ps1`, einige Minuten, siehe unten), installiert
+die npm-Pakete in `ui/` und `desktop/`, lädt beim ersten Mal Gradle und baut alles. **Maven braucht man nicht**, das
+Import-Skript lädt eine gepinnte Version nach `%LOCALAPPDATA%\MageLite-build`. Es gibt keine Karten-DB mehr: Forge liest
+die Kartenskripte bei jedem Start aus `vendor\forge\res` (Boot ca. 4 s, `gradlew forgeCheck` misst es); die Dev-Engine
+legt ihr Forge-Profil in `engine/run/forge-data`, die App in `%APPDATA%\MageLite\engine\forge-data` ab.
+
+### Forge importieren (`scripts\import-forge.ps1`)
+
+`vendor/forge/` (Jars, Kartenskripte, Editionen, KI-Profile) ist **nicht** im Repo und entsteht nur durch dieses Skript
+aus dem Commit in `vendor/forge/FORGE_COMMIT`. Braucht Git, ein JDK 17+ und Internet; Maven ≥ 3.8.1 nimmt es aus dem
+PATH oder lädt `apache-maven-3.9.x` (SHA-512 geprüft) selbst. Ablauf (das Skript meldet `[n/9]`):
+
+1. Voraussetzungen (git, JDK, Maven); bricht ab, wenn ein `java.exe` mit `vendor\forge` in der Kommandozeile läuft (eine
+   laufende Engine sperrt die Jars – erst beenden).
+2. Commit holen: `git fetch --depth 1 --filter=blob:none` mit sparse Checkout (nur `forge-core/-game/-ai/-gui`, benötigte
+   `res`-Verzeichnisse), Scratch-Kopie in `%LOCALAPPDATA%\MageLite-build\forge-src` (außerhalb des Repos).
+3. Wachen: `Sentry.init` in den Forge-Modulen → Abbruch; zu wenige Kartenskripte (< 25 000) → Abbruch.
+4. Reactor in der Scratch-Kopie auf 4 Module kürzen.
+5. Bauen: `mvn package` + `copy-dependencies` (Checkstyle aus, Tests aus).
+6. Jars nach `vendor/forge/lib` **ohne** `jetty-*`, `javax.servlet-api*`, `org.jupnp.support*`, `slf4j-tinylog*`,
+   `slf4j-api*` (Javalin bringt Jetty 11, Logging läuft über reload4j; `org.jupnp` selbst bleibt, `IGuiBase` braucht den Typ).
+7. `res/` nach Allow-Liste (`ai`, `blockdata`, `defaults`, `editions`, `formats`, `licenses`, `lists`, `setlookup`,
+   `languages/*.properties`, `quest/commanderprecons`); `cardsfolder` und `tokenscripts` als `cardsfolder.zip` mit den
+   Overrides aus `vendor/forge-overrides/` darüber.
+8. Metadaten: `forge.profile.properties` (relative Pfade `forge-data/…`, Arbeitsverzeichnis = Datenordner),
+   `LICENSE-Forge.txt`, `manifest.json` (Commit, Version, Jars mit SHA-256, Overrides).
+9. Tausch über `vendor/forge.tmp` → `vendor/forge`, nie halbfertig.
+
+Parameter: `-Commit <sha>` (anderer Stand; nach Erfolg wird `FORGE_COMMIT` gesetzt = Forge-Bump), `-Scratch <dir>`,
+`-FullRes` (komplettes `res/`), `-KeepScratch`. Gemessen 2–4 min (Maven-Cache warm); beim allerersten Lauf länger.
+
+- **Forge-Bump:** `import-forge.ps1 -Commit <sha>`, danach `gradlew test`, `gradlew forgeCheck`, `humanSpike` (Standard +
+  Szenarien) und `botArena` laufen lassen, `FORGE_COMMIT` committen. Die Engine stempelt den Commit in
+  `magelite-version.properties`; `ForgeBoot` verweigert den Start, wenn `vendor/forge/manifest.json` einen anderen
+  Commit hat (Engine neu bauen oder neu importieren). `build.ps1` importiert selbst neu, wenn Pin und Manifest
+  abweichen.
+- **Karten-Fix:** Datei `vendor/forge-overrides/cardsfolder/<x>/<name>.txt` (komplettes Kartenskript, erste Zeile bzw.
+  eine Kommentarzeile `# MageLite: <Grund>` ist Pflicht), dann neu importieren. Keine losen `.txt` neben dem Zip, keine
+  Shadow-Klassen (`vendor/forge-overrides/README`).
 
 ## 2. Entwicklungs-Schleife
 
@@ -49,6 +84,10 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
   und springt ins Menü.
 - **Für die App** (`MageLite.cmd`) danach `scripts\build.ps1` laufen lassen (baut `ui/dist` und
   `engine/build/install`).
+- **Test-App getrennt von der installierten:** `MageLite.cmd` (nicht gepackt) nutzt `%APPDATA%\MageLite-dev`
+  (Fenstertitel „MageLite (Test)“). Beim ersten Start kopiert die Engine `%APPDATA%\MageLite\engine\magelite.db` nur
+  lesend dorthin (`--seed-db`) und stellt die Kopie auf Forge um; die installierte App bleibt unberührt. Neu
+  übernehmen: `%APPDATA%\MageLite-dev\engine\magelite.db*` löschen. Anderes Verzeichnis: `MAGELITE_USER_DATA`.
 
 ## 3. Testen
 
@@ -56,15 +95,17 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 |---|---|---|
 | Typecheck UI | `cd ui; npx tsc -b` | keine Ausgabe |
 | Engine kompilieren | `cd engine; .\gradlew.bat compileJava` | BUILD SUCCESSFUL |
-| Parser-Tests | `cd engine; .\gradlew.bat test` | 7 PASSED (erster Lauf baut die DB, dauert länger) |
+| Engine-Tests | `cd engine; .\gradlew.bat test` | alle PASSED (Deck-Parser, 70 Sample-Decks, Bracket-Analyse, Forge-Boot, Text-/Mapper-/Bild-/Lobby-Helfer; bootet Forge einmal pro Lauf, ca. 10–25 s extra) |
+| Forge-Boot | `.\gradlew.bat forgeCheck` | Exit 0 und Zeile `Forge <version> (<sha>): ~33 500 Karten, ~684 Editionen … Boot ca. 4 s, Heap ca. 150 MB` (Karten > 25 000, Editionen > 500) |
 | 4 Bots headless | `.\gradlew.bat spike -PspikeArgs="--games=3 --tempo=BLITZ --turnCap=40"` | keine FEHLER, Zeiten pro Zug |
 | Deck-Validierung | `.\gradlew.bat spike -PspikeArgs="--validate"` | 67/70 Sample-Decks gültig (3 mit gebannten Karten) |
 | Prompt-API-Stresstest | `.\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=32 --verbose"` | „0 fehlgeschlagen“, keine STALLs |
 | REST + WS End-to-End | Dev-Engine starten, dann `node scripts\e2e-flow.mjs https://archidekt.com/decks/7031486` | Spielende mit `reward` |
 | Server-Modus (Konten) | `gradlew runServer`, dann `node scripts\e2e-login.mjs` | „alles gruen“ (Login, Cookie, Nutzertrennung, 409, Rotieren, Rate-Limit) |
 | Mehrere Menschen (Routing) | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=2"` (auch `--humans=4`) | „0 fehlgeschlagen“, jeder Sitz bekommt Prompts und `gameOver`; Zeile „Ereignisse (events)“ ohne „verdeckte Karten an Fremde“ |
-| Szenarien | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=8 --scenario=necro"` (auch `gemstone --turnCap=4`, `swarm --turnCap=24`, `dredge`) | „Necro x5: OK“, „Starthand-Aktion (Gemstone): OK“, „Mehrfach-Angriff: OK“ + „Angriff zuruecksetzen: OK“ |
-| Karten-DB vs. Interrupt | `.\gradlew.bat dbInterruptSpike` | „retry-FS=aktiv … 0 KAPUTT -> OK“ (Demonic-Consultation-Absturz; nicht Teil von `test`) |
+| Szenarien | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=8 --scenario=necro"` (auch `gemstone --turnCap=4`, `swarm --turnCap=24`, `dredge`, `convoke`) | „Necro x5: OK“, „Starthand-Aktion (Gemstone): OK“, „Mehrfach-Angriff: OK“ + „Angriff zuruecksetzen: OK“ |
+| Verlassen/Abbruch mitten in einer Frage | `.\gradlew.bat humanSpike -PspikeArgs="--games=1 --leave=abortTarget"` (auch `abortRequiredTarget`, `prompt`, `bot`, `abort`) | „0 fehlgeschlagen“; Spielende wenige ms nach dem Abbruch (Forge fragt Ziele sonst rekursiv neu) |
+| KI-Profile vergleichen | `.\gradlew.bat botArena -PspikeArgs="--games=30 --turnCap=80"` | Siege/Platzierungspunkte je Profil (MageLite vs. Reckless), CSV in `engine\run\arena` |
 | Mehrere Menschen (REST+WS) | `gradlew runServer`, dann `node scripts\e2e-online.mjs` | „alles gruen“ (2 Cookies, 2 Autopiloten, Aufgeben einzeln, reward + `games`-Zeile je Nutzer) |
 | Lobby/Tische | `gradlew runServer`, dann `node scripts\e2e-tables.mjs` | „alles gruen“ (Tisch eröffnen/beitreten, Decks, Bot-Platz, Start mit 3 Spielern, Revanche, schließen, 409-Fälle) |
 | Server-UI visuell | `runServer` + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-server.json` in `desktop/` | `engine/run/shot-server-*.png` (Login, Einladungen, Spiel) |
@@ -73,8 +114,10 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 | Design-Screenshots (alle Screens) | Dev-Engine + `npm run dev`: `tools\steps-design-<splash\|meta\|game\|swarm\|necro\|dredge\|gemstone\|minsize>.json`; danach `runServer` + `node tools\design-mate.mjs` (zweiter Mensch) parallel zu `tools\steps-design-server.json` | `design/claude-design/screenshots/*.png`, Übersicht in `INDEX.md`; für Vorher/Nachher-Vergleiche beim Redesign |
 | UI visuell | siehe unten | Screenshots ansehen |
 
-Spike-Argumente: `--games --turnCap --tempo=BLITZ|NORMAL|BEDACHT|MAX --fastOpp=true|false --seed --verbose
---maxMinutes` (BotSpike) bzw. `--dumpJson=datei.jsonl` (HumanSpike, schreibt alle Server-Nachrichten mit).
+Spike-Argumente: BotSpike `--games --turnCap --tempo=BLITZ|NORMAL|BEDACHT|MAX --seed --maxMinutes --parallel=P
+--deckDir --decks=a;b --slowTurnSec --validate`; HumanSpike `--games --turnCap --tempo --seed --humans=1..4 --verbose
+--scenario=swarm|dredge|gemstone|necro|convoke --spectate --decks=a;b --leave=… --dumpJson=datei.jsonl` (schreibt alle
+Server-Nachrichten mit). Beide Spikes melden langsame Züge und zählen `UNMAPPED`-Aufrufe (siehe Abschnitt 4).
 
 ### UI automatisiert ansehen
 
@@ -108,58 +151,72 @@ Die echte App einmal starten und nach X ms abfotografieren (beendet sich danach)
 
 ## 4. Debuggen
 
-- Logs: Dev → `engine\run\logs\engine.log` und Konsole; App → `%APPDATA%\MageLite\desktop.log` und
-  `%APPDATA%\MageLite\engine\logs\engine.log`.
+- Logs: Dev → `engine\run\logs\engine.log` (+ Konsole) und `engine\run\logs\forge.log` (Forge/tinylog, ab WARN);
+  Test-App (`MageLite.cmd`) → `%APPDATA%\MageLite-dev\desktop.log` und `%APPDATA%\MageLite-dev\engine\logs\`;
+  installierte App → dasselbe unter `%APPDATA%\MageLite\`.
 - DevTools im App-Fenster: `Strg+Umschalt+I`.
-- „AI player thinks too long“-Warnungen sind normal (Denkzeit-Limit greift).
-- Hängt ein Spiel, nach „Game frozen“/„waitResponseOpen“ im Log suchen. Meist hat jemand vom Spiel-Thread aus
-  geantwortet (siehe Regel 2 in `CLAUDE.md`).
-- Datenstand zurücksetzen: Dev → `engine\run` löschen; App → `%APPDATA%\MageLite` löschen (Decks/Statistik weg!).
+- „AI eval thread at timeout“ (Stacktrace auf stderr) ist normal: Forges KI-Zeitlimit (`Game.AI_TIMEOUT`, vom Tempo-Preset)
+  hat eine Entscheidung abgebrochen, vor allem bei großen Boards.
+- Startet die Engine nicht: „Forge-Daten (…) passen nicht zur Engine (…)“ → `scripts\import-forge.ps1` bzw. Engine neu
+  bauen; „Forge-Kartenskripte fehlen“ oder „Forge-Daten unvollständig“ → `scripts\import-forge.ps1`; ERROR „Arbeitsverzeichnis
+  != Datenordner“ → Engine mit `cwd` = `--data` starten (sonst landet `forge-data/` an der falschen Stelle).
+- Hängt ein Spiel (UI: `activity` meldet `stuck`, > 15 s ohne Änderung und ohne CPU-Last), im `engine.log` suchen:
+  - `UNMAPPED <Methode> …`: ein Forge-Aufruf, den `PromptBridge`/`SeatGui` (oder `HeadlessGui`) nicht abbildet; die Engine
+    beantwortet ihn automatisch oder wirft `IllegalStateException`. Die Spikes zählen sie (Zeile „Nicht abgebildet“).
+  - `UNMAPPED loop …`: Client und Forge drehen sich im Kreis (> 200 Antworten auf eine Frage), der Sitz geht auf Autopilot.
+  - „Endlosschleife vermutet: N Entscheidungen in Zug T“: Forge hat keine Schleifenerkennung (z. B. Marken-Trigger-Ketten);
+    > 3000 Entscheidungen in einem Zug beenden das Spiel als Remis.
+  - Thread-Dump (`jcmd <pid> Thread.print`): Der Spiel-Thread `Game-ml-<id>` wartet normalerweise in `GameHost.park`. Steckt
+    er woanders, rechnet Forge (KI-Entscheidung) oder hängt selbst. Client-Antworten dürfen Forge nie direkt anfassen: sie
+    gehören über `GameHost.inbox` auf den Spiel-Thread (siehe Klassen-Javadoc `GameHost`).
+- Datenstand zurücksetzen: Dev → `engine\run` löschen; Test-App → `%APPDATA%\MageLite-dev` löschen (nächster Start
+  übernimmt die echte DB nur lesend); installierte App → `%APPDATA%\MageLite` löschen (Decks/Statistik weg!).
 
-### XMage-Interna nachschlagen
+### Forge-Interna nachschlagen
 
-- Signaturen gegen die vorhandenen Jars: `javap -cp "vendor\xmage\lib\mage-1.4.60.jar;vendor\xmage\lib\mage-common-1.4.60.jar" mage.players.Player`
-  (für private Felder `-p`, für Bytecode `-c`).
-- Quellcode am passenden Tag: `https://raw.githubusercontent.com/magefree/mage/xmage_1.4.60V3/<pfad>`. Wichtige Pfade:
-  - `Mage.Server/src/main/java/mage/server/game/GameController.java` (Vorbild für `GameHost`)
-  - `Mage.Server/src/main/java/mage/server/game/GameSessionPlayer.java`
-  - `Mage.Server.Plugins/Mage.Player.Human/src/mage/player/human/HumanPlayer.java` (wie Antworten gelesen werden)
-  - `Mage.Server.Plugins/Mage.Player.AI.MA/src/mage/player/ai/ComputerPlayer6.java` / `ComputerPlayer7.java`
-  - `Mage.Common/src/main/java/mage/view/GameView.java`, `CardView.java`, `PlayerView.java`
-  - `Mage/src/main/java/mage/players/PlayerImpl.java`, `Mage/src/main/java/mage/players/net/UserData.java`
-- Gute Protokoll-Referenz: der XMage-Client speichert Spielmitschnitte unter `mage-client\gamelogsJson\` (JSON-Lines).
+- Signaturen gegen die gebauten Jars: `javap -cp "vendor\forge\lib\*" forge.gamemodes.match.AbstractGuiGame` (für private
+  Felder `-p`, für Bytecode `-c`); Beispiele: `forge.player.PlayerControllerHuman`, `forge.ai.PlayerControllerAi`,
+  `forge.game.phase.PhaseHandler`, `forge.model.FModel`.
+- Quellcode **am gepinnten Commit** (nie `master`, die APIs weichen ab): `https://raw.githubusercontent.com/Card-Forge/forge/<sha>/<pfad>`
+  mit `<sha>` aus `vendor/forge/FORGE_COMMIT`. Wichtige Pfade:
+  - `forge-gui/src/main/java/forge/gamemodes/match/AbstractGuiGame.java` und `…/match/input/Input*.java` (Vorbild für `SeatGui`/`PromptBridge`)
+  - `forge-gui/src/main/java/forge/player/PlayerControllerHuman.java` (Vorbild für `HumanController`), `forge/gui/interfaces/IGuiBase.java`, `forge/gui/interfaces/IGuiGame.java`
+  - `forge-ai/src/main/java/forge/ai/PlayerControllerAi.java`, `AiBlockController.java`, `AiProfileUtil.java` (KI)
+  - `forge-game/src/main/java/forge/game/phase/PhaseHandler.java`, `forge/game/Match.java`, `forge/game/Game.java`, `forge/game/player/Player.java`, `forge/game/GameAction.java`
+  - `forge-gui/src/main/java/forge/model/FModel.java`, `forge-core/src/main/java/forge/StaticData.java` (Karten-DB, Prefs)
+  - Kartenskripte: `forge-gui/res/cardsfolder/<buchstabe>/<name>.txt`
+- Karten-Skripte der importierten Version liegen gezippt in `vendor/forge/res/cardsfolder/cardsfolder.zip`.
 
 ## 5. Typische Erweiterungen
 
-- **Neues Feld für die UI:** DTO in `engine/.../view/dto` ergänzen, in `GameViewMapper`/`PromptMapper` füllen,
-  `ui/src/api/types.ts` nachziehen. Bei `@JsonInclude(NON_DEFAULT)` daran denken, dass Default-Werte (0/false)
+- **Neues Feld für die UI:** DTO in `engine/.../view/dto` ergänzen, in `ForgeViewMapper` (State) bzw. `PromptBridge`
+  (Prompt) füllen, Wire-Namen über `WireNames`, `ui/src/api/types.ts` nachziehen. Bei `@JsonInclude(NON_DEFAULT)` daran denken, dass Default-Werte (0/false)
   nicht gesendet werden.
-- **Neue Client-Aktion:** `HttpServer.onSocketMessage` (`case "…"`), Methode in `GameHost`
-  (Spielzustand nur vom Spiel-Thread oder, wenn der Spiel-Thread gerade wartet, vom CALL-Thread anfassen),
+- **Neue Client-Aktion:** `api/GameMessages.dispatch` (`case "…"`; gemeinsam für WebSocket und Host-Link), Methode in
+  `GameHost` (prüft nur und reiht das Kommando in `inbox` ein; Forge-Objekte fasst nur der Spiel-Thread an),
   Store-Methode in `ui/src/store/game.ts`.
-- **Neue PlayerAction erlauben:** `GameHost.ALLOWED_ACTIONS`.
+- **Neue Aktion (`action`) erlauben:** `case` in `GameHost.action`.
 - **Neuer REST-Endpunkt:** als `HttpServer.Module` (Beispiele: `DeckRoutes`, `StatsRoutes`), in `Main` registrieren.
   Fehler: `IllegalArgumentException` → HTTP 400 mit `{error}`.
-- **DB-Schema ändern:** neue Datei `engine/src/main/resources/db/migrations/V2__beschreibung.sql` und in
+- **DB-Schema ändern:** neue Datei `engine/src/main/resources/db/migrations/V10__beschreibung.sql` und in
   `Db.MIGRATIONS` eintragen. Bestehende Migrationen nie ändern.
 - **Neuer Screen:** `ui/src/screens/…`, in `App.tsx` (`NAV` + Render) und `store/nav.ts` (`Screen`) eintragen.
 
 ## 6. Konventionen
 
 - Java 17, Paket `dev.magelite`. Kommentare deutsch, ohne Umlaute (ae/oe/ue/ss). UI-Texte deutsch mit Umlauten.
-- XMage-Texte (Prompts, Kartentexte, Log) bleiben englisch.
-- UI: React-Funktionskomponenten, Zustand-Stores, Tailwind-Klassen. Nie `dangerouslySetInnerHTML`; XMage-HTML
+- Forge-Texte (Kartentexte, Spielverlauf, Teile der Prompts) bleiben englisch; eigene Prompt-Texte der Engine dürfen deutsch sein.
+- UI: React-Funktionskomponenten, Zustand-Stores, Tailwind-Klassen. Nie `dangerouslySetInnerHTML`; Log-/Prompt-Markup
   kommt als Segmente (`RichText` → `Rich`).
 - PowerShell-/CMD-Skripte ASCII-only, Zeilenenden CRLF (regelt `.gitattributes`).
-- `vendor/xmage/lib` nur über `scripts\import-xmage.ps1` aktualisieren; danach Spikes und Tests laufen lassen.
+- `vendor/forge` nur über `scripts\import-forge.ps1` erzeugen/aktualisieren (Jars und Daten immer vom selben Commit, nie
+  von Hand); danach Tests, `forgeCheck` und Spikes laufen lassen.
 
 ## 7. Release: Windows-Installer
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts
-elease.ps1          # Version +1, bauen, Setup, still installieren
-powershell -ExecutionPolicy Bypass -File scripts
-elease.ps1 -Fly     # dazu fly-Deploy (braucht committeten Stand)
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1          # Version +1, bauen, Setup, still installieren
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -Fly     # dazu fly-Deploy (braucht committeten Stand)
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1          # nur Setup bauen -> desktop\dist\MageLite-Setup-<version>.exe
 ```
 
@@ -172,12 +229,17 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1          # nur Setu
 
 - Braucht zum Bauen ein **JDK 17+** (wegen `jlink`/`jdeps`, ein JRE reicht nicht) und Node.js. Auf dem Ziel-PC
   muss nichts installiert sein.
-- Ablauf: `build.ps1` → Module per `jdeps` + feste Extraliste (`$extraModules` im Skript) → `jlink` nach
-  `desktop\out\jre` → `electron-builder` (Konfiguration im `build`-Block von `desktop/package.json`).
-- Gepackte App: `resources/{engine/lib, ui, xmage, jre}`; `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst.
-  Die Karten-DB wird nicht mitgeliefert, sondern beim ersten Start in `%APPDATA%\MageLite\engine\db` gebaut.
+- Ablauf: `build.ps1` (importiert Forge bei Bedarf) → Forge-Prüfung (`cardsfolder.zip`, `manifest.json`) →
+  `desktop\out\SOURCE.txt` (Repo-Commit, Forge-Commit, GPL-Hinweis; vorher committen, sonst steht dort
+  „UNCOMMITTETE AENDERUNGEN“) → Module per `jdeps -R` + Extraliste (`$extraModules`) → `jlink` nach `desktop\out\jre`
+  → **Smoke-Start** der Engine mit dieser JRE (wartet auf `MAGELITE_READY`, bricht sonst mit Log ab) →
+  `electron-builder` (Konfiguration im `build`-Block von `desktop/package.json`).
+- Gepackte App: `resources/{engine/lib, ui, forge, jre, licenses, LICENSE.txt, SOURCE.txt}`; `forge` = `vendor/forge`
+  ohne Jars (`res/**`, `manifest.json`, `forge.profile.properties`, `LICENSE-Forge.txt`), die Forge-Jars liegen in
+  `engine/lib`. `engine.cjs` (`resolvePaths`) nimmt `resources/jre` zuerst. Forge liest die Kartenskripte bei jedem
+  Start (wenige Sekunden), es gibt keine Karten-DB mehr.
 - Installer: NSIS, pro Nutzer (kein Admin), Zielordner wählbar, Desktop-/Startmenü-Verknüpfung.
-- Setup.exe ca. 320 MB; Ziel: Windows 10/11 x64, ≥ 8 GB RAM empfohlen (Engine `-Xmx3g`).
+- Setup.exe ca. 205 MB (entpackt ca. 500 MB); Ziel: Windows 10/11 x64, ≥ 8 GB RAM empfohlen (Engine `-Xmx3g`).
 - EXE ist **nicht signiert** → SmartScreen: „Weitere Informationen“ → „Trotzdem ausführen“. Signieren ginge über
   Azure Trusted Signing oder ein OV-Zertifikat (kostenpflichtig), aktuell nicht geplant.
 - Fehlt der Laufzeit ein Modul: `NoClassDefFoundError`/`ClassNotFoundException` in `%APPDATA%\MageLite\desktop.log`

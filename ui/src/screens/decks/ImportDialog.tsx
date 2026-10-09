@@ -307,7 +307,7 @@ export function ImportDialog({ edit, onClose, onSaved, onRequestDelete }: { edit
                   wrap="off"
                   disabled={textLoading}
                   className="min-h-[160px] flex-1 resize-none overflow-auto whitespace-pre rounded-sm bg-bg-0 p-3 font-mono text-[13px] font-medium leading-[1.7] text-fg-2 shadow-[inset_0_0_0_1px_var(--color-line-3)] outline-none transition-shadow duration-1 scrollbar-thin placeholder:text-fg-4 hover:shadow-[inset_0_0_0_1px_var(--color-line-4)] focus:shadow-[inset_0_0_0_1px_var(--color-ember)] disabled:opacity-50"
-                  placeholder={textLoading ? 'Lade Liste …' : "Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n1 Sol Ring\n1 Arcane Signet\n…\n\nFormate: Moxfield, Archidekt, MTGA, MTGO, XMage (.dck)"}
+                  placeholder={textLoading ? 'Lade Liste …' : "Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n1 Sol Ring\n1 Arcane Signet\n…\n\nFormate: Moxfield, Archidekt, MTGA, MTGO, Forge/XMage (.dck)"}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                 />
@@ -372,35 +372,26 @@ function PreviewBody({
   const art = p.commanderSet && p.commanderNum ? cardImageUrl({ set: p.commanderSet, num: p.commanderNum }, { size: 'art_crop' }) : null
   const cmdNames = p.commanders.map((c) => c.name).join(' & ')
   const unknownN = p.issues ? p.issues.filter((i) => i.kind === 'unknown').length : p.unknown.length
-  const unfinishedN = p.issues ? p.issues.filter((i) => i.kind === 'unfinished').length : p.unfinished.length
   const issues: { key: string; node: ReactNode }[] = p.issues
     ? p.issues.map((i) => ({
         key: `${i.line}:${i.name}`,
-        node:
-          i.kind === 'unfinished' ? (
-            <>
-              In XMage noch nicht spielbar, Zeile {i.line}: <span className="font-mono text-[12.5px]">{i.name}</span>. Die Karte wird ignoriert.
-            </>
-          ) : (
-            <>
-              Unbekannte Karte in Zeile {i.line}: <span className="font-mono text-[12.5px]">{i.name}</span>.
-              {i.suggestion && (
-                <>
-                  {' '}
-                  Meintest du{' '}
-                  <button type="button" className="font-semibold text-fg-1 underline decoration-fg-4 underline-offset-2 hover:decoration-fg-1" title="Zeile ersetzen" onClick={() => onSuggestion(i)}>
-                    {i.suggestion}
-                  </button>
-                  ?
-                </>
-              )}
-            </>
-          ),
+        node: (
+          <>
+            Unbekannte Karte in Zeile {i.line}: <span className="font-mono text-[12.5px]">{i.name}</span>.
+            {i.suggestion && (
+              <>
+                {' '}
+                Meintest du{' '}
+                <button type="button" className="font-semibold text-fg-1 underline decoration-fg-4 underline-offset-2 hover:decoration-fg-1" title="Zeile ersetzen" onClick={() => onSuggestion(i)}>
+                  {i.suggestion}
+                </button>
+                ?
+              </>
+            )}
+          </>
+        ),
       }))
-    : [
-        ...p.unknown.map((u) => ({ key: `u:${u}`, node: <>Unbekannte Karte: <span className="font-mono text-[12.5px]">{u}</span>.</> })),
-        ...p.unfinished.map((u) => ({ key: `f:${u}`, node: <>In XMage noch nicht spielbar: <span className="font-mono text-[12.5px]">{u}</span>.</> })),
-      ]
+    : p.unknown.map((u) => ({ key: `u:${u}`, node: <>Unbekannte Karte: <span className="font-mono text-[12.5px]">{u}</span>.</> }))
   const typed = p.cards.some((c) => c.type)
   const groups = typed
     ? GROUPS.map((g) => ({ ...g, cards: p.cards.filter((c) => (c.type ?? 'other') === g.type) })).filter((g) => g.cards.length)
@@ -438,7 +429,6 @@ function PreviewBody({
           </Chip>
         )}
         {unknownN > 0 && <Chip tone="target">{`${unknownN} unbekannt`}</Chip>}
-        {unfinishedN > 0 && <Chip tone="target">{`${unfinishedN} nicht in XMage`}</Chip>}
       </div>
 
       {p.needsCommander && (
