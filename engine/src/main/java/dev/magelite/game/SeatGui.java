@@ -48,6 +48,8 @@ public final class SeatGui extends AbstractGuiGame {
     boolean btn1Enabled;
     boolean btn2Enabled;
     final List<CardView> selectables = new ArrayList<>();
+    /** auch bei nur einer Faehigkeit fragen ("N-mal aktivieren"), gesetzt von {@link HumanController} */
+    boolean forceAbilityChoice;
 
     SeatGui(GameHost host, GameHost.HumanSeat seat) {
         this.host = host;
@@ -115,7 +117,7 @@ public final class SeatGui extends AbstractGuiGame {
         if (abilities.isEmpty()) {
             return null;
         }
-        if (abilities.size() == 1) {
+        if (abilities.size() == 1 && !forceAbilityChoice) {
             return abilities.get(0);
         }
         return host.bridge().chooseAbility(seat, hostCard, abilities);
@@ -212,14 +214,32 @@ public final class SeatGui extends AbstractGuiGame {
     @Override
     public <T> OrderResult<T> order(String title, String top, int remainingObjectsMin, int remainingObjectsMax, List<T> sourceChoices,
                                     List<T> destChoices, CardView referenceCard, boolean sideboardingMode, boolean showRememberCheckbox) {
-        // Phase 1: sequenzielle Reihenfolge-Wahl. Bis dahin Forges Vorschlag (Quell-Reihenfolge) uebernehmen.
-        host.bridge().auto(seat, "order", title);
-        List<T> out = new ArrayList<>();
+        List<T> all = new ArrayList<>();
         if (destChoices != null) {
-            out.addAll(destChoices);
+            all.addAll(destChoices);
         }
-        out.addAll(sourceChoices);
-        return new OrderResult<>(out, false);
+        all.addAll(sourceChoices);
+        if (remainingObjectsMin > 0 || remainingObjectsMax > 0) {
+            // Auswahl mit Reihenfolge: zwischen (n - max) und (n - min) Objekte uebernehmen
+            int min = Math.max(0, all.size() - Math.max(remainingObjectsMax, remainingObjectsMin));
+            int max = Math.max(min, all.size() - Math.max(0, remainingObjectsMin));
+            return new OrderResult<>(host.bridge().choices(seat, title, min, max, all, null), false);
+        }
+        return new OrderResult<>(host.bridge().order(seat, title, top, all), false);
+    }
+
+    /** Mehrfachauswahl (Scry nach unten, Starthand ...): -1 = unbegrenzt. */
+    @Override
+    public <T> List<T> many(String title, String topCaption, int min, int max, List<T> sourceChoices, List<T> destChoices, CardView c) {
+        if (sourceChoices == null || sourceChoices.isEmpty()) {
+            return new ArrayList<>();
+        }
+        int lo = Math.max(0, min);
+        int hi = max < 0 ? sourceChoices.size() : Math.min(max, sourceChoices.size());
+        if (hi <= 0) {
+            return new ArrayList<>();
+        }
+        return host.bridge().choices(seat, title, Math.min(lo, hi), hi, sourceChoices, null);
     }
 
     @Override

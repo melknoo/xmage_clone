@@ -138,8 +138,16 @@ public final class GameHost {
         private final Deque<Long> chatTimes = new ArrayDeque<>();
         /** genommene Mulligans (Spiel-Thread) */
         int mulligans;
-        /** Aktionen der letzten Prioritaets-Pruefung (Spiel-Thread), fuer den folgenden State */
-        Set<CardView> cachedActions;
+        /** Auto-Passen, F-Tasten, Stopps */
+        final AutoPassPolicy.SeatPass pass = new AutoPassPolicy.SeatPass();
+        /** laufende Mehrfach-Aktivierung (Spiel-Thread) */
+        volatile RepeatMacro repeat;
+        /** laufende Ersatzeffekt-Entscheidung ("Keinen anwenden" / 1-Klick), Spiel-Thread */
+        volatile ReplMacro replMacro;
+        /** Ersatzeffekte (Regeltext -> Kurzname), die dieses Spiel automatisch abgelehnt werden */
+        final Map<String, String> replDeclineAlways = new ConcurrentHashMap<>();
+        /** Antwort auf die naechste "Effekt anwenden?"-Frage (Spiel-Thread), null = fragen */
+        Boolean replConfirm;
         // Forge (Spiel-Thread; gesetzt beim Anlegen des Spiels)
         private Player player;
         private HumanController controller;
@@ -221,6 +229,31 @@ public final class GameHost {
 
         public Messages.GameOver gameOver() {
             return gameOver;
+        }
+    }
+
+    /** "N-mal aktivieren": Quelle, Faehigkeit (Forge-ids, Text als Rueckfall), verbleibende Aktivierungen. */
+    static final class RepeatMacro {
+        final int sourceCardId;
+        final int abilityId;
+        final String abilityText;
+        int remaining;
+
+        RepeatMacro(int sourceCardId, int abilityId, String abilityText, int remaining) {
+            this.sourceCardId = sourceCardId;
+            this.abilityId = abilityId;
+            this.abilityText = abilityText;
+            this.remaining = remaining;
+        }
+    }
+
+    /** Laufende Ersatzeffekt-Entscheidung: angenommen (eine Quelle) oder abgelehnt (Regeltexte). */
+    static final class ReplMacro {
+        final boolean accept;
+        final Set<String> rules = new HashSet<>();
+
+        ReplMacro(boolean accept) {
+            this.accept = accept;
         }
     }
 
@@ -431,6 +464,11 @@ public final class GameHost {
         return frames.peek();
     }
 
+    /** offene Fragen (Spiel-Thread), oberste zuerst */
+    Iterable<PromptBridge.Frame> framesView() {
+        return frames;
+    }
+
     // ------------------------------------------------------------------ Lebenszyklus
 
     public UUID getId() {
@@ -510,11 +548,40 @@ public final class GameHost {
     }
 
     public void setAutoPass(HumanSeat seat, boolean autoPass) {
+        boolean wasOn = seat.autoPass;
         seat.autoPass = autoPass;
+        if (wasOn && !autoPass) {
+            // "Passen manuell" beendet auch laufendes F-Tasten-Passen. Nur beim Umschalten: der Client schickt die
+            // Einstellung bei jedem Reconnect erneut.
+            cancelSkip(seat);
+        }
     }
 
-    /** Stopp-Einstellungen; folgen in Phase 1 (AutoPassPolicy). */
+    /** Stopps: Upkeep der Gegner halten; anhalten, sobald ein fremdes Stapelobjekt mich/meins anvisiert. */
     public void setStops(HumanSeat seat, Boolean stopOppUpkeep, Boolean stopOnTargeted) {
+        if (stopOppUpkeep != null) {
+            seat.pass.stopOppUpkeep = stopOppUpkeep;
+        }
+        if (stopOnTargeted != null) {
+            seat.pass.stopOnTargeted = stopOnTargeted;
+        }
+    }
+
+    private void cancelSkip(HumanSeat seat) {
+        inbox.add(() -> {
+            seat.pass.skip = AutoPassPolicy.SkipMode.NONE;
+            seat.pass.passedSigs.clear();
+            refreshState();
+        });
+    }
+
+    /** Spiel-Thread: State sofort neu senden, wenn gerade niemand gefragt wird (sonst kommt er mit dem naechsten). */
+    private void refreshState() {
+        if (frames.isEmpty()) {
+            stateDirty = true;
+        } else {
+            sendState(null, PromptBridge.StateMode.NONE);
+        }
     }
 
     /** Verbindet einen Client mit einem Sitz und schickt den aktuellen Stand (Resync nach Reconnect). */
@@ -882,37 +949,257 @@ public final class GameHost {
         }
     }
 
-    /** Mehrfach-Angriff/-Block; folgt in Phase 1. */
+    /**
+     * Mehrfach-Angriff/-Block: {@code ids} greifen {@code target} an (Angriffs-Prompt) bzw. blocken den Angreifer
+     * {@code target} (Block-Prompt). Danach kommt ein neuer Prompt (zum Bestaetigen).
+     */
     public boolean combat(HumanSeat seat, List<UUID> ids, UUID target) {
-        return false;
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        boolean attack = "attackers".equals(p.mode);
+        if (!"SELECT".equals(p.kind) || target == null || ids == null || (!attack && !"blockers".equals(p.mode))) {
+            send(seat, p); // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen
+            return false;
+        }
+        List<UUID> possible = attack ? p.possibleAttackers : p.possibleBlockers;
+        List<UUID> list = ids.stream().distinct().filter(id -> possible != null && possible.contains(id)).toList();
+        if (list.isEmpty() || !openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        String mode = p.mode;
+        inbox.add(() -> {
+            if (f instanceof PromptBridge.InputFrame inf && frames.peek() == f && !f.done() && inf.isCombat(mode)) {
+                inf.combatMacro(list, target);
+            }
+            if (f != null && !f.done()) {
+                f.dirty = true;
+            }
+        });
+        return true;
     }
 
-    /** "Angriff zuruecksetzen"; folgt in Phase 1. */
+    /** "Angriff zuruecksetzen": alle eigenen Angreifer zurueck, solange der Angriff nicht bestaetigt ist. */
     public boolean combatReset(HumanSeat seat) {
-        return false;
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        boolean ok = ("SELECT".equals(p.kind) && "attackers".equals(p.mode)) || ("PICK_TARGET".equals(p.kind) && p.defenderPick);
+        if (!ok || !openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        inbox.add(() -> {
+            if (f instanceof PromptBridge.InputFrame inf && frames.peek() == f && !f.done()) {
+                inf.combatReset();
+            }
+            if (f != null && !f.done()) {
+                f.dirty = true;
+            }
+        });
+        return true;
     }
 
-    /** "N-mal aktivieren"; folgt in Phase 1. */
+    /**
+     * "N-mal aktivieren" (z.B. Necropotence "Pay 1 life"): Antwort auf den offenen {@code CHOOSE_ABILITY}-Prompt mit
+     * {@code abilityId}, danach {@code times - 1} weitere Aktivierungen derselben Faehigkeit ({@link HumanController}).
+     * Ziele, Fragen oder fremde Stapelobjekte beenden die Wiederholung.
+     */
     public boolean repeat(HumanSeat seat, long promptId, UUID abilityId, int times) {
-        return false;
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || p.id != promptId || promptSeat != seat) {
+            return false;
+        }
+        PromptDto.Item item = null;
+        if ("CHOOSE_ABILITY".equals(p.kind) && p.choices != null && abilityId != null) {
+            for (PromptDto.Item i : p.choices) {
+                if (abilityId.toString().equals(i.id())) {
+                    item = i;
+                }
+            }
+        }
+        IdCodec.Decoded src = p.sourceId == null ? null : ids.decode(p.sourceId);
+        IdCodec.Decoded ab = ids.decode(abilityId);
+        if (item == null || src == null || ab == null || src.kind() != IdCodec.Kind.CARD) {
+            send(seat, p);
+            return false;
+        }
+        if (!openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        int n = Math.max(1, Math.min(20, times));
+        String text = item.text();
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        inbox.add(() -> {
+            seat.repeat = n > 1 ? new RepeatMacro(src.id(), ab.id(), text, n - 1) : null;
+            answer(f, Response.ofUuid(abilityId));
+        });
+        return true;
     }
 
-    /** Einberufen per Klick; folgt in Phase 1. */
+    /** Einberufen per Klick: beim offenen Mana-Prompt die Kreatur {@code permId} tappen. */
     public boolean specialPay(HumanSeat seat, long promptId, UUID permId) {
-        return false;
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        if (p.id != promptId || !"PLAY_MANA".equals(p.kind) || permId == null || p.specialTargets == null
+                || !p.specialTargets.contains(permId) || !openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        inbox.add(() -> answer(f, Response.ofUuid(permId)));
+        return true;
     }
 
-    /** Ersatzeffekt-Gruppen; folgen in Phase 1. */
+    /**
+     * Ersatzeffekt-Wahl mit Gruppen: {@code accept} = Effekt {@code key} anwenden (seine Rueckfrage beantwortet die
+     * Engine mit Ja), {@code acceptGroup} = erste Quelle der gleichnamigen Gruppe {@code key} (Regeltext),
+     * {@code decline} = alle optionalen Effekte ablehnen (Wahl und Nein-Kette automatisch), mit {@code always} auch in
+     * allen weiteren Ereignissen dieses Spiels.
+     */
     public boolean replacement(HumanSeat seat, String mode, String key, boolean always) {
-        return false;
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || promptSeat != seat) {
+            return false;
+        }
+        List<PromptDto.ReplGroup> groups = "CHOOSE_CHOICE".equals(p.kind) && p.choice != null ? p.choice.groups : null;
+        ReplMacro m = null;
+        String answer = null;
+        Boolean confirm = null;
+        if (groups != null && "accept".equals(mode) && key != null) {
+            for (PromptDto.ReplGroup g : groups) {
+                for (PromptDto.ReplSource s : g.sources()) {
+                    if (key.equals(s.key())) {
+                        answer = key;
+                        confirm = g.optional() ? Boolean.TRUE : null;
+                    }
+                }
+            }
+        } else if (groups != null && "acceptGroup".equals(mode) && key != null) {
+            for (PromptDto.ReplGroup g : groups) {
+                if (key.equals(g.rule()) && g.uniform() && !g.sources().isEmpty()) {
+                    answer = g.sources().get(0).key();
+                    confirm = g.optional() ? Boolean.TRUE : null;
+                }
+            }
+        } else if (groups != null && "decline".equals(mode)) {
+            m = new ReplMacro(false);
+            for (PromptDto.ReplGroup g : groups) {
+                if (!g.optional()) {
+                    continue;
+                }
+                m.rules.add(g.rule());
+                if (always) {
+                    seat.replDeclineAlways.put(g.rule(), g.label());
+                }
+                if (answer == null) {
+                    answer = g.sources().get(0).key();
+                    confirm = Boolean.FALSE;
+                }
+            }
+        }
+        if (answer == null || !openPrompt.compareAndSet(p, null)) {
+            if (openPrompt.get() == p) {
+                send(seat, p);
+            }
+            return false;
+        }
+        ReplMacro macro = m;
+        String a = answer;
+        Boolean c = confirm;
+        send(seat, new Messages.PromptClosed(p.id));
+        notifyOthers(seat, null);
+        inbox.add(() -> {
+            seat.replMacro = macro;
+            seat.replConfirm = c;
+            answer(f, Response.ofString(a));
+        });
+        return true;
     }
 
+    /** "Fuer dieses Spiel merken" zuruecknehmen. */
     public void resetReplacementDeclines(HumanSeat seat) {
+        seat.replDeclineAlways.clear();
+        StateDto last = seat.lastState;
+        if (last != null) {
+            last.replDeclines = null; // Client leert seine Anzeige selbst; der naechste State kommt ohne
+        }
     }
 
-    /** F-Tasten und Einstellungen. POC: Aufgeben und Auto-Bezahlen; F-Tasten folgen in Phase 1. */
+    /**
+     * F-Tasten und Einstellungen (XMage-{@code PlayerAction}-Namen, kein Undo/Rollback/Cheat). F-Tasten schliessen den
+     * offenen Prioritaets-Prompt und passen; F10 bei leerem Stapel wird abgelehnt.
+     */
     public boolean action(HumanSeat seat, String actionName, Object data) {
+        AutoPassPolicy.SkipMode skip = AutoPassPolicy.SkipMode.ofAction(actionName);
+        if (skip != null) {
+            if (skip == AutoPassPolicy.SkipMode.STACK_RESOLVED) {
+                StateDto last = seat.lastState;
+                if (last == null || last.stack == null || last.stack.isEmpty()) {
+                    return false;
+                }
+            }
+            closePriorityPromptOf(seat);
+            inbox.add(() -> {
+                if (game.isGameOver()) {
+                    return;
+                }
+                policy.startSkip(seat.pass, skip, game);
+                if (!bridge.passPriority(seat)) {
+                    refreshState();
+                }
+            });
+            return true;
+        }
         switch (actionName) {
+            case "PASS_PRIORITY_CANCEL_ALL_ACTIONS" -> {
+                cancelSkip(seat);
+                return true;
+            }
+            case "HOLD_PRIORITY" -> {
+                seat.pass.hold = true;
+                return true;
+            }
+            case "UNHOLD_PRIORITY" -> {
+                seat.pass.hold = false;
+                return true;
+            }
+            case "RESET_AUTO_SELECT_REPLACEMENT_EFFECTS" -> {
+                resetReplacementDeclines(seat);
+                return true;
+            }
+            case "TRIGGER_AUTO_ORDER_ABILITY_FIRST", "TRIGGER_AUTO_ORDER_ABILITY_LAST", "TRIGGER_AUTO_ORDER_NAME_FIRST",
+                 "TRIGGER_AUTO_ORDER_NAME_LAST", "TRIGGER_AUTO_ORDER_RESET_ALL", "REQUEST_AUTO_ANSWER_ID_YES",
+                 "REQUEST_AUTO_ANSWER_ID_NO", "REQUEST_AUTO_ANSWER_TEXT_YES", "REQUEST_AUTO_ANSWER_TEXT_NO",
+                 "REQUEST_AUTO_ANSWER_RESET_ALL", "MANA_AUTO_PAYMENT_RESTRICTED_ON", "MANA_AUTO_PAYMENT_RESTRICTED_OFF",
+                 "USE_FIRST_MANA_ABILITY_ON", "USE_FIRST_MANA_ABILITY_OFF" -> {
+                return true; // angenommen; die UI nutzt sie nicht, Forge ordnet Trigger selbst
+            }
             case "CONCEDE" -> {
                 leave(seat);
                 return true;
@@ -926,9 +1213,17 @@ public final class GameHost {
                 return true;
             }
             default -> {
-                LOG.info("Aktion noch nicht umgesetzt (Forge-POC): " + actionName);
                 return false;
             }
+        }
+    }
+
+    /** Offenen Prioritaets-Prompt dieses Sitzes schliessen (F-Tasten passen ihn selbst). */
+    private void closePriorityPromptOf(HumanSeat seat) {
+        PromptDto p = openPrompt.get();
+        if (p != null && promptSeat == seat && "SELECT".equals(p.kind) && "priority".equals(p.mode) && openPrompt.compareAndSet(p, null)) {
+            send(seat, new Messages.PromptClosed(p.id));
+            notifyOthers(seat, null);
         }
     }
 
@@ -978,6 +1273,11 @@ public final class GameHost {
         }
         frames.push(frame);
         parked = true;
+        HumanSeat fs = frame.seat;
+        if (fs.repeat != null && !(frame instanceof PromptBridge.InputFrame inf && (inf.stateMode() == PromptBridge.StateMode.MANA
+                || inf.stateMode() == PromptBridge.StateMode.PRIORITY))) {
+            fs.controller().stopRepeat("Mehrfach-Aktivierung angehalten – bitte hier selbst entscheiden.");
+        }
         try {
             while (!frame.done()) {
                 if (frame.seat.conceded()) {
@@ -1143,15 +1443,26 @@ public final class GameHost {
             ForgeViewMapper.Playable pl = null;
             if (s == forSeat) {
                 if (mode == PromptBridge.StateMode.PRIORITY) {
-                    Set<CardView> actions = s.cachedActions != null ? s.cachedActions
+                    Set<CardView> actions = s.pass.cachedActions != null ? s.pass.cachedActions
                             : ForgeViewMapper.actionable(s.player, AutoPassPolicy.budgetMs(s.player));
                     pl = mapper.priorityPlayable(s.player, actions);
                 } else if (mode == PromptBridge.StateMode.MANA) {
                     pl = mapper.manaPlayable(s.player);
                 }
-                s.cachedActions = null;
+                s.pass.cachedActions = null;
             }
             StateDto st = mapper.map(s.player, seq, pl, thinking, deckNames);
+            if (!s.replDeclineAlways.isEmpty()) {
+                st.replDeclines = new ArrayList<>(new java.util.LinkedHashSet<>(s.replDeclineAlways.values()));
+            }
+            List<String> skips = AutoPassPolicy.skips(s.pass);
+            if (skips != null) {
+                for (var p : st.players) {
+                    if (p.me) {
+                        p.skips = skips;
+                    }
+                }
+            }
             s.lastState = st;
             send(s, st);
             if (s == forSeat || (mine == null && forSeat == null)) {
@@ -1471,6 +1782,11 @@ public final class GameHost {
         Map<UUID, Integer> out = new LinkedHashMap<>();
         eliminatedTurn.forEach((pid, t) -> out.put(ids.player(pid), t));
         return out;
+    }
+
+    /** Wire-id einer Forge-Karte. */
+    UUID wireCard(forge.game.card.Card c) {
+        return ids.card(c.getId());
     }
 
     /** Wire-id einer Forge-Karte (Tests, Zuschauer-Pruefung). */

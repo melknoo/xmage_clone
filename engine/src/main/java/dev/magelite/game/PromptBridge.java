@@ -25,6 +25,7 @@ import forge.gamemodes.match.input.InputConfirmMulligan;
 import forge.gamemodes.match.input.InputLondonMulligan;
 import forge.gamemodes.match.input.InputPassPriority;
 import forge.gamemodes.match.input.InputPayMana;
+import forge.gamemodes.match.input.InputSelectCardsForConvokeOrImprovise;
 import forge.gamemodes.match.input.InputSelectEntitiesFromList;
 import forge.gamemodes.match.input.InputSelectTargets;
 import forge.util.FSerializableFunction;
@@ -93,6 +94,26 @@ final class PromptBridge {
 
     private IdCodec ids() {
         return host.mapper().ids();
+    }
+
+    /** Laeuft gerade die Einberufen-Auswahl dieses Sitzes? */
+    boolean convokeOpen(GameHost.HumanSeat seat) {
+        for (Frame f : host.framesView()) {
+            if (f.seat == seat && f instanceof InputFrame inf && inf.isConvoke()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** F-Taste: offene Prioritaet dieses Sitzes passen. */
+    boolean passPriority(GameHost.HumanSeat seat) {
+        Frame f = host.topFrame();
+        if (f instanceof InputFrame inf && f.seat == seat && inf.input instanceof InputPassPriority && !f.done()) {
+            seat.controller().selectButtonOk();
+            return true;
+        }
+        return false;
     }
 
     void markDirty(GameHost.HumanSeat seat) {
@@ -195,10 +216,14 @@ final class PromptBridge {
             if (input instanceof InputPassPriority) {
                 return StateMode.PRIORITY;
             }
-            if (input instanceof InputPayMana) {
+            if (input instanceof InputPayMana || input instanceof InputSelectCardsForConvokeOrImprovise) {
                 return StateMode.MANA;
             }
             return StateMode.NONE;
+        }
+
+        boolean isConvoke() {
+            return input instanceof InputSelectCardsForConvokeOrImprovise;
         }
 
         @Override
@@ -206,6 +231,8 @@ final class PromptBridge {
             if (input instanceof InputPassPriority) {
                 PromptDto p = prompt("SELECT", gui().message);
                 p.mode = "priority";
+                p.stopReason = seat.pass.promptStopReason;
+                p.nextStop = seat.pass.promptNextStop;
                 return p;
             }
             if (input instanceof InputAttack) {
@@ -223,6 +250,7 @@ final class PromptBridge {
                 p.leftBtn = "Mulligan";
                 p.rightBtn = "Keep";
                 p.mulligans = seat.mulligans;
+                p.freeMulligan = seat.mulligans == 0 && game().getPlayers().size() > 2;
                 return p;
             }
             if (input instanceof InputConfirm) {
@@ -260,6 +288,9 @@ final class PromptBridge {
             if (input instanceof InputSelectTargets) {
                 return buildTargets();
             }
+            if (input instanceof InputSelectCardsForConvokeOrImprovise conv) {
+                return buildConvoke(conv);
+            }
             unmapped(seat, "input:" + (input == null ? "null" : input.getClass().getSimpleName()), gui().message);
             hc().selectButtonOk();
             if (!done()) {
@@ -277,6 +308,10 @@ final class PromptBridge {
                         host.toast(seat, "info", "Das geht gerade nicht.");
                     }
                 } else if (Boolean.FALSE.equals(r.bool())) {
+                    String sig = seat.pass.promptSig;
+                    if (sig != null) {
+                        seat.pass.passedSigs.add(sig); // gleiche Stapelobjekte ab jetzt automatisch passen
+                    }
                     hc().selectButtonOk(); // passen
                 }
             } else if (input instanceof InputAttack) {
@@ -307,6 +342,8 @@ final class PromptBridge {
                 } else if (gui().btn1Enabled) {
                     hc().selectButtonOk();
                 }
+            } else if (input instanceof InputSelectCardsForConvokeOrImprovise conv) {
+                answerConvoke(conv, r);
             } else if (input instanceof InputSelectEntitiesFromList<?> || input instanceof InputSelectTargets) {
                 if (r.uuid() != null) {
                     select(r.uuid());
@@ -646,6 +683,10 @@ final class PromptBridge {
         }
 
         void autoPay() {
+            if (isConvoke()) {
+                hc().selectButtonOk(); // Einberufen fertig; den Rest zahlt das folgende Mana (automatisch)
+                return;
+            }
             if (gui().btn1Enabled) {
                 hc().selectButtonOk();
                 if (!done()) {
@@ -654,6 +695,126 @@ final class PromptBridge {
             } else {
                 host.toast(seat, "info", "Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.");
             }
+        }
+
+        // ---- Einberufen / Improvisieren (Forge fragt vor dem Mana)
+
+        private PromptDto buildConvoke(InputSelectCardsForConvokeOrImprovise conv) {
+            PromptDto p = prompt("PLAY_MANA", gui().message);
+            String desc = field(conv, "description", String.class);
+            p.specialBtn = "Improvise".equals(desc) ? "Improvisieren" : "Convoke".equals(desc) ? "Einberufen" : desc;
+            List<UUID> targets = new ArrayList<>();
+            Iterable<?> avail = field(conv, "availableCards", Iterable.class);
+            if (avail != null) {
+                for (Object o : avail) {
+                    if (o instanceof Card c && !conv.getSelected().contains(c)) {
+                        targets.add(mapper().cardId(c));
+                    }
+                }
+            }
+            p.specialTargets = targets;
+            p.sourceId = stackSource();
+            return p;
+        }
+
+        private void answerConvoke(InputSelectCardsForConvokeOrImprovise conv, GameHost.Response r) {
+            if (r.uuid() != null) {
+                Card c = card(r.uuid());
+                Iterable<?> avail = field(conv, "availableCards", Iterable.class);
+                boolean special = false;
+                if (c != null && avail != null) {
+                    for (Object o : avail) {
+                        special |= o == c;
+                    }
+                }
+                if (special) {
+                    hc().selectCard(c.getView(), null, null);
+                } else {
+                    hc().selectButtonOk(); // anderes (Land): Einberufen beenden, normal weiter bezahlen
+                }
+            } else if (Boolean.FALSE.equals(r.bool())) {
+                hc().selectButtonCancel(); // kein Einberufen
+            } else {
+                hc().selectButtonOk();
+            }
+        }
+
+        // ---- Makros (Mehrfach-Angriff/-Block, Zuruecksetzen)
+
+        /** Mehrere Kreaturen greifen {@code target} an bzw. blocken den Angreifer {@code target}. */
+        void combatMacro(List<UUID> ids, UUID target) {
+            Combat combat = hc().combat;
+            if (combat == null) {
+                return;
+            }
+            GameEntity t = entity(target);
+            List<String> failed = new ArrayList<>();
+            if (input instanceof InputAttack) {
+                pendingCreature = null;
+                pendingOptions = null;
+                pendingAlpha = false;
+                if (t == null || !combat.getDefenders().contains(t)) {
+                    host.toast(seat, "info", "Dieses Ziel kann nicht angegriffen werden.");
+                    return;
+                }
+                setDefender(t);
+                for (UUID id : ids) {
+                    Card c = card(id);
+                    if (c == null || combat.isAttacking(c, t)) {
+                        continue;
+                    }
+                    if (combat.isAttacking(c)) {
+                        hc().selectCard(c.getView(), null, RIGHT_CLICK);
+                    }
+                    if (CombatUtil.canAttack(c, t)) {
+                        hc().selectCard(c.getView(), null, null);
+                    } else {
+                        failed.add(c.getName());
+                    }
+                }
+            } else if (input instanceof InputBlock) {
+                pendingCreature = null;
+                pendingOptions = null;
+                if (!(t instanceof Card attacker) || !combat.isAttacking(attacker)) {
+                    return;
+                }
+                hc().selectCard(attacker.getView(), null, null);
+                for (UUID id : ids) {
+                    Card b = card(id);
+                    if (b == null || combat.isBlocking(b, attacker)) {
+                        continue;
+                    }
+                    if (CombatUtil.canBlock(attacker, b, combat)) {
+                        hc().selectCard(b.getView(), null, null);
+                    } else {
+                        failed.add(b.getName());
+                    }
+                }
+            }
+            if (!failed.isEmpty()) {
+                host.toast(seat, "info", "Nicht möglich: " + String.join(", ", failed));
+            }
+        }
+
+        /** "Angriff zuruecksetzen": alle eigenen Angreifer zurueck (bzw. offene Verteidiger-Wahl verwerfen). */
+        void combatReset() {
+            Combat combat = hc().combat;
+            if (!(input instanceof InputAttack) || combat == null) {
+                return;
+            }
+            if (pendingCreature != null) {
+                pendingCreature = null;
+                pendingOptions = null;
+                pendingAlpha = false;
+                return;
+            }
+            if (!combat.getAttackers().isEmpty()) {
+                hc().selectButtonCancel(); // Forge "Call Back"; ohne Angreifer waere das "Alle angreifen"
+            }
+        }
+
+        boolean isCombat(String mode) {
+            return "attackers".equals(mode) ? input instanceof InputAttack : input instanceof InputBlock;
         }
 
         // ---- Ziele
@@ -871,6 +1032,135 @@ final class PromptBridge {
         return Boolean.TRUE.equals(d.run(defaultYes));
     }
 
+    /**
+     * Reihenfolge festlegen: nacheinander "was zuerst?" (Faehigkeiten als PICK_ABILITY, Karten als PICK_TARGET, sonst
+     * CHOOSE_CHOICE); "Fertig"/Abbrechen uebernimmt den Rest in der angebotenen Reihenfolge.
+     */
+    <T> List<T> order(GameHost.HumanSeat seat, String title, String top, List<T> items) {
+        List<T> remaining = new ArrayList<>(items);
+        List<T> out = new ArrayList<>();
+        while (remaining.size() > 1 && !game().isGameOver()) {
+            String msg = (title == null ? "Reihenfolge" : title) + (top == null || top.isBlank() ? "" : " – " + top)
+                    + " (" + (out.size() + 1) + "/" + items.size() + ")";
+            T pick;
+            boolean abilities = remaining.stream().allMatch(x -> x instanceof SpellAbilityView || x instanceof SpellAbility);
+            boolean cards = remaining.stream().allMatch(x -> x instanceof CardView cv && game().findById(cv.getId()) != null);
+            if (abilities) {
+                pick = pickOption(seat, "PICK_ABILITY", msg, remaining, null, true);
+            } else if (cards) {
+                @SuppressWarnings("unchecked")
+                List<GameEntityView> views = (List<GameEntityView>) (List<?>) remaining;
+                List<GameEntityView> one = entities(seat, msg, views, 0, 1);
+                @SuppressWarnings("unchecked")
+                T t = one.isEmpty() ? null : (T) one.get(0);
+                pick = t;
+            } else {
+                List<T> one = choices(seat, msg, 0, 1, remaining, null);
+                pick = one.isEmpty() ? null : one.get(0);
+            }
+            if (pick == null) {
+                break;
+            }
+            out.add(pick);
+            remaining.remove(pick);
+        }
+        out.addAll(remaining);
+        return out;
+    }
+
+    /** Eine Option aus Faehigkeiten/Modi waehlen (Items mit OPTION-ids); null = abgebrochen. */
+    private <T> T pickOption(GameHost.HumanSeat seat, String kind, String message, List<T> options,
+                             FSerializableFunction<T, String> display, boolean optional) {
+        Dialog<T> d = new Dialog<>(seat) {
+            @Override
+            PromptDto build() {
+                PromptDto p = prompt(kind, message);
+                List<PromptDto.Item> items = new ArrayList<>();
+                for (int i = 0; i < options.size(); i++) {
+                    T o = options.get(i);
+                    String text = display != null ? display.apply(o) : o instanceof SpellAbilityView sav
+                            ? (sav.getDescription() == null || sav.getDescription().isBlank() ? sav.toString() : sav.getDescription())
+                            : String.valueOf(o);
+                    UUID src = null;
+                    if (o instanceof SpellAbilityView sav && sav.getHostCard() != null) {
+                        Card c = game().findById(sav.getHostCard().getId());
+                        src = c == null ? null : mapper().cardId(c);
+                    } else if (o instanceof SpellAbility sa && sa.getHostCard() != null) {
+                        src = mapper().cardId(sa.getHostCard());
+                    }
+                    items.add(new PromptDto.Item(ids().encode(IdCodec.Kind.OPTION, i).toString(), text, src, null, null));
+                }
+                p.choices = items;
+                p.required = !optional;
+                return p;
+            }
+
+            @Override
+            void answer(GameHost.Response r) {
+                if (r.uuid() != null) {
+                    IdCodec.Decoded dec = ids().decode(r.uuid());
+                    if (dec != null && dec.kind() == IdCodec.Kind.OPTION && dec.id() >= 0 && dec.id() < options.size()) {
+                        finish(options.get(dec.id()));
+                    }
+                } else if (optional) {
+                    finish(null);
+                }
+            }
+
+            @Override
+            void autopilot() {
+                finish(optional ? null : options.get(0));
+            }
+        };
+        return d.run(optional ? null : options.get(0));
+    }
+
+    /**
+     * Ersatzeffekt-Wahl als CHOOSE_CHOICE (Schluessel = Index) mit Gruppen nach Regeltext; die UI zeigt sie als
+     * Ersatzeffekt-Dialog ({@link GameHost#replacement}).
+     */
+    int replacement(GameHost.HumanSeat seat, List<forge.game.replacement.ReplacementEffect> effects, List<PromptDto.ReplGroup> groups) {
+        Dialog<Integer> d = new Dialog<>(seat) {
+            @Override
+            PromptDto build() {
+                PromptDto p = prompt("CHOOSE_CHOICE", "Choose replacement effect to resolve first");
+                PromptDto.ChoiceDto c = new PromptDto.ChoiceDto();
+                c.message = p.messageText;
+                c.required = true;
+                c.keyed = true;
+                List<PromptDto.ChoiceItem> items = new ArrayList<>();
+                for (int i = 0; i < effects.size(); i++) {
+                    var re = effects.get(i);
+                    String host = re.getHostCard() == null ? "?" : re.getHostCard().getName();
+                    items.add(new PromptDto.ChoiceItem(String.valueOf(i), host + ": " + ReplacementAssist.rule(re), null, null));
+                }
+                c.items = items;
+                c.groups = groups;
+                p.choice = c;
+                p.required = true;
+                return p;
+            }
+
+            @Override
+            void answer(GameHost.Response r) {
+                try {
+                    int i = Integer.parseInt(r.string() == null ? "" : r.string().trim());
+                    if (i >= 0 && i < effects.size()) {
+                        finish(i);
+                    }
+                } catch (NumberFormatException ignored) {
+                    // erneut fragen
+                }
+            }
+
+            @Override
+            void autopilot() {
+                finish(0);
+            }
+        };
+        return d.run(0);
+    }
+
     /** Stapel waehlen: true = Stapel 1. */
     boolean pile(GameHost.HumanSeat seat, SpellAbility sa, Iterable<Card> pile1, Iterable<Card> pile2) {
         Dialog<Boolean> d = new Dialog<>(seat) {
@@ -912,6 +1202,12 @@ final class PromptBridge {
             List<GameEntityView> views = (List<GameEntityView>) (List<?>) choices;
             return (List<T>) (List<?>) entities(seat, message, views, min, max);
         }
+        boolean modes = choices.stream().allMatch(c -> c instanceof SpellAbility || c instanceof SpellAbilityView);
+        if (modes && max == 1) {
+            T pick = pickOption(seat, "CHOOSE_MODE", message, choices, display, min == 0);
+            return pick == null ? new ArrayList<>() : new ArrayList<>(List.of(pick));
+        }
+        boolean cardNames = choices.stream().allMatch(c -> c instanceof forge.game.card.CardFaceView || c instanceof forge.card.ICardFace);
         List<T> selected = new ArrayList<>();
         Dialog<List<T>> d = new Dialog<>(seat) {
             @Override
@@ -935,6 +1231,10 @@ final class PromptBridge {
                 }
                 c.items = items;
                 c.manaColor = choices.stream().allMatch(x -> x instanceof String s && isColorName(s));
+                if (cardNames) {
+                    c.search = true;
+                    c.hint = "card";
+                }
                 p.choice = c;
                 p.required = c.required;
                 return p;

@@ -23,6 +23,7 @@ import forge.game.card.Card;
 import forge.game.card.CardView;
 import forge.game.card.CounterType;
 import forge.game.combat.AttackingBand;
+import forge.game.keyword.Keyword;
 import forge.game.combat.Combat;
 import forge.game.phase.PhaseHandler;
 import forge.game.player.Player;
@@ -593,6 +594,42 @@ public final class ForgeViewMapper {
         return new Playable(all, new ArrayList<>(actions));
     }
 
+    /**
+     * Forges KI-Pruefung kennt Einberufen/Improvisieren nicht: Zauber mit dem Schlagwort zaehlen als spielbar, wenn
+     * ungetappte Manaquellen plus passende Kreaturen/Artefakte die Manakosten erreichen (nur Anzeige, grob).
+     */
+    private static void addConvoke(Player p, Set<CardView> out) {
+        int sources = 0;
+        int creatures = 0;
+        int artifacts = 0;
+        for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+            if (c.isTapped()) {
+                continue;
+            }
+            if (c.isCreature()) {
+                creatures++;
+            } else if (c.isArtifact()) {
+                artifacts++;
+            }
+            if (!c.getManaAbilities().isEmpty() && !c.isCreature()) {
+                sources++;
+            }
+        }
+        for (ZoneType z : new ZoneType[] {ZoneType.Hand, ZoneType.Command}) {
+            for (Card c : p.getCardsIn(z)) {
+                boolean convoke = c.hasKeyword(Keyword.CONVOKE);
+                boolean improvise = c.hasKeyword(Keyword.IMPROVISE);
+                if ((!convoke && !improvise) || out.contains(c.getView())) {
+                    continue;
+                }
+                int helpers = (convoke ? creatures : 0) + (improvise ? artifacts : 0);
+                if (sources + helpers >= c.getCMC() && !c.getAllPossibleAbilities(p, true).isEmpty()) {
+                    out.add(c.getView());
+                }
+            }
+        }
+    }
+
     /** Bezahlen: nur Manaquellen. */
     public Playable manaPlayable(Player p) {
         Map<UUID, Integer> all = new LinkedHashMap<>();
@@ -621,6 +658,7 @@ public final class ForgeViewMapper {
     /** Nicht-Mana-Aktionen eines Spielers (Spiel-Thread; kann dauern, Budget in ms). */
     public static Set<CardView> actionable(Player p, long budgetMs) {
         Set<CardView> out = new LinkedHashSet<>(AvailableActions.collectActionable(p, budgetMs));
+        addConvoke(p, out);
         Collection<Card> command = p.getCardsIn(ZoneType.Command);
         if (!command.isEmpty()) {
             p.runWithController(() -> {

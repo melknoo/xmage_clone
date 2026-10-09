@@ -13,15 +13,12 @@ dev/magelite/game/MageLiteHuman.java
 dev/magelite/game/MageLiteMatch.java
 dev/magelite/game/NextStop.java
 dev/magelite/game/PromptMapper.java
-dev/magelite/game/ReplacementAssist.java
 dev/magelite/game/SpecialPay.java
 dev/magelite/game/StackSig.java
 dev/magelite/game/TargetCheck.java
 dev/magelite/game/TrackingLondonMulligan.java
 dev/magelite/game/TableManager.java
 dev/magelite/view/GameViewMapper.java
-dev/magelite/spike/BotArena.java
-dev/magelite/spike/Scenarios.java
 dev/magelite/api/**
 dev/magelite/relay/**
 dev/magelite/stats/StatsWatcher.java
