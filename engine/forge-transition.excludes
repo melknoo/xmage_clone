@@ -2,20 +2,37 @@
 # Beim Portieren die jeweilige Zeile loeschen. Gelesen von build.gradle.kts.
 mage/**
 dev/magelite/Main.java
-dev/magelite/game/**
+# XMage-Kern (wird in Phase 1 geloescht bzw. portiert)
+dev/magelite/game/AutoPayer.java
+dev/magelite/game/BotTuning.java
+dev/magelite/game/FfaAttack.java
+dev/magelite/game/FxWatcher.java
+dev/magelite/game/HumanSettings.java
+dev/magelite/game/MageLiteBot.java
+dev/magelite/game/MageLiteHuman.java
+dev/magelite/game/MageLiteMatch.java
+dev/magelite/game/NextStop.java
+dev/magelite/game/PromptMapper.java
+dev/magelite/game/ReplacementAssist.java
+dev/magelite/game/SpecialPay.java
+dev/magelite/game/StackSig.java
+dev/magelite/game/TargetCheck.java
+dev/magelite/game/TrackingLondonMulligan.java
+dev/magelite/game/TableManager.java
 dev/magelite/view/GameViewMapper.java
-dev/magelite/spike/**
+dev/magelite/spike/BotArena.java
+dev/magelite/spike/Scenarios.java
 dev/magelite/api/**
 dev/magelite/relay/**
+dev/magelite/stats/StatsWatcher.java
+# Deck-Layer (Phase 2)
 dev/magelite/deck/BracketAnalyzer.java
 dev/magelite/deck/CardNameSuggester.java
 dev/magelite/deck/DeckLoader.java
-dev/magelite/deck/LoadedDeck.java
 dev/magelite/deck/SampleDeckCatalog.java
 dev/magelite/deck/TextDeckParser.java
 dev/magelite/deck/XmageUnfinished.java
 dev/magelite/deck/DeckRoutes.java
-dev/magelite/stats/StatsWatcher.java
 test:dev/magelite/deck/**
 test:dev/magelite/game/**
 # transitiv abhaengig (vom Compiler ermittelt)

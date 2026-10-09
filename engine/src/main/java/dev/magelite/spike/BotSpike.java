@@ -1,23 +1,13 @@
 package dev.magelite.spike;
 
-import dev.magelite.boot.CardDbManager;
+import dev.magelite.boot.ForgeBoot;
 import dev.magelite.boot.LogConfig;
-import dev.magelite.deck.DeckLoader;
 import dev.magelite.deck.LoadedDeck;
-import dev.magelite.game.MageLiteBot;
-import dev.magelite.game.MageLiteMatch;
+import dev.magelite.game.GameHost;
 import dev.magelite.game.TempoSettings;
-import mage.constants.PhaseStep;
-import mage.constants.RangeOfInfluence;
-import mage.game.Game;
-import mage.game.GameOptions;
-import mage.game.events.TableEvent;
-import mage.players.Player;
-import mage.util.ThreadUtils;
-import org.apache.log4j.AppenderSkeleton;
-import org.apache.log4j.Logger;
-import org.apache.log4j.spi.LoggingEvent;
+import dev.magelite.view.dto.Messages;
 
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,18 +17,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * P0a-Spike: 4 Bots spielen headless Commander FFA mit XMage-Sample-Decks.
+ * Headless-Spike: 4 Forge-Bots spielen Commander FFA mit den Sample-Decks (ueber {@link GameHost}, ohne Menschen).
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ|NORMAL|BEDACHT|MAX --fastOpp=true|false --seed=S
- * --validate (nur Decks pruefen) --verbose (Spiel-Log auf Konsole) --maxMinutes=M
+ * Args: --games=N --turnCap=T --tempo=BLITZ|NORMAL|BEDACHT|MAX --seed=S --maxMinutes=M --validate (nur Decks pruefen)
+ * --parallel=P (P Spiele gleichzeitig in dieser JVM) --deckDir=D (statt der Sample-Decks)
+ * --decks=a;b (diese Decks per Namensteil zuerst; "_" statt Leerzeichen) --slowTurnSec=S (langsame Zuege melden, Standard 10)
  */
 public final class BotSpike {
-
-    private static final AtomicInteger THINK_TIMEOUTS = new AtomicInteger();
 
     public static void main(String[] args) throws Exception {
         Map<String, String> opt = parseArgs(args);
@@ -46,183 +33,134 @@ public final class BotSpike {
         int turnCap = Integer.parseInt(opt.getOrDefault("turnCap", "40"));
         int maxMinutes = Integer.parseInt(opt.getOrDefault("maxMinutes", "20"));
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
-        Boolean fastOpp = opt.containsKey("fastOpp") ? Boolean.valueOf(opt.get("fastOpp")) : null;
-        boolean verbose = opt.containsKey("verbose");
         long seed = Long.parseLong(opt.getOrDefault("seed", String.valueOf(System.nanoTime())));
+        int parallel = Math.max(1, Integer.parseInt(opt.getOrDefault("parallel", "1")));
 
         Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
+        Path forge = Path.of(System.getProperty("magelite.forge", "../../vendor/forge")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
         Files.createDirectories(logs);
-        LogConfig.configure(logs, verbose);
-        Logger.getLogger("mage.player.ai").addAppender(new ThinkTimeoutCounter());
-
-        long tBoot = System.currentTimeMillis();
-        boolean scanned = CardDbManager.ensure(vendor.resolve("db/cards.h2.mv.db"));
-        long bootMs = System.currentTimeMillis() - tBoot;
-        out("Boot: Karten-DB %d ms (Scan=%s)", bootMs, scanned);
+        LogConfig.configure(logs, opt.containsKey("verbose"));
+        ForgeBoot.Info boot = ForgeBoot.init(forge, Path.of("").toAbsolutePath());
+        out("Boot: Forge %s, %d Karten, %d ms, Heap %d MB", boot.forgeVersion(), boot.cards(), boot.ms(), boot.heapMb());
 
         long tDecks = System.currentTimeMillis();
         List<LoadedDeck> valid = new ArrayList<>();
         int invalid = 0;
-        for (Path f : DeckLoader.listDeckFiles(vendor.resolve("sample-decks"))) {
-            try {
-                LoadedDeck d = DeckLoader.loadFile(f);
-                if (d.valid()) {
-                    valid.add(d);
-                } else {
-                    invalid++;
-                }
-                if (!d.valid() || opt.containsKey("validate")) {
-                    out("  %s %-45s main=%d cmd=%s %s %s", d.valid() ? "OK " : "ERR", trim(d.name(), 45), d.mainCount(), d.commanders(),
-                            trim(d.validationErrors().replace('\n', ' '), 140), trim(d.importErrors().replace('\n', ' '), 100));
-                }
-            } catch (Exception e) {
+        Path deckDir = opt.containsKey("deckDir") ? Path.of(opt.get("deckDir")) : vendor.resolve("sample-decks");
+        for (Path f : PocDecks.files(deckDir)) {
+            LoadedDeck d = PocDecks.load(f);
+            if (d.valid()) {
+                valid.add(d);
+            } else {
                 invalid++;
-                out("  EXC %s: %s", f.getFileName(), e);
+            }
+            if (!d.valid() || opt.containsKey("validate")) {
+                out("  %s %-45s main=%d cmd=%s %s %s", d.valid() ? "OK " : "ERR", trim(d.name(), 45), d.mainCount(), d.commanders(),
+                        trim(d.validationErrors().replace('\n', ' '), 140), trim(d.importErrors(), 140));
             }
         }
         out("Decks: %d gueltig, %d ungueltig (%d ms)", valid.size(), invalid, System.currentTimeMillis() - tDecks);
         if (opt.containsKey("validate") || valid.size() < 4) {
-            System.exit(0);
+            System.exit(valid.size() < 4 ? 1 : 0);
         }
 
         Random rnd = new Random(seed);
-        out("Seed=%d tempo=%s fastOpp=%s turnCap=%d", seed, preset, fastOpp == null ? preset.fastOpponentTurns : fastOpp, turnCap);
-        List<GameResult> results = new ArrayList<>();
-        for (int g = 1; g <= games; g++) {
-            List<LoadedDeck> pool = new ArrayList<>(valid);
-            Collections.shuffle(pool, rnd);
-            GameResult r = runGame(g, pool.subList(0, 4), preset, fastOpp, turnCap, maxMinutes, verbose);
-            results.add(r);
-            out("Spiel %d: %s | Zuege=%d | %.1f s | %.0f ms/Zug | max %.0f ms/Zug | Think-Timeouts=%d | Heap max %d MB%s",
-                    g, r.winner, r.turns, r.durationMs / 1000.0, r.avgTurnMs, r.maxTurnMs, r.thinkTimeouts, r.peakHeapMb,
-                    r.error != null ? " | FEHLER " + r.error : "");
-        }
-
-        out("=== Zusammenfassung ===");
-        double avgDur = results.stream().mapToLong(r -> r.durationMs).average().orElse(0);
-        double avgTurns = results.stream().mapToInt(r -> r.turns).average().orElse(0);
-        long errors = results.stream().filter(r -> r.error != null).count();
-        out("Spiele=%d Fehler=%d Ø Dauer=%.1f s Ø Zuege=%.1f Think-Timeouts gesamt=%d", results.size(), errors, avgDur / 1000, avgTurns, THINK_TIMEOUTS.get());
-        System.exit(errors > 0 ? 1 : 0);
-    }
-
-    private static GameResult runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, Boolean fastOpp,
-                                      int turnCap, int maxMinutes, boolean verbose) throws Exception {
-        TempoSettings tempo = new TempoSettings(preset);
-        tempo.setActionDelayMs(0);
-        tempo.setCombatDelayMs(0);
-        if (fastOpp != null) {
-            tempo.setFastOpponentTurns(fastOpp);
-        }
-
-        MageLiteMatch match = new MageLiteMatch(MageLiteMatch.defaultOptions("Spike " + nr));
-        for (int i = 0; i < 4; i++) {
-            LoadedDeck d = decks.get(i);
-            MageLiteBot bot = new MageLiteBot("Bot" + (i + 1) + " [" + trim(d.name(), 28) + "]", RangeOfInfluence.ALL, tempo);
-            match.addPlayer(bot, d.newDeck());
-        }
-        match.startMatch();
-        match.startGame();
-        Game game = match.getGame();
-
-        GameOptions go = GameOptions.getDefault().copy();
-        go.rollbackTurnsAllowed = false;
-        go.stopOnTurn = turnCap;
-        go.stopAtStep = PhaseStep.UPKEEP;
-        game.setGameOptions(go);
-
-        int timeoutsBefore = THINK_TIMEOUTS.get();
-        GameResult r = new GameResult();
-        long[] turnStart = {System.currentTimeMillis()};
-        int[] lastTurn = {0};
-        List<Long> turnDurations = new ArrayList<>();
-        Runtime rt = Runtime.getRuntime();
-
-        game.addTableEventListener(event -> {
-            if (event.getEventType() == TableEvent.EventType.UPDATE) {
-                int t = game.getTurnNum();
-                if (t != lastTurn[0]) {
-                    long now = System.currentTimeMillis();
-                    if (lastTurn[0] > 0) {
-                        turnDurations.add(now - turnStart[0]);
-                    }
-                    turnStart[0] = now;
-                    lastTurn[0] = t;
-                    long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
-                    r.peakHeapMb = Math.max(r.peakHeapMb, used);
-                    if (verbose) {
-                        out("--- Zug %d (aktiv: %s) Heap %d MB", t, playerName(game, game.getActivePlayerId()), used);
+        out("Seed=%d, Tempo=%s, Zuglimit=%d", seed, preset, turnCap);
+        int failures = 0;
+        long totalMs = 0;
+        int totalTurns = 0;
+        for (int g = 1; g <= games; g += parallel) {
+            List<GameHost> hosts = new ArrayList<>();
+            for (int k = 0; k < parallel && g + k <= games; k++) {
+                Collections.shuffle(valid, rnd);
+                List<LoadedDeck> pick = new ArrayList<>();
+                for (String want : opt.getOrDefault("decks", "").replace('_', ' ').split(";")) {
+                    valid.stream().filter(d -> !want.isBlank() && d.name().contains(want.trim()) && !pick.contains(d))
+                            .findFirst().ifPresent(pick::add);
+                }
+                for (LoadedDeck d : valid) {
+                    if (pick.size() < 4 && !pick.contains(d)) {
+                        pick.add(d);
                     }
                 }
-            } else if (verbose && (event.getEventType() == TableEvent.EventType.INFO || event.getEventType() == TableEvent.EventType.STATUS)) {
-                out("    %s", stripHtml(event.getMessage()));
-            } else if (event.getEventType() == TableEvent.EventType.ERROR) {
-                out("    ERROR: %s", event.getMessage());
+                out("Spiel %d: %s", g + k, pick.stream().map(LoadedDeck::name).toList());
+                GameHost host = GameHost.createBots(pick, preset);
+                host.setTurnCap(turnCap);
+                hosts.add(host);
             }
-        });
+            long t0 = System.currentTimeMillis();
+            hosts.forEach(GameHost::start);
+            int slowSec = Integer.parseInt(opt.getOrDefault("slowTurnSec", "10"));
+            Thread monitor = slowTurnMonitor(hosts, slowSec);
+            for (int k = 0; k < hosts.size(); k++) {
+                GameHost host = hosts.get(k);
+                long left = Math.max(1, maxMinutes * 60_000L - (System.currentTimeMillis() - t0));
+                boolean ended = host.awaitEnd(left);
+                long ms = System.currentTimeMillis() - t0;
+                int nr = g + k;
+                if (!ended) {
+                    out("!!! Spiel %d haengt nach %d min - Abbruch", nr, maxMinutes);
+                    host.shutdownNow();
+                    failures++;
+                    continue;
+                }
+                Messages.GameOver over = host.getGameOver();
+                int turns = over == null ? 0 : over.turns();
+                totalMs += over == null ? ms : over.durationMs();
+                totalTurns += turns;
+                System.gc();
+                long heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() / (1024 * 1024);
+                long dur = over == null ? ms : over.durationMs();
+                out("Spiel %d: %s | Zuege=%d | %.1f s (%.2f s/Zug) | Heap %d MB%s", nr, over == null ? "?" : over.result(), turns,
+                        dur / 1000.0, turns == 0 ? 0 : dur / 1000.0 / turns, heap,
+                        over != null && over.error() != null ? " | FEHLER " + over.error() : "");
+                if (over != null) {
+                    for (Messages.Placement p : over.placements()) {
+                        out("    %d. %-30s Leben=%d%s", p.place(), trim(p.name(), 30), p.life(),
+                                p.eliminatedTurn() == null ? "" : " (raus Zug " + p.eliminatedTurn() + ")");
+                    }
+                }
+                if (over == null || over.error() != null) {
+                    failures++;
+                }
+            }
+            monitor.interrupt();
+        }
+        out("=== %d Spiele, %d fehlgeschlagen, Schnitt %.2f s/Zug ===", games, failures,
+                totalTurns == 0 ? 0 : totalMs / 1000.0 / totalTurns);
+        System.exit(failures > 0 ? 1 : 0);
+    }
 
-        AtomicReference<Throwable> error = new AtomicReference<>();
-        long t0 = System.currentTimeMillis();
-        Thread gameThread = new Thread(() -> {
+    /** Meldet Zuege, die laenger als {@code slowSec} dauern (Zugnummer aus dem State, ohne Spiel-Thread). */
+    private static Thread slowTurnMonitor(List<GameHost> hosts, int slowSec) {
+        Thread t = new Thread(() -> {
+            int[] lastTurn = new int[hosts.size()];
+            long[] since = new long[hosts.size()];
+            java.util.Arrays.fill(since, System.currentTimeMillis());
             try {
-                game.start(null);
-                game.fireUpdatePlayersEvent();
-            } catch (Throwable e) {
-                error.set(e);
-                Logger.getLogger(BotSpike.class).error("Spiel abgebrochen", e);
+                while (!Thread.currentThread().isInterrupted()) {
+                    Thread.sleep(1000);
+                    long now = System.currentTimeMillis();
+                    for (int i = 0; i < hosts.size(); i++) {
+                        int turn = hosts.get(i).currentTurn();
+                        if (turn != lastTurn[i]) {
+                            long ms = now - since[i];
+                            if (lastTurn[i] > 0 && ms > slowSec * 1000L) {
+                                out("  langsamer Zug %d: %.0f s", lastTurn[i], ms / 1000.0);
+                            }
+                            lastTurn[i] = turn;
+                            since[i] = now;
+                        }
+                    }
+                }
+            } catch (InterruptedException ignored) {
+                // Ende
             }
-        }, ThreadUtils.THREAD_PREFIX_GAME + " " + game.getId());
-        gameThread.start();
-        gameThread.join(maxMinutes * 60_000L);
-        if (gameThread.isAlive()) {
-            out("  Zeitlimit erreicht - alle Spieler geben auf");
-            for (Player p : game.getPlayers().values()) {
-                game.setConcedingPlayer(p.getId());
-            }
-            gameThread.join(15_000);
-            if (gameThread.isAlive()) {
-                error.compareAndSet(null, new IllegalStateException("Spiel-Thread haengt"));
-            }
-        }
-
-        r.durationMs = System.currentTimeMillis() - t0;
-        r.turns = game.getTurnNum();
-        r.thinkTimeouts = THINK_TIMEOUTS.get() - timeoutsBefore;
-        r.avgTurnMs = turnDurations.stream().mapToLong(Long::longValue).average().orElse(0);
-        r.maxTurnMs = turnDurations.stream().mapToLong(Long::longValue).max().orElse(0);
-        r.error = error.get() == null ? null : error.get().toString();
-        StringBuilder w = new StringBuilder();
-        for (Player p : game.getPlayers().values()) {
-            if (p.hasWon()) {
-                w.append("Sieger: ").append(p.getName());
-            }
-        }
-        if (w.length() == 0) {
-            w.append("kein Sieger (").append(game.getWinner()).append(")");
-        }
-        StringBuilder lifes = new StringBuilder();
-        for (Player p : game.getPlayers().values()) {
-            lifes.append(" ").append(p.getName(), 0, 4).append('=').append(p.getLife()).append(p.hasLost() ? "x" : "")
-                    .append("/m").append(match.getMulligan().getMulliganCount(p.getId()));
-        }
-        r.winner = w + " |" + lifes;
-        try {
-            game.cleanUp();
-            match.cleanUp();
-        } catch (Exception ignored) {
-            // egal im Spike
-        }
-        return r;
-    }
-
-    private static String playerName(Game game, java.util.UUID id) {
-        Player p = id == null ? null : game.getPlayer(id);
-        return p == null ? "?" : p.getName();
-    }
-
-    private static String stripHtml(String s) {
-        return s == null ? "" : s.replaceAll("<[^>]+>", "");
+        }, "slow-turns");
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     private static String trim(String s, int max) {
@@ -250,38 +188,5 @@ public final class BotSpike {
             }
         }
         return m;
-    }
-
-    private static final class GameResult {
-        String winner;
-        int turns;
-        long durationMs;
-        double avgTurnMs;
-        double maxTurnMs;
-        int thinkTimeouts;
-        long peakHeapMb;
-        String error;
-    }
-
-    /**
-     * Zaehlt "AI player thinks too long"-Warnungen von ComputerPlayer6.
-     */
-    private static final class ThinkTimeoutCounter extends AppenderSkeleton {
-        @Override
-        protected void append(LoggingEvent event) {
-            Object msg = event.getMessage();
-            if (msg != null && msg.toString().contains("thinks too long")) {
-                THINK_TIMEOUTS.incrementAndGet();
-            }
-        }
-
-        @Override
-        public void close() {
-        }
-
-        @Override
-        public boolean requiresLayout() {
-            return false;
-        }
     }
 }

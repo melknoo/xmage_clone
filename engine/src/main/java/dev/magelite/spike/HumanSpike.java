@@ -1,9 +1,8 @@
 package dev.magelite.spike;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.magelite.boot.CardDbManager;
+import dev.magelite.boot.ForgeBoot;
 import dev.magelite.boot.LogConfig;
-import dev.magelite.deck.DeckLoader;
 import dev.magelite.deck.LoadedDeck;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameSetup;
@@ -14,8 +13,6 @@ import dev.magelite.view.dto.PermanentDto;
 import dev.magelite.view.dto.PlayerDto;
 import dev.magelite.view.dto.PromptDto;
 import dev.magelite.view.dto.StateDto;
-import mage.constants.PhaseStep;
-import mage.game.GameOptions;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,14 +35,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
  * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke
- * --spectate
+ * --spectate --decks=a;b (diese Decks per Dateinamensteil zuerst, erstes = Test-Mensch; "_" statt Leerzeichen)
  * <p>
  * {@code --spectate}: Spiel wie ein Tisch-Spiel zuschaubar machen und einen In-Process-Zuschauer anmelden, der jede
  * Nachricht auf Lecks prueft ({@link SpectatorCheck}); ein Sitz schreibt im Spiel eine Chat-Zeile.
  * <p>
  * {@code --humans=N}: N automatische Test-Menschen mit eigenem Sitz und eigenem Autopiloten in einem Spiel (Routing-Test).
  * <p>
- * {@code --scenario=swarm}: lange Trigger-Ketten (siehe {@link Scenarios}). Der Test-Spieler spielt dann nur Laender,
+ * {@code --scenario=swarm}: lange Trigger-Ketten (siehe Scenarios). Der Test-Spieler spielt dann nur Laender,
  * passt sonst und misst, wie lange jede Kette auf dem Stapel braucht. Beim ersten Angriff greift er per
  * Mehrfach-Angriff ({@code GameHost.combat}) mit allen Kreaturen einen Gegner an und prueft das Ergebnis; danach
  * nimmt er den Angriff per {@code GameHost.combatReset} komplett zurueck und prueft, dass niemand mehr angreift.
@@ -81,25 +78,42 @@ public final class HumanSpike {
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
         String scenario = opt.get("scenario");
         boolean spectate = opt.containsKey("spectate");
-        if (scenario != null && !Scenarios.exists(scenario)) {
-            throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
+        if (scenario != null) {
+            throw new IllegalArgumentException("Szenarien folgen in Phase 1 (Forge-Umbau): " + scenario);
         }
 
+        // Forge-POC: Sample-Decks noch aus vendor/xmage (Phase 2: Classpath, Decktext v2)
         Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
+        Path forge = Path.of(System.getProperty("magelite.forge", "../../vendor/forge")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
         Files.createDirectories(logs);
         LogConfig.configure(logs, false);
-        CardDbManager.ensure(vendor.resolve("db/cards.h2.mv.db"));
+        ForgeBoot.Info boot = ForgeBoot.init(forge, Path.of("").toAbsolutePath());
+        out("Forge %s: %d Karten, Boot %d ms", boot.forgeVersion(), boot.cards(), boot.ms());
 
-        List<Path> files = new ArrayList<>(DeckLoader.listDeckFiles(vendor.resolve("sample-decks")));
+        List<Path> files = new ArrayList<>(PocDecks.files(vendor.resolve("sample-decks")));
         Random rnd = new Random(seed);
         out("Seed=%d", seed);
         int failures = 0;
         for (int g = 1; g <= games; g++) {
             Collections.shuffle(files, rnd);
             List<LoadedDeck> decks = new ArrayList<>();
+            for (String want : opt.getOrDefault("decks", "").replace('_', ' ').split(";")) {
+                for (Path f : files) {
+                    if (!want.isBlank() && f.getFileName().toString().contains(want.trim())) {
+                        LoadedDeck d = PocDecks.load(f);
+                        if (d.valid()) {
+                            decks.add(d);
+                            break;
+                        }
+                    }
+                }
+            }
             for (Path f : files) {
-                LoadedDeck d = DeckLoader.loadFile(f);
+                if (decks.stream().anyMatch(x -> f.getFileName().toString().startsWith(x.name()))) {
+                    continue;
+                }
+                LoadedDeck d = PocDecks.load(f);
                 if (d.valid()) {
                     decks.add(d);
                 }
@@ -107,11 +121,14 @@ public final class HumanSpike {
                     break;
                 }
             }
-            boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario, spectate);
+            boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario, spectate,
+                    opt.get("leave"));
             if (!ok) {
                 failures++;
             }
         }
+        reportLatency();
+        out("Heap nach GC je Spiel (MB): %s", HEAPS);
         out("=== %d Spiele, %d fehlgeschlagen ===", games, failures);
         System.exit(failures > 0 ? 1 : 0);
     }
@@ -120,8 +137,29 @@ public final class HumanSpike {
     private record In(GameHost.HumanSeat seat, Object msg) {
     }
 
+    /** Antwort -> naechster State/Prompt desselben Sitzes (ms), ueber alle Spiele */
+    private static final List<Long> LATENCIES = Collections.synchronizedList(new ArrayList<>());
+    private static final List<Long> HEAPS = new ArrayList<>();
+
+    private static void reportLatency() {
+        List<Long> l;
+        synchronized (LATENCIES) {
+            l = new ArrayList<>(LATENCIES);
+        }
+        if (l.isEmpty()) {
+            return;
+        }
+        Collections.sort(l);
+        out("Antwort -> naechster State: n=%d p50=%d ms p95=%d ms max=%d ms", l.size(), l.get(l.size() / 2),
+                l.get((int) Math.min(l.size() - 1, Math.round(l.size() * 0.95))), l.get(l.size() - 1));
+    }
+
+    /**
+     * @param leave {@code prompt}: der erste Mensch verlaesst das Spiel ab Zug 4 statt einen Prompt zu beantworten;
+     *              {@code bot}: ab Zug 4 waehrend eines Bot-Zugs; {@code abort}: Spiel ab Zug 4 im Bot-Zug abbrechen
+     */
     private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, int humans, Random rnd,
-                                   boolean verbose, String dumpJson, String scenario, boolean spectate) throws Exception {
+                                   boolean verbose, String dumpJson, String scenario, boolean spectate, String leave) throws Exception {
         List<GameSetup.SeatSpec> specs = new ArrayList<>();
         for (int i = 0; i < 4; i++) {
             if (i < humans) {
@@ -134,14 +172,7 @@ public final class HumanSpike {
         GameHost host = GameHost.create(setup);
         host.getTempo().setActionDelayMs(0);
         host.getTempo().setCombatDelayMs(0);
-        GameOptions go = GameOptions.getDefault().copy();
-        go.rollbackTurnsAllowed = false;
-        go.stopOnTurn = turnCap;
-        go.stopAtStep = PhaseStep.UPKEEP;
-        host.getGame().setGameOptions(go);
-        if (scenario != null) {
-            Scenarios.apply(scenario, host.getGame(), host.getHumanId());
-        }
+        host.setTurnCap(turnCap);
 
         out("Spiel %d: Menschen=%s vs Bots=%s", nr, decks.subList(0, humans).stream().map(LoadedDeck::name).toList(),
                 decks.subList(humans, 4).stream().map(LoadedDeck::name).toList());
@@ -153,16 +184,30 @@ public final class HumanSpike {
         java.util.concurrent.atomic.AtomicInteger maxState = new java.util.concurrent.atomic.AtomicInteger();
         java.io.PrintWriter dump = dumpJson == null ? null : new java.io.PrintWriter(Files.newBufferedWriter(Path.of(dumpJson)));
         java.util.concurrent.atomic.AtomicInteger recovered = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger foreignPrompts = new java.util.concurrent.atomic.AtomicInteger();
+        AtomicLong seatOutAt = new AtomicLong();
         Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
-        SpectatorCheck spec = spectate ? new SpectatorCheck(host.getGame()) : null;
+        SpectatorCheck spec = spectate ? new SpectatorCheck(host) : null;
         if (spec != null) {
             host.setSpectatable(true);
         }
+
         for (GameHost.HumanSeat seat : host.seats()) {
-            drivers.put(seat, new Driver(host, seat, rnd, verbose, scenario));
+            Driver drv = new Driver(host, seat, rnd, verbose, scenario);
+            drivers.put(seat, drv);
             host.attach(seat, msg -> {
                 if (spec != null && msg instanceof StateDto st) {
                     spec.seatState(st); // synchron, vor dem oeffentlichen State derselben seq
+                }
+                if ((msg instanceof StateDto || msg instanceof PromptDto) && drv.answeredAt > 0) {
+                    LATENCIES.add(System.currentTimeMillis() - drv.answeredAt);
+                    drv.answeredAt = 0;
+                }
+                if (msg instanceof PromptDto pr && !seat.playerId().equals(pr.playerId)) {
+                    foreignPrompts.incrementAndGet();
+                }
+                if (msg instanceof Messages.SeatStatus ss && ss.conceded() && seatOutAt.get() == 0) {
+                    seatOutAt.set(System.currentTimeMillis());
                 }
                 if (msg instanceof Messages.Activity a) {
                     // Herzschlag zaehlt nicht als Fortschritt (sonst greift die STALL-Erkennung nie)
@@ -214,6 +259,9 @@ public final class HumanSpike {
         boolean stalled = false;
         Messages.GameOver over = null;
         TurnOrderCheck turnOrder = new TurnOrderCheck();
+        long leftAt = 0;
+        int slowTurn = 0;
+        long slowSince = System.currentTimeMillis();
         while (over == null) {
             In in = inbox.poll(500, TimeUnit.MILLISECONDS);
             Object msg = in == null ? null : in.msg();
@@ -231,8 +279,28 @@ public final class HumanSpike {
             }
             if (msg instanceof StateDto s) {
                 d.state = s;
+                if (d == driver && s.turn != slowTurn) {
+                    long now = System.currentTimeMillis();
+                    if (slowTurn > 0 && now - slowSince > 30_000) {
+                        int perms = s.players.stream().mapToInt(pl -> pl.battlefield.size()).sum();
+                        out("  langsamer Zug %d: %.0f s | Permanents=%d %s | Hand=%d", slowTurn, (now - slowSince) / 1000.0, perms,
+                                s.players.stream().map(pl -> pl.name + ":" + pl.battlefield.size()).toList(), s.hand.size());
+                    }
+                    slowTurn = s.turn;
+                    slowSince = now;
+                }
                 if (spec != null && !chatted && s.turn >= 2) {
                     chatted = host.chat(in.seat(), "Hallo Zuschauer");
+                }
+                if (leave != null && leftAt == 0 && d == driver && s.turn >= 4 && !d.me(s).active
+                        && ("bot".equals(leave) || "abort".equals(leave))) {
+                    leftAt = System.currentTimeMillis();
+                    out("  -> %s im Bot-Zug %d", leave, s.turn);
+                    if ("abort".equals(leave)) {
+                        host.abort();
+                    } else {
+                        host.leave(in.seat());
+                    }
                 }
                 if (d.convoke) {
                     d.convokeState(s);
@@ -242,6 +310,12 @@ public final class HumanSpike {
                     chains.accept(s);
                 }
             } else if (msg instanceof PromptDto p) {
+                if ("prompt".equals(leave) && leftAt == 0 && d == driver && d.state != null && d.state.turn >= 4) {
+                    leftAt = System.currentTimeMillis();
+                    out("  -> verlasse waehrend Prompt %s in Zug %d", p.kind, d.state.turn);
+                    host.leave(in.seat());
+                    continue;
+                }
                 d.handle(p);
             } else if (msg instanceof Messages.GameOver g) {
                 overs.put(in.seat(), g);
@@ -263,7 +337,15 @@ public final class HumanSpike {
         if (dump != null) {
             dump.close();
         }
-        long dur = System.currentTimeMillis() - t0;
+        long endAt = System.currentTimeMillis();
+        long dur = endAt - t0;
+        if (leftAt > 0) {
+            out("  Verlassen/Abbruch: Sitz raus nach %s, Spielende nach %d ms",
+                    seatOutAt.get() == 0 ? "-" : (seatOutAt.get() - leftAt) + " ms", endAt - leftAt);
+        }
+        if (foreignPrompts.get() > 0) {
+            out("  FEHLER: %d Prompts an einen fremden Sitz", foreignPrompts.get());
+        }
         out("  Ergebnis: %s | Zuege=%d | %.1f s | Prompts=%s | States=%d | JSON %.1f MB | groesster State %d KB",
                 over == null ? "ABGEBROCHEN" : over.result(), over == null ? -1 : over.turns(), dur / 1000.0,
                 driver.kinds, states.get(), bytes.get() / 1e6, maxState.get() / 1024);
@@ -327,15 +409,20 @@ public final class HumanSpike {
         }
         out("  Ereignisse (events): %s%s", fxKinds.isEmpty() ? "KEINE" : fxKinds, fxLeaks > 0 ? " | FEHLER: " + fxLeaks + " verdeckte Karten an Fremde" : "");
         chains.report();
-        boolean specOk = true;
+        boolean specOk = foreignPrompts.get() == 0;
+        host.awaitEnd(10_000);
         if (spec != null) {
-            host.awaitEnd(10_000); // gameOver an Zuschauer kommt direkt nach den Sitzen
-            specOk = spec.ok() && spec.over != null && spec.chats > 0;
-            out("  Zuschauer: %s | %s", specOk ? "OK" : "FEHLER", spec.summary());
+            boolean ok = spec.ok() && spec.over != null && spec.chats > 0;
+            specOk &= ok;
+            out("  Zuschauer: %s | %s", ok ? "OK" : "FEHLER", spec.summary());
             for (String e : spec.errors) {
                 out("    !! %s", e);
             }
         }
+        System.gc();
+        long heap = java.lang.management.ManagementFactory.getMemoryMXBean().getHeapMemoryUsage().getUsed() / (1024 * 1024);
+        HEAPS.add(heap);
+        out("  Nicht abgebildet (UNMAPPED): %s | automatisch: %s", host.unmappedCounts(), host.autoCounts());
         out("  Sitzordnung (UI): %s", turnOrder.seats);
         out("  Zugfolge: %s", turnOrder.sequence);
         if (turnOrder.errors > 0) {
@@ -465,6 +552,8 @@ public final class HumanSpike {
         volatile StateDto state;
         PromptDto lastPrompt;
         final Map<String, Integer> kinds = new HashMap<>();
+        /** Zeitpunkt der letzten Antwort (Latenz bis zum naechsten State) */
+        volatile long answeredAt;
         final Map<String, Integer> repeats = new HashMap<>();
         final Set<UUID> declaredAttackers = new HashSet<>();
         int attackTurn = -1;
@@ -544,6 +633,7 @@ public final class HumanSpike {
                 out("  [T%s %s] %s '%s' -> %s", state == null ? "?" : state.turn, state == null ? "" : state.step, p.kind,
                         trim(p.messageText, 70), describe(r));
             }
+            answeredAt = System.currentTimeMillis();
             if (!host.respond(seat, p.id, r)) {
                 out("  !! Antwort abgelehnt fuer Prompt %d", p.id);
             }
@@ -1216,7 +1306,7 @@ public final class HumanSpike {
     private static void dumpThreads() {
         for (Map.Entry<Thread, StackTraceElement[]> e : Thread.getAllStackTraces().entrySet()) {
             String n = e.getKey().getName();
-            if (n.startsWith("GAME") || n.startsWith("CALL") || n.startsWith("AI")) {
+            if (n.startsWith("Game") || n.startsWith("forge") || n.startsWith("AI")) {
                 out("Thread %s (%s)", n, e.getKey().getState());
                 StackTraceElement[] st = e.getValue();
                 for (int i = 0; i < Math.min(st.length, 25); i++) {

@@ -1,26 +1,22 @@
 package dev.magelite.game;
 
 import dev.magelite.deck.LoadedDeck;
-import dev.magelite.stats.StatsSink;
-import dev.magelite.stats.StatsWatcher;
-import dev.magelite.view.GameViewMapper;
+import dev.magelite.view.ForgeViewMapper;
+import dev.magelite.view.IdCodec;
 import dev.magelite.view.RichText;
 import dev.magelite.view.dto.Messages;
 import dev.magelite.view.dto.PromptDto;
 import dev.magelite.view.dto.StateDto;
-import mage.constants.ManaType;
-import mage.constants.PhaseStep;
-import mage.constants.PlayerAction;
-import mage.constants.RangeOfInfluence;
-import mage.game.Game;
-import mage.game.permanent.Permanent;
-import mage.game.GameException;
-import mage.game.GameOptions;
-import mage.game.events.PlayerQueryEvent;
-import mage.game.events.TableEvent;
-import mage.player.human.HumanPlayer;
-import mage.players.Player;
-import mage.util.ThreadUtils;
+import forge.LobbyPlayer;
+import forge.game.Game;
+import forge.game.GameEndReason;
+import forge.game.GameLogEntry;
+import forge.game.GameRules;
+import forge.game.GameType;
+import forge.game.Match;
+import forge.game.card.CardView;
+import forge.game.player.Player;
+import forge.game.player.RegisteredPlayer;
 import org.apache.log4j.Logger;
 
 import java.lang.management.ManagementFactory;
@@ -33,17 +29,14 @@ import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -51,64 +44,36 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
- * Fuehrt ein Spiel (1-4 Menschen, Rest Bots) ohne XMage-Server aus. Ersetzt GameController/GameSessionPlayer.
+ * Fuehrt ein Forge-Spiel (1-4 Menschen, Rest Bots; fuer Tests auch nur Bots) aus.
  * <p>
- * Threads:
+ * Threads und Regeln:
  * <ul>
- *   <li>Game-Thread ({@code GAME <id>}): {@code game.start()}, alle Listener, GameView-Bau.</li>
- *   <li>CALL-Thread: einziger Aufrufer von {@code setResponse*}/{@code sendPlayerAction}. Antworten
- *       vom Game-Thread wuerden 30 s blockieren und verworfen.</li>
+ *   <li>Ein Spiel-Thread {@code Game-ml-<id>}: {@code match.startGame} laeuft synchron darauf. Nur er fasst Forge-Objekte
+ *       an; StateDto, PromptDto und Log entstehen dort.</li>
+ *   <li>Client-Eingaben (WS-/Relay-Threads) rufen Forge nie direkt: sie pruefen nur und reihen Kommandos in die
+ *       {@link #inbox} ein. Der Spiel-Thread fuehrt sie aus, waehrend er in einer Frage parkt ({@link #park}) oder an
+ *       Safe-Points ({@link #safePoint}, vor jeder Entscheidung eines Controllers).</li>
  * </ul>
- * Jeder Mensch hat einen {@link HumanSeat} (Verbindung, eigener State, Auto-Pay-Zustand). Da das Spiel single-threaded
- * ist, gibt es immer hoechstens einen offenen Prompt; er gehoert genau einem Sitz ({@link #promptSeat}). Antworten
- * werden nur vom Besitzer angenommen.
+ * Das Spiel ist single-threaded: hoechstens ein offener Prompt; er gehoert genau einem Sitz ({@link #promptSeat}).
  */
 public final class GameHost {
 
     private static final Logger LOG = Logger.getLogger(GameHost.class);
     private static final long STATE_MIN_INTERVAL_MS = 60;
     private static final int LOG_KEEP = 400;
-    /** Max. Wartezeit, bis der Spiel-Thread wirklich auf eine Antwort wartet (sonst wie bisher antworten). */
-    private static final long AWAIT_WAITING_MS = 3000;
-    /** Spiel haengt nach einer Antwort weiter in waitForResponse, ohne neue Frage -> Antwort erneut zustellen. */
-    private static final long RECOVER_AFTER_MS = 2500;
-    private static final int RECOVER_MAX_PER_ANSWER = 3;
+    private static final int CHAT_KEEP = 100;
     /** Ohne Spielaenderung und ohne CPU-Last so lange -> "stuck" melden. */
     private static final long STUCK_AFTER_MS = 15000;
     /** Ab so langer Trennung duerfen die anderen Menschen einen Sitz aufgeben lassen (Dev: -Dmagelite.kickAfterMs). */
     private static final long KICK_AFTER_MS = Long.getLong("magelite.kickAfterMs", 60_000L);
-
-    /** F-Tasten und Einstellungen, die der Client senden darf (kein Undo/Rollback/Cheat). */
-    private static final Set<PlayerAction> ALLOWED_ACTIONS = EnumSet.of(
-            PlayerAction.PASS_PRIORITY_UNTIL_MY_NEXT_TURN,
-            PlayerAction.PASS_PRIORITY_UNTIL_TURN_END_STEP,
-            PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN,
-            PlayerAction.PASS_PRIORITY_UNTIL_NEXT_TURN_SKIP_STACK,
-            PlayerAction.PASS_PRIORITY_UNTIL_NEXT_MAIN_PHASE,
-            PlayerAction.PASS_PRIORITY_UNTIL_STACK_RESOLVED,
-            PlayerAction.PASS_PRIORITY_UNTIL_END_STEP_BEFORE_MY_NEXT_TURN,
-            PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS,
-            PlayerAction.HOLD_PRIORITY,
-            PlayerAction.UNHOLD_PRIORITY,
-            PlayerAction.TRIGGER_AUTO_ORDER_ABILITY_FIRST,
-            PlayerAction.TRIGGER_AUTO_ORDER_ABILITY_LAST,
-            PlayerAction.TRIGGER_AUTO_ORDER_NAME_FIRST,
-            PlayerAction.TRIGGER_AUTO_ORDER_NAME_LAST,
-            PlayerAction.TRIGGER_AUTO_ORDER_RESET_ALL,
-            PlayerAction.REQUEST_AUTO_ANSWER_ID_YES,
-            PlayerAction.REQUEST_AUTO_ANSWER_ID_NO,
-            PlayerAction.REQUEST_AUTO_ANSWER_TEXT_YES,
-            PlayerAction.REQUEST_AUTO_ANSWER_TEXT_NO,
-            PlayerAction.REQUEST_AUTO_ANSWER_RESET_ALL,
-            PlayerAction.RESET_AUTO_SELECT_REPLACEMENT_EFFECTS,
-            PlayerAction.MANA_AUTO_PAYMENT_ON,
-            PlayerAction.MANA_AUTO_PAYMENT_OFF,
-            PlayerAction.MANA_AUTO_PAYMENT_RESTRICTED_ON,
-            PlayerAction.MANA_AUTO_PAYMENT_RESTRICTED_OFF,
-            PlayerAction.USE_FIRST_MANA_ABILITY_ON,
-            PlayerAction.USE_FIRST_MANA_ABILITY_OFF,
-            PlayerAction.CONCEDE
-    );
+    public static final int MAX_SPECTATORS = 8;
+    /** Schleifen-Schutz: so viele Antworten auf eine einzige Frage, dann Autopilot */
+    private static final int MAX_ANSWERS_PER_FRAME = 200;
+    /**
+     * Endlosschleifen-Schutz (Regel 104.4b): so viele Entscheidungen (Safe-Points) in einem Zug, dann endet das Spiel
+     * unentschieden. Ein normaler Zug hat einige Dutzend, grosse Trigger-Ketten wenige Hundert.
+     */
+    private static final int MAX_DECISIONS_PER_TURN = 3000;
 
     /** Empfaenger fuer Server->Client-Nachrichten (WebSocket, Konsole, Test-Treiber). */
     public interface Sink {
@@ -121,7 +86,7 @@ public final class GameHost {
     }
 
     /** Antwort des Clients auf einen Prompt. Genau ein Feld gesetzt. */
-    public record Response(UUID uuid, Boolean bool, Integer integer, String string, UUID manaPlayerId, ManaType manaType) {
+    public record Response(UUID uuid, Boolean bool, Integer integer, String string, UUID manaPlayerId, ManaColor manaType) {
         public static Response ofUuid(UUID u) {
             return new Response(u, null, null, null, null, null);
         }
@@ -138,7 +103,7 @@ public final class GameHost {
             return new Response(null, null, null, s, null, null);
         }
 
-        public static Response ofMana(UUID playerId, ManaType type) {
+        public static Response ofMana(UUID playerId, ManaColor type) {
             return new Response(null, null, null, null, playerId, type);
         }
     }
@@ -146,70 +111,68 @@ public final class GameHost {
     private static final Sink NOOP = msg -> {
     };
 
-    /**
-     * Ein menschlicher Sitz: XMage-Spieler, Konto, Verbindung und alles, was pro Mensch gilt (letzter State,
-     * Auto-Passen, Auto-Bezahlen, gepasste Stapelobjekte, Mehrfach-Angriff, Aufgabe).
-     */
+    /** Ein menschlicher Sitz: Konto, Verbindung, Forge-Spieler/-Controller und Einstellungen pro Mensch. */
     public final class HumanSeat {
-        private final HumanPlayer player;
+        private final int index;
         private final UUID playerId;
         private final long userId;
         private final Long deckId;
         private final LoadedDeck deck;
         private final boolean host;
+        private final String name;
         private volatile Sink sink = NOOP;
         /** 0 = Client verbunden; sonst Zeitpunkt der Trennung (bzw. Erzeugung, solange sich noch niemand verbunden hat) */
         private volatile long disconnectedSince = System.currentTimeMillis();
         private volatile StateDto lastState;
         private volatile Messages.GameOver gameOver;
         private volatile boolean autoPass = true;
-        /** Auto-Passen (auch F-Tasten) im Upkeep eines Gegners anhalten */
-        private volatile boolean stopOppUpkeep;
-        /** Auto-Passen (auch F-Tasten) anhalten, sobald ein fremdes Stapelobjekt mich/meine Objekte anvisiert */
-        private volatile boolean stopOnTargeted = true;
-        /** anvisierende Stapelobjekte, fuer die schon angehalten wurde (Game-Thread) */
-        private final Set<UUID> targetAlerted = ConcurrentHashMap.newKeySet();
-        /** Zug, in dessen Gegner-Upkeep schon angehalten wurde (Game-Thread) */
-        private int upkeepStoppedTurn = -1;
         private volatile boolean autoPayDefault = true;
         private volatile boolean conceded;
         /** selbst verlassen ({@link #leave}); zaehlt bei der Platzierung hinter den Ueberlebenden */
         private volatile boolean left;
-        /** Stapelobjekte, auf die dieser Mensch schon gepasst hat ({@link StackSig}); gleiche danach automatisch passen. */
-        private final Set<String> passedSigs = ConcurrentHashMap.newKeySet();
-        /** Signatur des obersten Stapelobjekts zum offenen Prioritaets-Prompt {@link #promptSigId} */
-        private volatile String promptSig;
-        private volatile long promptSigId;
-        /** laufender Mehrfach-Angriff/-Block (Game-Thread, gestartet vom WS-Thread) */
-        private volatile CombatMacro macro;
-        /** laufende Ersatzeffekt-Entscheidung (1-Klick / "Keinen anwenden"), siehe {@link #handleReplacement} */
-        private volatile ReplMacro replMacro;
-        /** laufende Mehrfach-Aktivierung ("N-mal aktivieren"), siehe {@link #continueRepeat} */
-        private volatile RepeatMacro repeat;
-        /** laufende Sonderbezahlung (Einberufen per Klick / Knopf), siehe {@link #continueSpecial} */
-        private volatile SpecialMacro special;
-        /** Sendezeitpunkte der letzten Chat-Nachrichten (Rate-Limit) */
         private final Deque<Long> chatTimes = new ArrayDeque<>();
-        /** Ersatzeffekte (Regeltext -> Kurzname), die dieses Spiel automatisch abgelehnt werden */
-        private final Map<String, String> replDeclineAlways = new ConcurrentHashMap<>();
-        // Auto-Bezahlen (Game-Thread)
-        private boolean autoPayActive;
-        private boolean autoPayFailed;
-        /** Stapelobjekt, bei dessen Bezahlung Auto-Bezahlen gescheitert ist (neue Bezahlung -> wieder automatisch) */
-        private UUID autoPayFailedKey;
-        /** Auto-Bezahlen nur mit Laendern, Rest per Sonderbezahlung (Convoke & Co.) */
-        private boolean autoPayPartial;
-        private AutoPayer.Color autoPayColor;
-        private int autoPaySteps;
-        private String autoPayLastMsg;
+        /** genommene Mulligans (Spiel-Thread) */
+        int mulligans;
+        /** Aktionen der letzten Prioritaets-Pruefung (Spiel-Thread), fuer den folgenden State */
+        Set<CardView> cachedActions;
+        // Forge (Spiel-Thread; gesetzt beim Anlegen des Spiels)
+        private Player player;
+        private HumanController controller;
+        private SeatGui gui;
 
-        private HumanSeat(HumanPlayer player, GameSetup.SeatSpec spec, boolean host) {
-            this.player = player;
-            this.playerId = player.getId();
+        private HumanSeat(int index, UUID playerId, GameSetup.SeatSpec spec, boolean host, String name) {
+            this.index = index;
+            this.playerId = playerId;
             this.userId = spec.userId();
             this.deckId = spec.deckId();
             this.deck = spec.deck();
             this.host = host;
+            this.name = name;
+        }
+
+        void bind(Player p, HumanController c) {
+            this.player = p;
+            this.controller = c;
+        }
+
+        Player player() {
+            return player;
+        }
+
+        HumanController controller() {
+            return controller;
+        }
+
+        SeatGui gui() {
+            return gui;
+        }
+
+        boolean autoPass() {
+            return autoPass;
+        }
+
+        boolean autoPayDefault() {
+            return autoPayDefault;
         }
 
         public UUID playerId() {
@@ -229,7 +192,7 @@ public final class GameHost {
         }
 
         public String name() {
-            return player.getName();
+            return name;
         }
 
         /** Gastgeber (erster Mensch): darf das Tempo stellen. */
@@ -266,39 +229,42 @@ public final class GameHost {
     private record Spectator(long userId, String name, Sink sink) {
     }
 
-    public static final int MAX_SPECTATORS = 8;
-
     private final UUID id = UUID.randomUUID();
-    private final MageLiteMatch match;
-    /** Zuschauer; gelesen vom Game-, Wachhund- und WS-Thread */
-    private final Set<Spectator> spectators = ConcurrentHashMap.newKeySet();
-    /** Reihenfolge "hello vor State": Zuschauer anmelden und oeffentlichen State verteilen nur unter dieser Sperre */
-    private final Object specLock = new Object();
-    /** oeffentlicher State fuer Zuschauer (Game-Thread baut ihn nach den Sitzen); null = noch keiner */
-    private volatile StateDto publicState;
-    /** Zuschau-Sicht bauen (nur Tisch-Spiele, vor {@link #start()} gesetzt) */
-    private volatile boolean spectatable;
-    private volatile String tableName;
-    /** Blickwinkel der Zuschauer: erster Mensch, der beim ersten oeffentlichen State nicht aufgegeben hat; danach fest */
-    private volatile UUID viewpoint;
-    private long lastPublicErrorAt;
-    /** Spielende fuer Zuschauer (ohne Belohnung), gesetzt sobald es an die angemeldeten Zuschauer ging */
-    private volatile Messages.GameOver spectatorOver;
+    private final GameSetup setup;
+    private final TempoSettings tempo;
+    private final IdCodec ids = new IdCodec();
+    private final Match match;
     private final Game game;
+    private final ForgeViewMapper mapper;
+    private final PromptBridge bridge = new PromptBridge(this);
+    private final AutoPassPolicy policy = new AutoPassPolicy();
     /** menschliche Sitze nach Spieler-id, in Tischreihenfolge; nach dem Konstruktor nur gelesen */
     private final Map<UUID, HumanSeat> humans = new LinkedHashMap<>();
     private final HumanSeat firstHuman;
-    private final List<MageLiteBot> bots = new ArrayList<>();
-    private final TempoSettings tempo;
     private final Map<UUID, String> deckNames = new LinkedHashMap<>();
     private final List<Messages.Seat> seats = new ArrayList<>();
     private final Map<UUID, List<String>> commanders = new LinkedHashMap<>();
-    private final GameSetup setup;
-    private final ExecutorService callExecutor = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, ThreadUtils.THREAD_PREFIX_CALL_REQUEST + " magelite");
-        t.setDaemon(true);
-        return t;
-    });
+
+    /** Kommandos fuer den Spiel-Thread (Antworten, Aufgeben, Abbruch) */
+    private final LinkedBlockingQueue<Runnable> inbox = new LinkedBlockingQueue<>();
+    /** offene Fragen (Spiel-Thread), oberste = aktuelle */
+    private final Deque<PromptBridge.Frame> frames = new ArrayDeque<>();
+    /** offener Prompt; Antworten raeumen ihn per compareAndSet (genau eine Antwort pro Prompt) */
+    private final AtomicReference<PromptDto> openPrompt = new AtomicReference<>();
+    private volatile HumanSeat promptSeat;
+    private volatile PromptBridge.Frame promptFrame;
+    /** Spiel-Thread parkt in einer Frage (fuer Aktivitaet/Wachhund) */
+    private volatile boolean parked;
+
+    private final Set<Spectator> spectators = ConcurrentHashMap.newKeySet();
+    /** Reihenfolge "hello vor State": Zuschauer anmelden und oeffentlichen State verteilen nur unter dieser Sperre */
+    private final Object specLock = new Object();
+    private volatile StateDto publicState;
+    private volatile boolean spectatable;
+    private volatile String tableName;
+    private volatile UUID viewpoint;
+    private long lastPublicErrorAt;
+    private volatile Messages.GameOver spectatorOver;
 
     private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "magelite-watchdog");
@@ -309,24 +275,10 @@ public final class GameHost {
     private final AtomicLong stateSeq = new AtomicLong();
     private final AtomicLong promptSeq = new AtomicLong();
     private final Deque<Messages.LogEntry> logTail = new ArrayDeque<>();
-    /** Chat-Verlauf fuer den Replay nach (Re-)Connect */
     private final Deque<Messages.ChatEntry> chatTail = new ArrayDeque<>();
-    private static final int CHAT_KEEP = 100;
-    /** Spielereignisse fuer Animationen (vom Game-Thread gefuellt, vor dem naechsten State bzw. per Wachhund geleert) */
-    private final java.util.concurrent.ConcurrentLinkedQueue<Messages.FxEvent> fx = new java.util.concurrent.ConcurrentLinkedQueue<>();
-    private final java.util.concurrent.atomic.AtomicInteger fxSize = new java.util.concurrent.atomic.AtomicInteger();
-    private volatile long lastFxAt;
-    private static final int FX_MAX = 200;
-    private static final long FX_FLUSH_AFTER_MS = 150;
-    private final List<UUID> eliminationOrder = new ArrayList<>();
-    private final Map<UUID, Integer> eliminatedTurn = new LinkedHashMap<>();
-
-    /** offener Prompt; Antworten raeumen ihn per compareAndSet (genau eine Antwort pro Prompt) */
-    private final AtomicReference<PromptDto> openPrompt = new AtomicReference<>();
-    /** Besitzer von {@link #openPrompt} */
-    private volatile HumanSeat promptSeat;
-    private volatile UUID thinking;
-    /** Zugnummer des zuletzt gesendeten States (fuer die Lobby, ohne Spiel-Thread lesbar) */
+    private final List<Integer> eliminationOrder = new ArrayList<>();
+    private final Map<Integer, Integer> eliminatedTurn = new LinkedHashMap<>();
+    private volatile Player thinking;
     private volatile int turn;
     private volatile Messages.GameOver gameOver;
     private volatile Consumer<GameHost> onFinished;
@@ -335,73 +287,81 @@ public final class GameHost {
     private boolean stateDirty;
     private volatile Thread gameThread;
     private volatile long startedAt;
-    // Wachhund / Aktivitaet
+    private volatile int turnCap;
+    private volatile boolean aborting;
     private volatile long lastProgressAt = System.currentTimeMillis();
-    private volatile long lastHumanQueryAt;
-    private volatile Player lastAppliedTarget;
-    private volatile HumanSeat lastAppliedSeat;
-    private volatile Response lastApplied;
-    private volatile long lastAppliedAt;
-    private int recoverAttempts;
-    private volatile int recovered;
     private long lastCpuNs = -1;
     private long lastCpuAt;
     private int ticks;
+    private int decisionTurn;
+    private int decisionsThisTurn;
 
-    private GameHost(GameSetup setup) throws GameException {
+    private GameHost(GameSetup setup, List<GameSetup.SeatSpec> specs, TempoSettings.Preset preset) {
         this.setup = setup;
-        this.tempo = new TempoSettings(setup.tempo());
-        this.match = new MageLiteMatch(MageLiteMatch.defaultOptions("MageLite"));
-
+        this.tempo = new TempoSettings(preset);
         Set<String> usedNames = new HashSet<>();
+        List<RegisteredPlayer> regs = new ArrayList<>();
         HumanSeat first = null;
-        for (GameSetup.SeatSpec spec : setup.seats()) {
+        int index = 0;
+        for (GameSetup.SeatSpec spec : specs) {
+            UUID wire = ids.player(index); // Forge vergibt Spieler-ids 0..n-1 in Anmeldereihenfolge (geprueft unten)
+            String name;
+            LobbyPlayer lobby;
             if (spec.human()) {
-                String name = uniqueName(spec.name() == null || spec.name().isBlank() ? "Spieler" : spec.name(), usedNames);
-                MageLiteHuman hp = new MageLiteHuman(name, RangeOfInfluence.ALL, 0);
-                hp.setUserData(HumanSettings.defaults());
-                HumanSeat seat = new HumanSeat(hp, spec, first == null);
-                hp.setStopGuard(g -> stopReason(seat, g, false) != null);
-                humans.put(hp.getId(), seat);
+                name = uniqueName(spec.name() == null || spec.name().isBlank() ? "Spieler" : spec.name(), usedNames);
+                HumanSeat seat = new HumanSeat(index, wire, spec, first == null, name);
+                humans.put(wire, seat);
                 if (first == null) {
                     first = seat;
                 }
-                addSeat(hp, spec.deck(), true);
+                lobby = new HumanController.Lobby(name, this, seat);
             } else {
-                String name = botName(spec.deck(), usedNames);
-                MageLiteBot bot = new MageLiteBot(name, RangeOfInfluence.ALL, tempo);
-                bot.setHooks((g, b) -> flushStateIfDirty());
-                bots.add(bot);
-                addSeat(bot, spec.deck(), false);
+                name = botName(spec.deck(), usedNames);
+                lobby = new ForgeBot.Lobby(name, this);
             }
+            RegisteredPlayer rp = RegisteredPlayer.forCommander(spec.deck().newDeck());
+            rp.setPlayer(lobby);
+            regs.add(rp);
+            deckNames.put(wire, spec.deck().name());
+            commanders.put(wire, spec.deck().commanders());
+            seats.add(new Messages.Seat(wire, name, spec.human(), spec.deck().name(), spec.deck().commanders()));
+            index++;
         }
         firstHuman = first;
 
-        match.startMatch();
-        match.startGame();
-        game = match.getGame();
-        GameOptions options = GameOptions.getDefault().copy();
-        options.rollbackTurnsAllowed = false;
-        game.setGameOptions(options);
-        game.addTableEventListener(this::onTableEvent);
-        game.addPlayerQueryEventListener(this::onQueryEvent);
-        for (HumanSeat s : humans.values()) {
-            StatsSink.register(game.getId(), s.playerId);
+        GameRules rules = new GameRules(GameType.Commander);
+        rules.setAppliedVariants(EnumSet.of(GameType.Commander));
+        rules.setGamesPerMatch(1);
+        match = new Match(rules, regs, "MageLite");
+        game = match.createGame();
+        game.AI_TIMEOUT = Math.max(1, tempo.thinkSecs());
+        mapper = new ForgeViewMapper(game, ids);
+
+        for (HumanSeat seat : humans.values()) {
+            if (seat.player == null || seat.player.getId() != seat.index) {
+                throw new IllegalStateException("Forge-Spieler-id passt nicht zum Sitz " + seat.name);
+            }
+            SeatGui gui = new SeatGui(this, seat);
+            seat.gui = gui;
+            seat.controller.setGui(gui);
+            gui.setGameView(null);
+            gui.setGameView(game.getView());
+            gui.setOriginalGameController(seat.player.getView(), seat.controller);
         }
-        game.getState().addWatcher(new StatsWatcher());
-        game.getState().addWatcher(new FxWatcher());
-        FxWatcher.listen(game.getId(), this::onFx);
+        for (Player p : game.getPlayers()) {
+            p.updateOpponentsForView();
+        }
+        game.getGameLog().addObserver((o, arg) -> onLogAdded());
     }
 
-    public static GameHost create(GameSetup setup) throws GameException {
-        return new GameHost(setup);
+    public static GameHost create(GameSetup setup) {
+        return new GameHost(setup, setup.seats(), setup.tempo());
     }
 
-    private void addSeat(Player player, LoadedDeck deck, boolean isHuman) throws GameException {
-        match.addPlayer(player, deck.newDeck());
-        deckNames.put(player.getId(), deck.name());
-        commanders.put(player.getId(), deck.commanders());
-        seats.add(new Messages.Seat(player.getId(), player.getName(), isHuman, deck.name(), deck.commanders()));
+    /** Spiel nur mit Bots (Spikes, Bot-Arena); kein {@link GameSetup}. */
+    public static GameHost createBots(List<LoadedDeck> decks, TempoSettings.Preset preset) {
+        List<GameSetup.SeatSpec> specs = decks.stream().map(GameSetup.SeatSpec::bot).toList();
+        return new GameHost(null, specs, preset);
     }
 
     private static String botName(LoadedDeck deck, Set<String> used) {
@@ -422,6 +382,32 @@ public final class GameHost {
         return name;
     }
 
+    // ------------------------------------------------------------------ Paket-intern (Spiel-Thread)
+
+    Game game() {
+        return game;
+    }
+
+    ForgeViewMapper mapper() {
+        return mapper;
+    }
+
+    PromptBridge bridge() {
+        return bridge;
+    }
+
+    AutoPassPolicy policy() {
+        return policy;
+    }
+
+    boolean isGameThread() {
+        return Thread.currentThread() == gameThread;
+    }
+
+    PromptBridge.Frame topFrame() {
+        return frames.peek();
+    }
+
     // ------------------------------------------------------------------ Lebenszyklus
 
     public UUID getId() {
@@ -433,7 +419,6 @@ public final class GameHost {
         return firstHuman.playerId;
     }
 
-    /** Menschliche Sitze in Tischreihenfolge. */
     public Collection<HumanSeat> seats() {
         return Collections.unmodifiableCollection(humans.values());
     }
@@ -442,7 +427,6 @@ public final class GameHost {
         return firstHuman;
     }
 
-    /** Sitz eines Kontos (lokal: Nutzer 1). */
     public Optional<HumanSeat> seatOf(long userId) {
         return humans.values().stream().filter(s -> s.userId == userId).findFirst();
     }
@@ -451,6 +435,7 @@ public final class GameHost {
         return Optional.ofNullable(humans.get(playerId));
     }
 
+    /** Forge-Spiel; nur auf dem Spiel-Thread anfassen. */
     public Game getGame() {
         return game;
     }
@@ -471,57 +456,20 @@ public final class GameHost {
         this.onFinished = onFinished;
     }
 
+    /** Spiel endet als Unentschieden, sobald dieser Zug vorbei ist (0 = aus). Fuer Spikes. */
+    public void setTurnCap(int turnCap) {
+        this.turnCap = turnCap;
+    }
+
     public void setAutoPass(HumanSeat seat, boolean autoPass) {
-        boolean wasOn = seat.autoPass;
         seat.autoPass = autoPass;
-        if (wasOn && !autoPass) {
-            // "Passen manuell" beendet auch laufendes F-Tasten-Passen (z.B. bis zu meinem Zug). Nur beim Umschalten:
-            // der Client schickt die Einstellung bei jedem Reconnect erneut.
-            action(seat, PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS.name(), null);
-        }
     }
 
+    /** Stopp-Einstellungen; folgen in Phase 1 (AutoPassPolicy). */
     public void setStops(HumanSeat seat, Boolean stopOppUpkeep, Boolean stopOnTargeted) {
-        if (stopOppUpkeep != null && stopOppUpkeep != seat.stopOppUpkeep) {
-            seat.stopOppUpkeep = stopOppUpkeep;
-            // XMage ueberspringt Steps ohne Stop-Flag bei leerem Stapel selbst (kein Prompt) -> Flag in den UserData
-            seat.player.setUserData(HumanSettings.of(stopOppUpkeep));
-        }
-        if (stopOnTargeted != null) {
-            seat.stopOnTargeted = stopOnTargeted;
-        }
     }
 
-    /**
-     * Grund, an dieser Prioritaet trotz Auto-Passen/F-Tasten anzuhalten (sonst null): ein fremdes Stapelobjekt visiert
-     * mich oder meine Objekte an (je Stapelobjekt einmal) bzw. Upkeep eines Gegners (je Zug einmal). Game-Thread;
-     * {@code mark} merkt sich den Halt (beim Zeigen des Prompts), ohne {@code mark} nur pruefen (F-Tasten-Guard).
-     */
-    private String stopReason(HumanSeat seat, Game g, boolean mark) {
-        if (seat.stopOnTargeted) {
-            for (TargetCheck.Hit hit : TargetCheck.targeting(g, seat.playerId)) {
-                if (!seat.targetAlerted.contains(hit.stackId())) {
-                    if (mark) {
-                        seat.targetAlerted.add(hit.stackId());
-                    }
-                    return hit.source() + " → " + hit.target();
-                }
-            }
-        }
-        if (seat.stopOppUpkeep && g.getTurnStepType() == PhaseStep.UPKEEP && g.getStack().isEmpty()
-                && !seat.playerId.equals(g.getActivePlayerId()) && seat.upkeepStoppedTurn != g.getTurnNum()) {
-            if (mark) {
-                seat.upkeepStoppedTurn = g.getTurnNum();
-            }
-            Player active = g.getPlayer(g.getActivePlayerId());
-            return "Upkeep von " + (active == null ? "?" : active.getName());
-        }
-        return null;
-    }
-
-    /**
-     * Verbindet einen Client mit einem Sitz und schickt den aktuellen Stand (Resync nach Reconnect).
-     */
+    /** Verbindet einen Client mit einem Sitz und schickt den aktuellen Stand (Resync nach Reconnect). */
     public synchronized void attach(HumanSeat seat, Sink newSink) {
         seat.sink = newSink;
         seat.disconnectedSince = 0;
@@ -558,7 +506,6 @@ public final class GameHost {
 
     // ------------------------------------------------------------------ Zuschauer
 
-    /** Zuschau-Sicht bauen (Tisch-Spiele). Vor {@link #start()} aufrufen. */
     public void setSpectatable(boolean on) {
         this.spectatable = on;
     }
@@ -573,8 +520,8 @@ public final class GameHost {
 
     /**
      * Meldet einen Zuschauer an: hello, Spiel- und Chat-Verlauf, gecachter oeffentlicher State, ggf. gameOver (ohne
-     * Belohnung), Sitz-Status. Beruehrt nie das Spiel und baut keine Sicht (Regel 2). Ein Nutzer schaut hoechstens
-     * einmal zu: eine neue Verbindung ersetzt die alte ({@code replaced}).
+     * Belohnung), Sitz-Status. Beruehrt nie das Spiel. Ein Nutzer schaut hoechstens einmal zu: eine neue Verbindung
+     * ersetzt die alte ({@code replaced}).
      */
     public SpectateResult attachSpectator(long userId, String name, Sink sink, String tableName) {
         Sink replaced = null;
@@ -619,15 +566,12 @@ public final class GameHost {
         return new SpectateResult(SpectateStatus.OK, replaced);
     }
 
-    /** Zuschauer abmelden (Socket geschlossen); nur der Eintrag mit genau diesem Sink. */
     public void detachSpectator(Sink sink) {
-        boolean removed = spectators.removeIf(x -> x.sink() == sink);
-        if (removed) {
+        if (spectators.removeIf(x -> x.sink() == sink)) {
             broadcastSeats();
         }
     }
 
-    /** Blickwinkel-Spieler der Zuschauer (fest, sobald einmal gewaehlt). */
     private UUID viewpointId() {
         UUID v = viewpoint;
         if (v != null) {
@@ -638,10 +582,9 @@ public final class GameHost {
                 return s.playerId;
             }
         }
-        return firstHuman.playerId;
+        return firstHuman == null ? null : firstHuman.playerId;
     }
 
-    /** An alle Zuschauer (Fehler einzelner Sinks stoeren niemanden). */
     private void sendSpectators(Object msg) {
         for (Spectator x : spectators) {
             try {
@@ -658,10 +601,7 @@ public final class GameHost {
         sendSpectators(msg);
     }
 
-    /**
-     * Chat-Nachricht eines Menschen an alle Menschen am Tisch (auch aufgegebene Sitze duerfen mitreden). Reine
-     * Host-Ebene, der Spiel-Thread ist nicht beteiligt.
-     */
+    /** Chat-Nachricht eines Menschen an alle am Tisch. Reine Host-Ebene, der Spiel-Thread ist nicht beteiligt. */
     public boolean chat(HumanSeat seat, String text) {
         String clean = ChatText.clean(text);
         if (clean == null) {
@@ -695,7 +635,6 @@ public final class GameHost {
         }
     }
 
-    /** Verbindungszustand aller Menschen und Namen der Zuschauer an alle Menschen und Zuschauer. */
     private void broadcastSeats() {
         List<Messages.SeatConn> list = new ArrayList<>();
         for (HumanSeat s : humans.values()) {
@@ -705,12 +644,7 @@ public final class GameHost {
         emitPublic(new Messages.SeatsStatus(list, KICK_AFTER_MS, names));
     }
 
-    /**
-     * Ein verbundener Mensch laesst einen seit mindestens {@link #KICK_AFTER_MS} getrennten Mitspieler aufgeben,
-     * damit das Spiel nicht ewig auf dessen Prompt wartet.
-     *
-     * @return true, wenn der Sitz aufgegeben hat
-     */
+    /** Ein verbundener Mensch laesst einen lange getrennten Mitspieler aufgeben. */
     public boolean kick(HumanSeat by, UUID targetPlayerId) {
         HumanSeat target = humans.get(targetPlayerId);
         if (target == null || target == by || target.conceded || by.conceded || !by.connected()
@@ -723,10 +657,7 @@ public final class GameHost {
         return true;
     }
 
-    /**
-     * Seit wann kein (noch mitspielender) Mensch verbunden ist, in ms; 0, sobald einer verbunden ist.
-     * Fuer den Abbruch verwaister Spiele.
-     */
+    /** Seit wann kein (noch mitspielender) Mensch verbunden ist, in ms; 0, sobald einer verbunden ist. */
     public long disconnectedForMs() {
         long min = Long.MAX_VALUE;
         boolean any = false;
@@ -753,7 +684,7 @@ public final class GameHost {
             return;
         }
         startedAt = System.currentTimeMillis();
-        gameThread = new Thread(this::runGame, ThreadUtils.THREAD_PREFIX_GAME + " " + game.getId());
+        gameThread = new Thread(this::runGame, "Game-ml-" + id.toString().substring(0, 8));
         gameThread.start();
         watchdog.scheduleWithFixedDelay(this::watchdogTick, 500, 500, TimeUnit.MILLISECONDS);
     }
@@ -761,15 +692,21 @@ public final class GameHost {
     private void runGame() {
         String error = null;
         try {
-            game.start(null);
-            game.fireUpdatePlayersEvent();
+            match.startGame(game, null);
         } catch (Throwable e) {
             LOG.error("Spiel abgebrochen", e);
             error = e.toString();
+            try {
+                if (!game.isGameOver()) {
+                    game.setGameOver(GameEndReason.Draw);
+                }
+            } catch (Throwable ignored) {
+                // Spiel ist ohnehin kaputt
+            }
         }
         try {
             trackEliminations();
-            sendState(null, null);
+            sendState(null, PromptBridge.StateMode.NONE);
             Messages.GameOver base = buildGameOver(error);
             gameOver = base;
             RewardHook hook = rewardHook;
@@ -789,7 +726,6 @@ public final class GameHost {
                 seat.gameOver = mine;
                 send(seat, mine);
             }
-            // Zuschauer: Spielende ohne Belohnung (gameOver ist gesetzt -> spaete Zuschauer bekommen es beim Anmelden)
             synchronized (specLock) {
                 sendSpectators(base);
                 spectatorOver = base;
@@ -805,41 +741,33 @@ public final class GameHost {
                     LOG.error("onFinished fehlgeschlagen", e);
                 }
             }
-            FxWatcher.forget(game.getId());
-            try {
-                game.cleanUp();
-                match.cleanUp();
-            } catch (Throwable e) {
-                LOG.warn("cleanUp: " + e);
+            for (HumanSeat s : humans.values()) {
+                try {
+                    s.gui.afterGameEnd();
+                } catch (Throwable ignored) {
+                    // nur Timer aufraeumen
+                }
             }
-            callExecutor.shutdown();
             watchdog.shutdownNow();
         }
     }
 
-    /**
-     * Beendet das Spiel: alle Spieler geben auf (Interrupts schluckt XMage).
-     */
+    /** Beendet das Spiel (Unentschieden), z.B. Admin, verwaistes Spiel, alle Menschen weg. */
     public void abort() {
+        aborting = true;
         for (HumanSeat s : humans.values()) {
             s.conceded = true;
         }
-        try {
-            callExecutor.execute(() -> {
-                for (Player p : game.getPlayers().values()) {
-                    if (p.isInGame()) {
-                        game.setConcedingPlayer(p.getId());
-                    }
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            // Spiel ist bereits zu Ende, CALL-Executor heruntergefahren
-        }
+        inbox.add(() -> {
+            if (!game.isGameOver()) {
+                game.setGameOver(GameEndReason.Draw);
+            }
+        });
     }
 
     /**
-     * Ein Mensch verlaesst das Spiel: nur sein Sitz gibt auf. Sind danach keine Menschen mehr im Spiel, geben auch
-     * die Bots auf (kein reines Bot-Spiel auf dem Server).
+     * Ein Mensch verlaesst das Spiel: nur sein Sitz gibt auf (offene Fragen beantwortet der Autopilot). Sind danach
+     * keine Menschen mehr im Spiel, endet es.
      */
     public void leave(HumanSeat seat) {
         if (seat.conceded) {
@@ -850,20 +778,12 @@ public final class GameHost {
         closePromptOf(seat);
         send(seat, new Messages.SeatStatus(true));
         boolean humansLeft = humans.values().stream().anyMatch(s -> !s.conceded);
-        try {
-            callExecutor.execute(() -> {
-                try {
-                    if (seat.player.isInGame()) {
-                        game.informPlayers(seat.player.getLogName() + " gibt auf");
-                        game.setConcedingPlayer(seat.playerId);
-                    }
-                } catch (Throwable e) {
-                    LOG.error("Aufgeben fehlgeschlagen", e);
-                }
-            });
-        } catch (RejectedExecutionException e) {
-            return;
-        }
+        inbox.add(() -> {
+            if (seat.player != null && seat.player.isInGame() && !game.isGameOver()) {
+                addLog("INFO", seat.name() + " gibt auf");
+                seat.controller.concede();
+            }
+        });
         if (!humansLeft) {
             abort();
         }
@@ -880,417 +800,92 @@ public final class GameHost {
 
     // ------------------------------------------------------------------ Client -> Engine
 
-    /**
-     * Antwort auf den offenen Prompt. Nur vom Besitzer des Prompts; ignoriert veraltete promptIds (Doppelklicks).
-     */
+    /** Antwort auf den offenen Prompt. Nur vom Besitzer; ignoriert veraltete promptIds (Doppelklicks). */
     public boolean respond(HumanSeat seat, long promptId, Response r) {
         PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
         if (p == null || p.id != promptId || promptSeat != seat || !openPrompt.compareAndSet(p, null)) {
             return false;
         }
-        seat.macro = null;
-        seat.replMacro = null;
-        seat.repeat = null;
-        seat.special = null;
-        if ("PLAY_MANA".equals(p.kind) && "special".equals(r.string())) {
-            // Knopf "Einberufen" & Co.: die folgende Aktionswahl beantworten wir, falls eindeutig
-            seat.special = new SpecialMacro(null, p.messageText);
-        }
-        String sig = seat.promptSig;
-        if (sig != null && seat.promptSigId == promptId && Boolean.FALSE.equals(r.bool())) {
-            // gepasst -> gleiche Stapelobjekte laufen ab jetzt automatisch durch
-            seat.passedSigs.add(sig);
-        }
         send(seat, new Messages.PromptClosed(promptId));
         notifyOthers(seat, null);
-        dispatch(seat, target -> apply(seat, target, r));
+        inbox.add(() -> answer(f, r));
         return true;
     }
 
-    /**
-     * Mehrfach-Angriff/-Block: {@code ids} greifen {@code target} an (Angriffs-Prompt) bzw. blocken den Angreifer
-     * {@code target} (Block-Prompt). Die Folge-Prompts beantwortet {@link #continueMacro}.
-     */
+    /** Spiel-Thread: Antwort an die Frage geben, falls sie noch die aktuelle ist. */
+    private void answer(PromptBridge.Frame f, Response r) {
+        if (f == null || frames.peek() != f || f.done()) {
+            return;
+        }
+        try {
+            if (++f.answers > MAX_ANSWERS_PER_FRAME) {
+                // Antwort-Schleife (Client und Forge drehen sich im Kreis): sicher beenden statt ewig zu haengen
+                bridge.unmapped(f.seat, "loop", f.getClass().getSimpleName() + " nach " + MAX_ANSWERS_PER_FRAME + " Antworten");
+                f.autopilot();
+                return;
+            }
+            f.answer(r);
+        } finally {
+            if (!f.done()) {
+                f.dirty = true;
+            }
+        }
+    }
+
+    /** Mehrfach-Angriff/-Block; folgt in Phase 1. */
     public boolean combat(HumanSeat seat, List<UUID> ids, UUID target) {
-        PromptDto p = openPrompt.get();
-        if (p == null || promptSeat != seat) {
-            return false;
-        }
-        boolean attack = "attackers".equals(p.mode);
-        if (!"SELECT".equals(p.kind) || target == null || ids == null || (!attack && !"blockers".equals(p.mode))) {
-            send(seat, p); // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen
-            return false;
-        }
-        List<UUID> possible = attack ? p.possibleAttackers : p.possibleBlockers;
-        Set<UUID> busy = inCombat(seat.lastState, attack);
-        Deque<UUID> queue = new ArrayDeque<>();
-        for (UUID id : new LinkedHashSet<>(ids)) {
-            if (possible != null && possible.contains(id) && !busy.contains(id)) {
-                queue.add(id);
-            }
-        }
-        UUID first = queue.poll();
-        if (first == null || !openPrompt.compareAndSet(p, null)) {
-            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
-            if (openPrompt.get() == p) {
-                send(seat, p);
-            }
-            return false;
-        }
-        CombatMacro m = new CombatMacro(p.mode, queue, target);
-        m.current = first;
-        seat.macro = m;
-        seat.special = null;
-        send(seat, new Messages.PromptClosed(p.id));
-        notifyOthers(seat, null);
-        dispatch(seat, t -> apply(seat, t, Response.ofUuid(first)));
-        return true;
-    }
-
-    /**
-     * "Angriff zuruecksetzen": alle eigenen Angreifer wieder aus dem Kampf nehmen, solange der Angriff noch nicht
-     * bestaetigt ist. XMage entfernt einen Angreifer, wenn er im Angriffs-Prompt erneut angeklickt wird
-     * ({@code removeAttackerIfPossible}); die Folge-Prompts beantwortet {@link #continueMacro}.
-     * <p>
-     * Steht gerade die Verteidiger-Wahl von "Alle angreifen" offen ({@code PICK_TARGET} mit {@code defenderPick}),
-     * waehlen wir das erste Ziel (XMage erklaert dann alle Angreifer) und nehmen sie danach wieder zurueck.
-     * Das ist deterministisch, egal ob der Prompt ein "Abbrechen" erlaubt - bei Pflicht-Zielen fragt XMage sonst
-     * endlos neu.
-     */
-    public boolean combatReset(HumanSeat seat) {
-        PromptDto p = openPrompt.get();
-        if (p == null || promptSeat != seat) {
-            return false;
-        }
-        UUID first;
-        if ("SELECT".equals(p.kind) && "attackers".equals(p.mode)) {
-            Set<UUID> attackers = inCombat(seat.lastState, true);
-            first = attackers.isEmpty() ? null : attackers.iterator().next();
-        } else if ("PICK_TARGET".equals(p.kind) && p.defenderPick && p.targets != null && !p.targets.isEmpty()) {
-            first = p.targets.get(0);
-        } else {
-            send(seat, p); // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen
-            return false;
-        }
-        if (first == null || !openPrompt.compareAndSet(p, null)) {
-            if (openPrompt.get() == p) {
-                send(seat, p);
-            }
-            return false;
-        }
-        CombatMacro m = new CombatMacro("attackers", new ArrayDeque<>(), null, true);
-        if ("SELECT".equals(p.kind)) {
-            m.tried.add(first);
-        }
-        seat.macro = m;
-        seat.special = null;
-        send(seat, new Messages.PromptClosed(p.id));
-        notifyOthers(seat, null);
-        dispatch(seat, t -> apply(seat, t, Response.ofUuid(first)));
-        return true;
-    }
-
-    /**
-     * "N-mal aktivieren" (z.B. Necropotence "Pay 1 life"): Antwort auf den offenen {@code CHOOSE_ABILITY}-Prompt mit
-     * {@code abilityId}, danach {@code times - 1} weitere Aktivierungen derselben Faehigkeit. Zwischen den
-     * Aktivierungen haelt XMage die Prioritaet ({@code HOLD_PRIORITY}), damit alle Aktivierungen erst auf den Stapel
-     * gehen; die letzte laeuft ohne Halten, danach greift XMages Auto-Passen. Folge-Prompts beantwortet
-     * {@link #continueRepeat}; Ziele, Fragen oder fremde Stapelobjekte beenden die Wiederholung.
-     */
-    public boolean repeat(HumanSeat seat, long promptId, UUID abilityId, int times) {
-        PromptDto p = openPrompt.get();
-        if (p == null || p.id != promptId || promptSeat != seat) {
-            return false;
-        }
-        PromptDto.Item item = null;
-        if ("CHOOSE_ABILITY".equals(p.kind) && p.choices != null && abilityId != null) {
-            for (PromptDto.Item i : p.choices) {
-                if (abilityId.toString().equals(i.id())) {
-                    item = i;
-                }
-            }
-        }
-        if (item == null || p.sourceId == null) {
-            send(seat, p);
-            return false;
-        }
-        if (!openPrompt.compareAndSet(p, null)) {
-            if (openPrompt.get() == p) {
-                send(seat, p);
-            }
-            return false;
-        }
-        int n = Math.max(1, Math.min(20, times));
-        RepeatMacro m = new RepeatMacro(p.sourceId, abilityId, item.text(), n - 1);
-        seat.macro = null;
-        seat.replMacro = null;
-        seat.special = null;
-        seat.repeat = n > 1 ? m : null;
-        send(seat, new Messages.PromptClosed(p.id));
-        notifyOthers(seat, null);
-        if (n > 1) {
-            holdPriority(seat);
-        }
-        dispatch(seat, t -> apply(seat, t, Response.ofUuid(abilityId)));
-        return true;
-    }
-
-    /**
-     * Einberufen per Klick: beim offenen Mana-Prompt die Kreatur {@code permId} tappen. Antwortet {@code "special"};
-     * Aktionswahl, Kreatur und Farbe beantwortet {@link #continueSpecial}.
-     */
-    public boolean specialPay(HumanSeat seat, long promptId, UUID permId) {
-        PromptDto p = openPrompt.get();
-        if (p == null || promptSeat != seat) {
-            return false;
-        }
-        if (p.id != promptId || !"PLAY_MANA".equals(p.kind) || permId == null || p.specialTargets == null
-                || !p.specialTargets.contains(permId) || !openPrompt.compareAndSet(p, null)) {
-            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
-            if (openPrompt.get() == p) {
-                send(seat, p);
-            }
-            return false;
-        }
-        seat.macro = null;
-        seat.replMacro = null;
-        seat.repeat = null;
-        seat.special = new SpecialMacro(permId, p.messageText);
-        send(seat, new Messages.PromptClosed(p.id));
-        notifyOthers(seat, null);
-        dispatch(seat, t -> apply(seat, t, Response.ofString("special")));
-        return true;
-    }
-
-    /** HOLD_PRIORITY auf dem CALL-Thread einreihen - vor der Antwort, die die Aktivierung ausloest (FIFO). */
-    private void holdPriority(HumanSeat seat) {
-        UUID pid = seat.playerId;
-        callExecutor.execute(() -> {
-            try {
-                game.sendPlayerAction(PlayerAction.HOLD_PRIORITY, pid, null);
-            } catch (Throwable e) {
-                LOG.error("HOLD_PRIORITY fehlgeschlagen", e);
-            }
-        });
-    }
-
-    /**
-     * Ersatzeffekt-Wahl mit Gruppen: {@code accept} = Effekt {@code key} anwenden, seine Folge-Frage ("Dredge X?")
-     * beantwortet {@link #handleReplacement} mit Ja. {@code decline} = alle optionalen Effekte ablehnen (Wahl und
-     * Nein-Kette automatisch), mit {@code always} auch in allen weiteren Ereignissen dieses Spiels.
-     */
-    public boolean replacement(HumanSeat seat, String mode, String key, boolean always) {
-        PromptDto p = openPrompt.get();
-        if (p == null || promptSeat != seat) {
-            return false;
-        }
-        List<PromptDto.ReplGroup> groups = "CHOOSE_CHOICE".equals(p.kind) && p.choice != null ? p.choice.groups : null;
-        ReplMacro m = null;
-        String answer = null;
-        if (groups != null && "accept".equals(mode) && key != null) {
-            for (PromptDto.ReplGroup g : groups) {
-                for (PromptDto.ReplSource s : g.sources()) {
-                    if (key.equals(s.key())) {
-                        m = new ReplMacro(true);
-                        if (g.optional() && s.objectId() != null) {
-                            m.sourceIds.add(s.objectId());
-                        }
-                        answer = key;
-                    }
-                }
-            }
-        } else if (groups != null && "acceptGroup".equals(mode) && key != null) {
-            // ganze Gruppe annehmen: nur bei gleichnamigen Quellen (sonst waere die Wahl der Karte eine Spielentscheidung)
-            for (PromptDto.ReplGroup g : groups) {
-                if (key.equals(g.rule()) && g.uniform() && !g.sources().isEmpty()) {
-                    PromptDto.ReplSource s = g.sources().get(0);
-                    m = new ReplMacro(true);
-                    if (g.optional() && s.objectId() != null) {
-                        m.sourceIds.add(s.objectId());
-                    }
-                    answer = s.key();
-                }
-            }
-        } else if (groups != null && "decline".equals(mode)) {
-            m = new ReplMacro(false);
-            for (PromptDto.ReplGroup g : groups) {
-                if (!g.optional()) {
-                    continue;
-                }
-                m.add(g);
-                if (always) {
-                    seat.replDeclineAlways.put(g.rule(), g.label());
-                }
-                if (answer == null) {
-                    answer = g.sources().get(0).key();
-                }
-            }
-        }
-        if (answer == null || !openPrompt.compareAndSet(p, null)) {
-            // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
-            if (openPrompt.get() == p) {
-                send(seat, p);
-            }
-            return false;
-        }
-        seat.macro = null;
-        seat.special = null;
-        seat.replMacro = m;
-        String a = answer;
-        send(seat, new Messages.PromptClosed(p.id));
-        notifyOthers(seat, null);
-        dispatch(seat, t -> apply(seat, t, Response.ofString(a)));
-        return true;
-    }
-
-    /** "Fuer dieses Spiel merken" zuruecknehmen. */
-    public void resetReplacementDeclines(HumanSeat seat) {
-        seat.replDeclineAlways.clear();
-        StateDto last = seat.lastState;
-        if (last != null) {
-            last.replDeclines = null; // Client leert seine Anzeige selbst; der naechste State kommt ohne
-        }
-    }
-
-    /** Laufende Ersatzeffekt-Entscheidung: welche Effekte (Regeltexte/Quellen) ab- bzw. angenommen werden. */
-    private static final class ReplMacro {
-        final boolean accept;
-        final Set<String> rules = new HashSet<>();
-        final Set<UUID> sourceIds = new HashSet<>();
-
-        ReplMacro(boolean accept) {
-            this.accept = accept;
-        }
-
-        void add(PromptDto.ReplGroup g) {
-            rules.add(g.rule());
-            for (PromptDto.ReplSource s : g.sources()) {
-                if (s.objectId() != null) {
-                    sourceIds.add(s.objectId());
-                }
-            }
-        }
-    }
-
-    /**
-     * Game-Thread: beantwortet Ersatzeffekt-Prompts selbst.
-     * <ul>
-     *   <li>Wahl: Gruppe, die abgelehnt werden soll (laufende Entscheidung oder "merken") -&gt; deren ersten Effekt
-     *       waehlen, die Frage danach beantwortet der ASK-Zweig mit Nein. Alle Optionen identisch (Token-Kopien)
-     *       -&gt; erste waehlen.</li>
-     *   <li>{@code ASK} aus einem Ersatzeffekt ({@link ReplacementAssist#inReplaceEvent}) zu einer Quelle der
-     *       laufenden Entscheidung -&gt; Ja/Nein. Auch der letzte Effekt ohne Wahl-Dialog und "merken"-Effekte mit nur
-     *       einer Quelle (Regeltext an der Quelle) werden so abgelehnt.</li>
-     *   <li>Alles andere beendet die laufende Entscheidung.</li>
-     * </ul>
-     *
-     * @return true, wenn der Prompt beantwortet wurde
-     */
-    private boolean handleReplacement(HumanSeat seat, PromptDto prompt) {
-        ReplMacro m = seat.replMacro;
-        List<PromptDto.ReplGroup> groups = "CHOOSE_CHOICE".equals(prompt.kind) && prompt.choice != null ? prompt.choice.groups : null;
-        if (groups != null) {
-            for (PromptDto.ReplGroup g : groups) {
-                boolean declined = (m != null && !m.accept && m.rules.contains(g.rule())) || seat.replDeclineAlways.containsKey(g.rule());
-                if (declined && g.optional()) {
-                    if (m == null || m.accept) {
-                        m = new ReplMacro(false);
-                        seat.replMacro = m;
-                    }
-                    m.add(g);
-                    onUpdate();
-                    answerInternally(seat, prompt, Response.ofString(g.sources().get(0).key()));
-                    return true;
-                }
-            }
-            seat.replMacro = null;
-            if (ReplacementAssist.allIdentical(groups)) {
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofString(groups.get(0).sources().get(0).key()));
-                return true;
-            }
-            return false;
-        }
-        if ("ASK".equals(prompt.kind) && (m != null || !seat.replDeclineAlways.isEmpty()) && ReplacementAssist.inReplaceEvent()) {
-            Set<UUID> ids = ReplacementAssist.objIds(prompt);
-            if (m != null && ids.stream().anyMatch(m.sourceIds::contains)) {
-                if (m.accept) {
-                    seat.replMacro = null;
-                }
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofBool(m.accept));
-                return true;
-            }
-            if (ReplacementAssist.hasRule(game, ids, seat.replDeclineAlways.keySet())) {
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofBool(false));
-                return true;
-            }
-        }
-        seat.replMacro = null;
         return false;
     }
 
-    private static Set<UUID> inCombat(StateDto s, boolean attackers) {
-        Set<UUID> out = new HashSet<>();
-        if (s != null && s.combat != null) {
-            for (var g : s.combat) {
-                out.addAll(attackers ? g.attackers() : g.blockers());
-            }
-        }
-        return out;
+    /** "Angriff zuruecksetzen"; folgt in Phase 1. */
+    public boolean combatReset(HumanSeat seat) {
+        return false;
     }
 
+    /** "N-mal aktivieren"; folgt in Phase 1. */
+    public boolean repeat(HumanSeat seat, long promptId, UUID abilityId, int times) {
+        return false;
+    }
+
+    /** Einberufen per Klick; folgt in Phase 1. */
+    public boolean specialPay(HumanSeat seat, long promptId, UUID permId) {
+        return false;
+    }
+
+    /** Ersatzeffekt-Gruppen; folgen in Phase 1. */
+    public boolean replacement(HumanSeat seat, String mode, String key, boolean always) {
+        return false;
+    }
+
+    public void resetReplacementDeclines(HumanSeat seat) {
+    }
+
+    /** F-Tasten und Einstellungen. POC: Aufgeben und Auto-Bezahlen; F-Tasten folgen in Phase 1. */
     public boolean action(HumanSeat seat, String actionName, Object data) {
-        PlayerAction action;
-        try {
-            action = PlayerAction.valueOf(actionName);
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
-        if (!ALLOWED_ACTIONS.contains(action)) {
-            return false;
-        }
-        if (action == PlayerAction.PASS_PRIORITY_CANCEL_ALL_ACTIONS) {
-            seat.passedSigs.clear();
-        }
-        if (action == PlayerAction.CONCEDE) {
-            leave(seat);
-            return true;
-        }
-        if (action == PlayerAction.PASS_PRIORITY_UNTIL_STACK_RESOLVED && game.getStack().isEmpty()) {
-            // XMage ignoriert das bei leerem Stapel (kein skip) - Prompt schliessen wuerde das Spiel haengen lassen
-            return false;
-        }
-        boolean closesPrompt = action.name().startsWith("PASS_PRIORITY_UNTIL");
-        if (closesPrompt) {
-            closePromptOf(seat);
-        }
-        UUID pid = seat.playerId;
-        callExecutor.execute(() -> {
-            try {
-                switch (action) {
-                    case MANA_AUTO_PAYMENT_ON -> game.setManaPaymentMode(pid, true);
-                    case MANA_AUTO_PAYMENT_OFF -> game.setManaPaymentMode(pid, false);
-                    case MANA_AUTO_PAYMENT_RESTRICTED_ON -> game.setManaPaymentModeRestricted(pid, true);
-                    case MANA_AUTO_PAYMENT_RESTRICTED_OFF -> game.setManaPaymentModeRestricted(pid, false);
-                    case USE_FIRST_MANA_ABILITY_ON -> game.setUseFirstManaAbility(pid, true);
-                    case USE_FIRST_MANA_ABILITY_OFF -> game.setUseFirstManaAbility(pid, false);
-                    default -> game.sendPlayerAction(action, pid, data);
-                }
-            } catch (Throwable e) {
-                LOG.error("Aktion " + action + " fehlgeschlagen", e);
+        switch (actionName) {
+            case "CONCEDE" -> {
+                leave(seat);
+                return true;
             }
-        });
-        return true;
+            case "MANA_AUTO_PAYMENT_ON" -> {
+                seat.autoPayDefault = true;
+                return true;
+            }
+            case "MANA_AUTO_PAYMENT_OFF" -> {
+                seat.autoPayDefault = false;
+                return true;
+            }
+            default -> {
+                LOG.info("Aktion noch nicht umgesetzt (Forge-POC): " + actionName);
+                return false;
+            }
+        }
     }
 
-    /** Offenen SELECT-Prompt dieses Sitzes schliessen (XMage beantwortet ihn ueber die Aktion selbst). */
     private void closePromptOf(HumanSeat seat) {
-        seat.repeat = null;
-        seat.special = null;
         PromptDto p = openPrompt.get();
-        if (p != null && promptSeat == seat && "SELECT".equals(p.kind) && openPrompt.compareAndSet(p, null)) {
+        if (p != null && promptSeat == seat && openPrompt.compareAndSet(p, null)) {
             send(seat, new Messages.PromptClosed(p.id));
             notifyOthers(seat, null);
         }
@@ -1300,150 +895,151 @@ public final class GameHost {
         tempo.apply(preset);
     }
 
-    /**
-     * Wie GameController.sendMessage: Antwort an den Menschen oder an den von ihm kontrollierten Prioritaetsspieler.
-     */
-    private void dispatch(HumanSeat seat, Consumer<Player> command) {
-        callExecutor.execute(() -> {
-            try {
-                HumanPlayer human = seat.player;
-                if (!human.isGameUnderControl()) {
-                    return;
+    public void setAutoPayDefault(HumanSeat seat, boolean on) {
+        seat.autoPayDefault = on;
+    }
+
+    /** Client-Knopf "Auto bezahlen" bei offenem Mana-Prompt. */
+    public void autoPayNow(HumanSeat seat) {
+        PromptDto p = openPrompt.get();
+        PromptBridge.Frame f = promptFrame;
+        if (p == null || promptSeat != seat || !"PLAY_MANA".equals(p.kind) || !openPrompt.compareAndSet(p, null)) {
+            return;
+        }
+        send(seat, new Messages.PromptClosed(p.id));
+        inbox.add(() -> {
+            if (f instanceof PromptBridge.InputFrame inf && frames.peek() == f && !f.done()) {
+                inf.autoPay();
+                if (!f.done()) {
+                    f.dirty = true;
                 }
-                UUID prio = game.getPriorityPlayerId();
-                if (prio == null || prio.equals(seat.playerId)) {
-                    command.accept(human);
-                } else {
-                    for (UUID controlled : human.getPlayersUnderYourControl()) {
-                        Player cp = game.getPlayer(controlled);
-                        if (cp != null && prio.equals(controlled)) {
-                            command.accept(cp);
-                        }
-                    }
-                }
-            } catch (Throwable e) {
-                LOG.error("Antwort fehlgeschlagen", e);
             }
         });
     }
 
-    // ------------------------------------------------------------------ Engine-Events (Game-Thread)
+    // ------------------------------------------------------------------ Park-Schleife (Spiel-Thread)
 
-    private void onTableEvent(TableEvent event) {
+    /**
+     * Haelt den Spiel-Thread in einer Frage fest, bis sie beantwortet ist: Prompt senden, Kommandos aus der inbox
+     * ausfuehren (auch verschachtelte Fragen), bei aufgegebenem Sitz den Autopiloten antworten lassen.
+     */
+    void park(PromptBridge.Frame frame) {
+        if (!isGameThread()) {
+            throw new IllegalStateException("park() ausserhalb des Spiel-Threads: " + Thread.currentThread().getName());
+        }
+        frames.push(frame);
+        parked = true;
         try {
-            switch (event.getEventType()) {
-                case UPDATE -> onUpdate();
-                case INFO, STATUS -> addLog(event.getEventType().name(), event.getMessage());
-                case ERROR -> {
-                    LOG.error("Engine-Fehler: " + event.getMessage(), event.getException());
-                    emit(new Messages.Toast("error", RichText.parse(event.getMessage())));
+            while (!frame.done()) {
+                if (frame.seat.conceded()) {
+                    frame.autopilot();
+                    if (frame.done()) {
+                        break;
+                    }
                 }
-                default -> {
-                    // Timer, Turnier etc. nicht relevant
+                if (frame.dirty) {
+                    frame.dirty = false;
+                    publish(frame);
+                    continue;
+                }
+                Runnable cmd;
+                try {
+                    cmd = inbox.poll(100, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+                if (cmd != null) {
+                    run(cmd);
                 }
             }
-        } catch (Throwable e) {
-            LOG.error("TableEvent " + event.getEventType() + " fehlgeschlagen", e);
+        } finally {
+            frames.pop();
+            if (promptFrame == frame) {
+                PromptDto p = openPrompt.get();
+                if (p != null && openPrompt.compareAndSet(p, null)) {
+                    send(frame.seat, new Messages.PromptClosed(p.id));
+                    notifyOthers(frame.seat, null);
+                }
+                promptFrame = null;
+            }
+            PromptBridge.Frame outer = frames.peek();
+            if (outer != null) {
+                outer.dirty = true;
+            }
+            parked = outer != null;
         }
     }
 
-    private void onQueryEvent(PlayerQueryEvent event) {
+    private void publish(PromptBridge.Frame frame) {
+        PromptDto prompt = frame.build();
+        if (prompt == null || frame.done()) {
+            return;
+        }
+        HumanSeat seat = frame.seat;
+        PromptDto old = openPrompt.getAndSet(null);
+        if (old != null && promptSeat != null) {
+            send(promptSeat, new Messages.PromptClosed(old.id));
+        }
+        thinking = null;
+        StateDto state = sendState(seat, frame.stateMode());
+        prompt.playerId = seat.playerId;
+        prompt.id = promptSeq.incrementAndGet();
+        prompt.stateSeq = state == null ? 0 : state.seq;
+        promptSeat = seat;
+        promptFrame = frame;
+        openPrompt.set(prompt);
+        send(seat, prompt);
+        notifyOthers(seat, seat.name());
+    }
+
+    private void run(Runnable cmd) {
         try {
-            Player player = game.getPlayer(event.getPlayerId());
-            if (player == null) {
-                return;
-            }
-            UUID controller = player.getTurnControlledBy();
-            HumanSeat seat = humans.get(controller);
-            if (seat == null) {
-                if (player instanceof MageLiteBot bot && bot.isQuickPassing()) {
-                    return; // passt ohne nachzudenken: kein "denkt", kein State
-                }
-                // Bots feuern SELECT bei jeder Prioritaet -> "denkt"-Signal (nur wenn der Bot wirklich rechnet)
-                boolean realThink = player.getId().equals(game.getActivePlayerId()) || !game.getStack().isEmpty()
-                        || !tempo.fastOpponentTurns();
-                if (event.getQueryType() == PlayerQueryEvent.QueryType.SELECT && realThink && !player.getId().equals(thinking)) {
-                    thinking = player.getId();
-                    flushStateIfDirty();
-                    emitPublic(new Messages.Status(thinking, false, player.getName()));
-                }
-                return;
-            }
-            if (event.getQueryType() == PlayerQueryEvent.QueryType.PERSONAL_MESSAGE) {
-                send(seat, new Messages.Toast("info", RichText.parse(event.getMessage())));
-                return;
-            }
-            lastHumanQueryAt = System.currentTimeMillis();
-            thinking = null;
-            PromptDto prompt = PromptMapper.map(game, event, seat.playerId);
-            if (prompt == null) {
-                return;
-            }
-
-            CombatMacro m = seat.macro;
-            if (m != null && continueMacro(seat, m, prompt)) {
-                return;
-            }
-            RepeatMacro rm = seat.repeat;
-            if (rm != null && continueRepeat(seat, rm, prompt)) {
-                return;
-            }
-            SpecialMacro sm = seat.special;
-            if (sm != null && continueSpecial(seat, sm, prompt)) {
-                return;
-            }
-
-            if (handleReplacement(seat, prompt)) {
-                return;
-            }
-
-            if (handleAutoPay(seat, prompt)) {
-                return;
-            }
-
-            boolean priorityPrompt = "SELECT".equals(prompt.kind) && "priority".equals(prompt.mode);
-            String sig = priorityPrompt ? StackSig.top(game) : null;
-            String stopReason = priorityPrompt ? stopReason(seat, game, true) : null;
-            if (sig != null && stopReason == null && seat.passedSigs.contains(sig)) {
-                // auf ein gleiches Stapelobjekt schon gepasst -> wieder passen (ohne vollen State)
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofBool(false));
-                return;
-            }
-            GameViewMapper.Playable playable = null;
-            if (priorityPrompt) {
-                playable = GameViewMapper.playable(game, seat.player);
-                boolean myTurnEmptyStack = game.getStack().isEmpty() && seat.playerId.equals(game.getActivePlayerId());
-                PhaseStep step = game.getTurnStepType();
-                // eigene Main-Phasen halten immer (Main 2 nie still ueberspringen); F-Tasten passen XMage-seitig vorher
-                boolean ownMain = myTurnEmptyStack && (step == PhaseStep.PRECOMBAT_MAIN || step == PhaseStep.POSTCOMBAT_MAIN);
-                if (seat.autoPass && !playable.hasActions() && !ownMain && stopReason == null) {
-                    // nichts spielbar (ausser Mana) -> automatisch passen; State nur gedrosselt
-                    onUpdate();
-                    answerInternally(seat, prompt, Response.ofBool(false));
-                    return;
-                }
-                prompt.stopReason = stopReason;
-                if (myTurnEmptyStack) {
-                    prompt.nextStop = NextStop.of(game, seat.player, seat.autoPass);
-                }
-            }
-            StateDto state = sendState(seat, playable);
-
-            prompt.id = promptSeq.incrementAndGet();
-            prompt.stateSeq = state.seq;
-            seat.promptSig = sig;
-            seat.promptSigId = prompt.id;
-            promptSeat = seat;
-            openPrompt.set(prompt);
-            send(seat, prompt);
-            notifyOthers(seat, seat.name());
+            cmd.run();
         } catch (Throwable e) {
-            LOG.error("QueryEvent " + event.getQueryType() + " fehlgeschlagen", e);
+            LOG.error("Kommando fehlgeschlagen", e);
         }
     }
 
-    /** Den anderen Menschen und den Zuschauern sagen, auf wen gewartet wird (null = niemand mehr). */
+    /** Safe-Point vor jeder Entscheidung eines Controllers: inbox abarbeiten, Zuglimit, gedrosselter State. */
+    void safePoint() {
+        if (!isGameThread()) {
+            return;
+        }
+        Runnable cmd;
+        while ((cmd = inbox.poll()) != null) {
+            run(cmd);
+        }
+        int cap = turnCap;
+        if (cap > 0 && !game.isGameOver() && game.getPhaseHandler().getTurn() > cap) {
+            LOG.info("Zuglimit " + cap + " erreicht - Unentschieden");
+            game.setGameOver(GameEndReason.Draw);
+        }
+        if (aborting && !game.isGameOver()) {
+            game.setGameOver(GameEndReason.Draw);
+        }
+        int t = game.getPhaseHandler().getTurn();
+        if (t != decisionTurn) {
+            decisionTurn = t;
+            decisionsThisTurn = 0;
+        }
+        if (++decisionsThisTurn > MAX_DECISIONS_PER_TURN && !game.isGameOver()) {
+            LOG.warn("Endlosschleife vermutet: " + decisionsThisTurn + " Entscheidungen in Zug " + t + " - Unentschieden");
+            addLog("INFO", "Endlosschleife erkannt – das Spiel endet unentschieden.");
+            game.setGameOver(GameEndReason.Draw);
+        }
+        onUpdate();
+    }
+
+    /** Bot denkt (Status an alle, wenn er wechselt). */
+    void botThinking(Player bot, boolean on) {
+        if (on && thinking != bot) {
+            thinking = bot;
+            flushStateIfDirty();
+            emitPublic(new Messages.Status(ids.player(bot.getId()), false, bot.getName()));
+        }
+    }
+
     private void notifyOthers(HumanSeat seat, String waitingFor) {
         Messages.Status st = new Messages.Status(null, false, waitingFor);
         if (humans.size() >= 2) {
@@ -1456,518 +1052,56 @@ public final class GameHost {
         sendSpectators(st);
     }
 
-    /** Mehrfach-Angriff/-Block: Warteschlange der markierten Kreaturen und gemeinsames Ziel. */
-    private static final class CombatMacro {
-        final String mode;
-        final Deque<UUID> queue;
-        final UUID target;
-        /** "Angriff zuruecksetzen": statt Kreaturen hinzuzufuegen alle eigenen Angreifer wieder entfernen */
-        final boolean remove;
-        /** beim Entfernen schon angeklickte Angreifer (XMage verweigert z.B. bei "muss angreifen") */
-        final Set<UUID> tried = new HashSet<>();
-        /** zuletzt angeklickte Kreatur (wartet ggf. auf die Zielabfrage) */
-        UUID current;
-
-        CombatMacro(String mode, Deque<UUID> queue, UUID target) {
-            this(mode, queue, target, false);
-        }
-
-        CombatMacro(String mode, Deque<UUID> queue, UUID target, boolean remove) {
-            this.mode = mode;
-            this.queue = queue;
-            this.target = target;
-            this.remove = remove;
-        }
-    }
-
-    /**
-     * Game-Thread: beantwortet die Prompts eines Mehrfach-Angriffs/-Blocks selbst.
-     * <ul>
-     *   <li>{@code SELECT} im gleichen Modus: naechste markierte Kreatur anklicken (bereits angreifende/blockende
-     *       ueberspringen - ein erneuter Klick wuerde sie bei XMage wieder entfernen). Keine mehr: normaler Prompt.</li>
-     *   <li>{@code PICK_TARGET} (Verteidiger bzw. Angreifer zum Blocken): das gemeinsame Ziel, falls waehlbar.</li>
-     *   <li>Alles andere (Kosten, Ziel nicht waehlbar ...): abbrechen und den Prompt normal zeigen. Nie mit "Abbrechen"
-     *       antworten - bei Pflicht-Zielen fragt XMage dann endlos neu.</li>
-     * </ul>
-     *
-     * @return true, wenn der Prompt beantwortet wurde
-     */
-    private boolean continueMacro(HumanSeat seat, CombatMacro m, PromptDto prompt) {
-        boolean attack = "attackers".equals(m.mode);
-        if (m.remove) {
-            if (!"SELECT".equals(prompt.kind) || !"attackers".equals(prompt.mode)) {
-                seat.macro = null;
-                return false;
-            }
-            UUID next = null;
-            for (UUID id : game.getCombat().getAttackers()) {
-                Permanent perm = game.getPermanent(id);
-                if (perm != null && perm.isControlledBy(seat.playerId) && !m.tried.contains(id)) {
-                    next = id;
-                    break;
-                }
-            }
-            if (next == null) {
-                seat.macro = null;
-                return false; // alle zurueckgenommen (oder XMage verweigert den Rest) -> normaler Prompt
-            }
-            m.tried.add(next);
-            onUpdate();
-            answerInternally(seat, prompt, Response.ofUuid(next));
-            return true;
-        }
-        if ("SELECT".equals(prompt.kind) && m.mode.equals(prompt.mode)) {
-            List<UUID> possibleList = attack ? prompt.possibleAttackers : prompt.possibleBlockers;
-            Set<UUID> possible = possibleList == null ? Set.of() : new HashSet<>(possibleList);
-            Set<UUID> busy = new HashSet<>(attack ? game.getCombat().getAttackers() : game.getCombat().getBlockers());
-            UUID next;
-            do {
-                next = m.queue.poll();
-            } while (next != null && (!possible.contains(next) || busy.contains(next)));
-            if (next == null) {
-                seat.macro = null;
-                return false; // fertig -> normaler Prompt (Angriff bestaetigen)
-            }
-            m.current = next;
-            onUpdate();
-            answerInternally(seat, prompt, Response.ofUuid(next));
-            return true;
-        }
-        if ("PICK_TARGET".equals(prompt.kind) && m.current != null && prompt.targets != null && prompt.targets.contains(m.target)) {
-            m.current = null;
-            onUpdate();
-            answerInternally(seat, prompt, Response.ofUuid(m.target));
-            return true;
-        }
-        seat.macro = null;
-        LOG.info("Mehrfach-" + (attack ? "Angriff" : "Block") + " angehalten bei " + prompt.kind + ": " + prompt.messageText);
-        send(seat, new Messages.Toast("info", RichText.parse(attack
-                ? "Mehrfach-Angriff angehalten – bitte hier selbst entscheiden."
-                : "Mehrfach-Block angehalten – bitte hier selbst entscheiden.")));
-        return false;
-    }
-
-    /** "N-mal aktivieren": Quelle, Faehigkeit (id + Text als Fallback) und verbleibende Aktivierungen. */
-    private static final class RepeatMacro {
-        final UUID sourceId;
-        final UUID abilityId;
-        final String abilityText;
-        int remaining;
-
-        RepeatMacro(UUID sourceId, UUID abilityId, String abilityText, int remaining) {
-            this.sourceId = sourceId;
-            this.abilityId = abilityId;
-            this.abilityText = abilityText;
-            this.remaining = remaining;
-        }
-    }
-
-    /**
-     * Game-Thread: beantwortet die Prompts einer Mehrfach-Aktivierung selbst.
-     * <ul>
-     *   <li>{@code SELECT}/Prioritaet: Quelle erneut anklicken, solange sie spielbar ist und nur eigene Objekte auf dem
-     *       Stapel liegen; vor jeder Aktivierung ausser der letzten die Prioritaet halten.</li>
-     *   <li>{@code CHOOSE_ABILITY}: dieselbe Faehigkeit (id, sonst gleicher Text) waehlen, Zaehler runter.</li>
-     *   <li>Mana-Prompts: durchlassen (Auto-Bezahlen). Alles andere (Ziele, Fragen, Mengen): abbrechen, der Spieler
-     *       entscheidet selbst.</li>
-     * </ul>
-     */
-    private boolean continueRepeat(HumanSeat seat, RepeatMacro m, PromptDto prompt) {
-        if ("SELECT".equals(prompt.kind) && "priority".equals(prompt.mode)) {
-            if (m.remaining <= 0) {
-                seat.repeat = null;
-                return false;
-            }
-            boolean foreignOnStack = game.getStack().stream().anyMatch(o -> !seat.playerId.equals(o.getControllerId()));
-            if (foreignOnStack) {
-                stopRepeat(seat, "Mehrfach-Aktivierung angehalten – ein Gegner hat reagiert.");
-                return false;
-            }
-            if (!GameViewMapper.playable(game, seat.player).actions().contains(m.sourceId)) {
-                stopRepeat(seat, "Mehrfach-Aktivierung beendet – Fähigkeit nicht mehr aktivierbar.");
-                return false;
-            }
-            if (m.remaining > 1) {
-                holdPriority(seat);
-            }
-            onUpdate();
-            answerInternally(seat, prompt, Response.ofUuid(m.sourceId));
-            return true;
-        }
-        if ("CHOOSE_ABILITY".equals(prompt.kind) && prompt.choices != null) {
-            PromptDto.Item pick = null;
-            for (PromptDto.Item i : prompt.choices) {
-                if (m.abilityId.toString().equals(i.id())) {
-                    pick = i;
-                    break;
-                }
-            }
-            if (pick == null) {
-                for (PromptDto.Item i : prompt.choices) {
-                    if (m.abilityText != null && m.abilityText.equals(i.text())) {
-                        pick = i;
-                        break;
-                    }
-                }
-            }
-            if (pick == null) {
-                stopRepeat(seat, "Mehrfach-Aktivierung angehalten – Fähigkeit nicht gefunden.");
-                return false;
-            }
-            m.remaining--;
-            if (m.remaining <= 0) {
-                seat.repeat = null;
-            }
-            onUpdate();
-            answerInternally(seat, prompt, Response.ofUuid(UUID.fromString(pick.id())));
-            return true;
-        }
-        if ("PLAY_MANA".equals(prompt.kind) || "PLAY_X_MANA".equals(prompt.kind)
-                || ("CHOOSE_CHOICE".equals(prompt.kind) && prompt.choice != null && prompt.choice.manaColor)) {
-            return false; // Auto-Bezahlen uebernimmt; schlaegt es fehl, raeumt respond() das Makro
-        }
-        stopRepeat(seat, "Mehrfach-Aktivierung angehalten – bitte hier selbst entscheiden.");
-        return false;
-    }
-
-    private void stopRepeat(HumanSeat seat, String msg) {
-        seat.repeat = null;
-        LOG.info(msg);
-        send(seat, new Messages.Toast("info", RichText.parse(msg)));
-    }
-
-    /** Sonderbezahlung: eingeberufene Kreatur (null = Knopf, nur die Aktionswahl) und Restkosten beim Start. */
-    private static final class SpecialMacro {
-        final UUID permId;
-        final String unpaid;
-        /** 0 = "special" gesendet, 1 = Aktion gewaehlt, 2 = Kreatur gewaehlt */
-        int stage;
-
-        SpecialMacro(UUID permId, String unpaid) {
-            this.permId = permId;
-            this.unpaid = unpaid;
-        }
-    }
-
-    /**
-     * Game-Thread: beantwortet die Prompts einer Sonderbezahlung selbst.
-     * <ul>
-     *   <li>{@code CHOOSE_ABILITY}: Klick -&gt; die Convoke-Aktion; Knopf -&gt; die einzige angebotene Aktion.</li>
-     *   <li>{@code PICK_TARGET}: die angeklickte Kreatur.</li>
-     *   <li>Farbwahl von Convoke: {@link SpecialPay#pickColor}.</li>
-     *   <li>Alles andere (naechster Mana-Prompt, Ziel automatisch gewaehlt ...): fertig, Prompt normal zeigen. Nie mit
-     *       "Abbrechen" antworten - bei Pflicht-Zielen fragt XMage sonst endlos neu.</li>
-     * </ul>
-     */
-    private boolean continueSpecial(HumanSeat seat, SpecialMacro m, PromptDto prompt) {
-        boolean click = m.permId != null;
-        if (m.stage == 0) {
-            if ("CHOOSE_ABILITY".equals(prompt.kind) && prompt.choices != null) {
-                UUID pick = click ? SpecialPay.convokeChoice(game, seat.playerId, prompt)
-                        : prompt.choices.size() == 1 ? UUID.fromString(prompt.choices.get(0).id()) : null;
-                if (pick != null) {
-                    m.stage = 1;
-                    if (!click) {
-                        seat.special = null; // Knopf: Ziel und Farbe waehlt der Spieler selbst
-                    }
-                    onUpdate();
-                    answerInternally(seat, prompt, Response.ofUuid(pick));
-                    return true;
-                }
-            }
-            seat.special = null;
-            if (click) {
-                stopSpecial(seat, prompt);
-            }
-            return false;
-        }
-        if ("PICK_TARGET".equals(prompt.kind) && m.stage == 1) {
-            if (prompt.targets != null && prompt.targets.contains(m.permId)) {
-                m.stage = 2;
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofUuid(m.permId));
-                return true;
-            }
-            seat.special = null;
-            stopSpecial(seat, prompt);
-            return false;
-        }
-        seat.special = null;
-        if (SpecialPay.isConvokeColor(prompt)) {
-            String color = SpecialPay.pickColor(game, seat.playerId, m.permId, m.unpaid, prompt.choice);
-            if (color != null) {
-                onUpdate();
-                answerInternally(seat, prompt, Response.ofString(color));
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void stopSpecial(HumanSeat seat, PromptDto prompt) {
-        LOG.info("Einberufen angehalten bei " + prompt.kind + ": " + prompt.messageText);
-        send(seat, new Messages.Toast("info", RichText.parse("Einberufen angehalten – bitte hier selbst entscheiden.")));
-    }
-
-    /** Auto-Antwort ohne promptClosed-Nachricht an den Client. */
-    private void respondInternal(HumanSeat seat, long promptId, Response r) {
-        PromptDto p = openPrompt.get();
-        if (p == null || p.id != promptId || promptSeat != seat || !openPrompt.compareAndSet(p, null)) {
+    void toast(HumanSeat seat, String level, String text) {
+        if (text == null || text.isBlank()) {
             return;
         }
-        dispatch(seat, target -> apply(seat, target, r));
-    }
-
-    /** Setzt die Antwort (nur CALL-Thread). Wartet vorher, bis XMage wirklich auf sie wartet. */
-    private void apply(HumanSeat seat, Player target, Response r) {
-        awaitHumanWaiting();
-        setResponse(seat, target, r);
-        lastAppliedSeat = seat;
-        lastAppliedTarget = target;
-        lastApplied = r;
-        lastAppliedAt = System.currentTimeMillis();
-        recoverAttempts = 0;
-    }
-
-    private static void setResponse(HumanSeat seat, Player target, Response r) {
-        if (r.uuid() != null) {
-            target.setResponseUUID(r.uuid());
-        } else if (r.bool() != null) {
-            target.setResponseBoolean(r.bool());
-        } else if (r.integer() != null) {
-            target.setResponseInteger(r.integer());
-        } else if (r.string() != null) {
-            target.setResponseString(r.string());
-        } else if (r.manaType() != null) {
-            target.setResponseManaType(r.manaPlayerId() == null ? seat.playerId : r.manaPlayerId(), r.manaType());
-        } else {
-            target.setResponseBoolean(false);
-        }
-    }
-
-    private void answerInternally(HumanSeat seat, PromptDto prompt, Response r) {
-        prompt.id = promptSeq.incrementAndGet();
-        promptSeat = seat;
-        openPrompt.set(prompt);
-        respondInternal(seat, prompt.id, r);
-    }
-
-    // ------------------------------------------------------------------ Auto-Bezahlen
-
-    public void setAutoPayDefault(HumanSeat seat, boolean on) {
-        seat.autoPayDefault = on;
-    }
-
-    /** Client-Knopf "Auto bezahlen" bei offenem Mana-Prompt (Game-Thread wartet gerade). */
-    public void autoPayNow(HumanSeat seat) {
-        PromptDto p = openPrompt.get();
-        if (p == null || promptSeat != seat || !"PLAY_MANA".equals(p.kind)) {
-            return;
-        }
-        boolean partial = p.specialBtn != null;
-        callExecutor.execute(() -> {
-            AutoPayer.Step st = AutoPayer.next(game, seat.playerId, p.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
-            LOG.info("Auto-Bezahlen (Knopf) " + seat.name() + ": " + payInfo(p) + " -> " + (st == null ? "keine Quelle" : describeSource(st)));
-            if (st == null) {
-                send(seat, new Messages.Toast("info", RichText.parse(partial
-                        ? "Länder reichen nicht – Rest per " + p.specialBtn + " (Kreaturen anklicken bzw. Knopf)."
-                        : "Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.")));
-                // Client hat den Prompt schon als beantwortet markiert -> erneut zustellen, sonst steht die UI
-                if (openPrompt.get() == p) {
-                    send(seat, p);
-                }
-                return;
-            }
-            seat.autoPayActive = true;
-            seat.autoPayFailed = false;
-            seat.autoPayPartial = partial;
-            seat.autoPaySteps = 1;
-            seat.autoPayLastMsg = p.messageText;
-            seat.autoPayColor = st.color();
-            if (respondDirect(seat, p.id, Response.ofUuid(st.sourceId()))) {
-                send(seat, new Messages.PromptClosed(p.id));
-            }
-        });
-    }
-
-    /** Antwort vom CALL-Thread aus (ohne erneutes Einreihen). */
-    private boolean respondDirect(HumanSeat seat, long promptId, Response r) {
-        PromptDto p = openPrompt.get();
-        if (p == null || p.id != promptId || promptSeat != seat || !openPrompt.compareAndSet(p, null)) {
-            return false;
-        }
-        if (seat.player.isGameUnderControl()) {
-            apply(seat, seat.player, r);
-        }
-        return true;
-    }
-
-    /**
-     * @return true, wenn der Prompt automatisch beantwortet wurde
-     */
-    private boolean handleAutoPay(HumanSeat seat, PromptDto prompt) {
-        switch (prompt.kind) {
-            case "PLAY_MANA" -> {
-                if (seat.autoPayFailed && !Objects.equals(seat.autoPayFailedKey, payKey())) {
-                    seat.autoPayFailed = false; // andere Bezahlung -> wieder automatisch
-                }
-                // Sonderbezahlung moeglich (Convoke & Co.): nicht von selbst - Laender muessten vor den Kreaturen
-                // getappt werden, der Spieler entscheidet (Knopf "Automatisch bezahlen" = nur Laender)
-                if (!seat.autoPayActive && (!seat.autoPayDefault || seat.autoPayFailed || prompt.specialBtn != null)) {
-                    return false;
-                }
-                if (!seat.autoPayActive) {
-                    seat.autoPayActive = true;
-                    seat.autoPayPartial = false;
-                    seat.autoPaySteps = 0;
-                    seat.autoPayLastMsg = null;
-                }
-                if (seat.autoPaySteps++ > 30 || prompt.messageText.equals(seat.autoPayLastMsg)) {
-                    LOG.info("Auto-Bezahlen gestoppt (" + (seat.autoPaySteps > 31 ? "zu viele Schritte" : "kein Fortschritt") + ") "
-                            + seat.name() + ": " + payInfo(prompt));
-                    stopAutoPay(seat, true);
-                    return false;
-                }
-                seat.autoPayLastMsg = prompt.messageText;
-                boolean partial = seat.autoPayPartial && prompt.specialBtn != null;
-                AutoPayer.Step st = AutoPayer.next(game, seat.playerId, prompt.messageText, GameViewMapper.playable(game, seat.player).all().keySet(), partial);
-                LOG.info("Auto-Bezahlen Schritt " + seat.autoPaySteps + " " + seat.name() + ": " + payInfo(prompt) + " -> "
-                        + (st == null ? "keine Quelle (Abbruch)" : describeSource(st)));
-                if (st == null) {
-                    stopAutoPay(seat, true);
-                    if (partial) {
-                        send(seat, new Messages.Toast("info", RichText.parse("Länder reichen nicht – Rest per " + prompt.specialBtn + ".")));
-                    }
-                    return false;
-                }
-                seat.autoPayColor = st.color();
-                answerInternally(seat, prompt, Response.ofUuid(st.sourceId()));
-                return true;
-            }
-            case "CHOOSE_CHOICE" -> {
-                if (seat.autoPayActive && seat.autoPayColor != null && prompt.choice != null && prompt.choice.manaColor) {
-                    String want = AutoPayer.colorName(seat.autoPayColor);
-                    for (PromptDto.ChoiceItem it : prompt.choice.items) {
-                        if (want.equalsIgnoreCase(it.value()) || want.equalsIgnoreCase(it.key())) {
-                            answerInternally(seat, prompt, Response.ofString(prompt.choice.keyed ? it.key() : it.value()));
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            }
-            case "CHOOSE_ABILITY" -> {
-                if (seat.autoPayActive && seat.autoPayColor != null && prompt.choices != null && !prompt.choices.isEmpty()) {
-                    String sym = "{" + seat.autoPayColor.name() + "}";
-                    PromptDto.Item pick = prompt.choices.stream().filter(i -> i.text().contains(sym)).findFirst()
-                            .orElse(prompt.choices.stream().filter(i -> i.text().contains("Add")).findFirst().orElse(null));
-                    if (pick != null) {
-                        answerInternally(seat, prompt, Response.ofUuid(UUID.fromString(pick.id())));
-                        return true;
-                    }
-                }
-                return false;
-            }
-            default -> {
-                if (seat.autoPayActive) {
-                    stopAutoPay(seat, false);
-                }
-                // nur bei einer neuen Prioritaet zuruecksetzen - Ziel-/Farbwahl mitten in der Bezahlung (Convoke)
-                // wuerde sonst Auto-Bezahlen neu starten
-                if ("SELECT".equals(prompt.kind)) {
-                    seat.autoPayFailed = false;
-                }
-                return false;
-            }
-        }
-    }
-
-    private void stopAutoPay(HumanSeat seat, boolean failed) {
-        seat.autoPayActive = false;
-        seat.autoPayColor = null;
-        if (failed) {
-            seat.autoPayFailed = true;
-            seat.autoPayFailedKey = payKey();
-        }
-    }
-
-    /** Diagnose fuers Log: was bezahlt wird (oberstes Stapelobjekt) und der XMage-Text des Bezahl-Prompts. */
-    private String payInfo(PromptDto p) {
-        String what;
-        try {
-            var top = game.getStack().getFirstOrNull();
-            what = top == null ? "-" : top.getName();
-        } catch (RuntimeException e) {
-            what = "?";
-        }
-        return what + " | " + p.messageText;
-    }
-
-    private String describeSource(AutoPayer.Step st) {
-        try {
-            var perm = game.getPermanent(st.sourceId());
-            String name = perm != null ? perm.getName() : String.valueOf(game.getObject(st.sourceId()));
-            return name + (st.color() != null ? " (" + st.color() + ")" : "");
-        } catch (RuntimeException e) {
-            return String.valueOf(st.sourceId());
-        }
-    }
-
-    /** Was gerade bezahlt wird: oberstes Stapelobjekt (Zauber/Faehigkeit liegt beim Bezahlen schon dort). */
-    private UUID payKey() {
-        try {
-            var top = game.getStack().getFirstOrNull();
-            return top == null ? null : top.getId();
-        } catch (RuntimeException e) {
-            return null;
-        }
+        send(seat, new Messages.Toast(level, RichText.parse(text)));
     }
 
     // ------------------------------------------------------------------ States
 
-    private void onUpdate() {
-        if (game.getStack().isEmpty()) {
-            for (HumanSeat s : humans.values()) {
-                if (!s.passedSigs.isEmpty()) {
-                    s.passedSigs.clear();
-                }
-                if (!s.targetAlerted.isEmpty()) {
-                    s.targetAlerted.clear();
-                }
-            }
+    void onUpdate() {
+        if (!isGameThread()) {
+            return;
         }
         long now = System.currentTimeMillis();
         if (now - lastStateAt >= STATE_MIN_INTERVAL_MS) {
-            sendState(null, null);
+            sendState(null, PromptBridge.StateMode.NONE);
         } else {
             stateDirty = true;
         }
     }
 
     private void flushStateIfDirty() {
-        if (stateDirty && ThreadUtils.isRunGameThread()) {
-            sendState(null, null);
+        if (stateDirty && isGameThread()) {
+            sendState(null, PromptBridge.StateMode.NONE);
         }
     }
 
     /**
-     * Baut und sendet jedem Menschen seinen State. {@code forSeat} bekommt die spielbaren Objekte dazu (der teure Teil),
-     * optional mit vorberechnetem {@code playable}.
+     * Baut und sendet jedem Menschen seinen State; {@code forSeat} bekommt die spielbaren Objekte dazu.
      *
      * @return der State von {@code forSeat} (bzw. des ersten Menschen)
      */
-    private StateDto sendState(HumanSeat forSeat, GameViewMapper.Playable playable) {
-        flushFx(); // Ereignisse vor dem State, der sie widerspiegelt (Outbox haelt die Reihenfolge)
+    private StateDto sendState(HumanSeat forSeat, PromptBridge.StateMode mode) {
         trackEliminations();
-        turn = game.getTurnNum();
+        turn = game.getPhaseHandler().getTurn();
         long seq = stateSeq.incrementAndGet();
         StateDto mine = null;
         for (HumanSeat s : humans.values()) {
-            boolean withPlayable = s == forSeat;
-            StateDto st = GameViewMapper.map(game, s.playerId, seq, withPlayable, withPlayable ? playable : null, thinking, deckNames);
-            if (!s.replDeclineAlways.isEmpty()) {
-                st.replDeclines = new ArrayList<>(new LinkedHashSet<>(s.replDeclineAlways.values()));
+            ForgeViewMapper.Playable pl = null;
+            if (s == forSeat) {
+                if (mode == PromptBridge.StateMode.PRIORITY) {
+                    Set<CardView> actions = s.cachedActions != null ? s.cachedActions
+                            : ForgeViewMapper.actionable(s.player, AutoPassPolicy.budgetMs(s.player));
+                    pl = mapper.priorityPlayable(s.player, actions);
+                } else if (mode == PromptBridge.StateMode.MANA) {
+                    pl = mapper.manaPlayable(s.player);
+                }
+                s.cachedActions = null;
             }
+            StateDto st = mapper.map(s.player, seq, pl, thinking, deckNames);
             s.lastState = st;
             send(s, st);
             if (s == forSeat || (mine == null && forSeat == null)) {
@@ -1982,16 +1116,13 @@ public final class GameHost {
         return mine;
     }
 
-    /**
-     * Zuschau-Sicht bauen (auch ohne Zuschauer, damit spaete Zuschauer sofort einen aktuellen State bekommen) und
-     * verteilen. Eigenes try/catch: ein Fehler hier darf nie Sitz-States, Prompts oder die Buchfuehrung blockieren.
-     */
     private void sendPublicState(long seq) {
         try {
             if (viewpoint == null) {
                 viewpoint = viewpointId();
             }
-            StateDto pub = GameViewMapper.mapPublic(game, viewpoint, seq, thinking, deckNames);
+            HumanSeat vs = viewpoint == null ? null : humans.get(viewpoint);
+            StateDto pub = mapper.mapPublic(vs == null ? null : vs.player, seq, thinking, deckNames);
             synchronized (specLock) {
                 publicState = pub;
                 sendSpectators(pub);
@@ -2006,19 +1137,30 @@ public final class GameHost {
     }
 
     private void trackEliminations() {
-        for (Player p : game.getState().getPlayers().values()) {
-            if ((p.hasLost() || p.hasLeft()) && !eliminatedTurn.containsKey(p.getId())) {
-                eliminatedTurn.put(p.getId(), game.getTurnNum());
+        for (Player p : game.getRegisteredPlayers()) {
+            if (p.hasLost() && !eliminatedTurn.containsKey(p.getId())) {
+                eliminatedTurn.put(p.getId(), game.getPhaseHandler().getTurn());
                 eliminationOrder.add(p.getId());
             }
         }
     }
 
-    private void addLog(String kind, String html) {
-        if (html == null || html.isBlank()) {
+    private void onLogAdded() {
+        List<GameLogEntry> all = game.getGameLog().getAllEntries();
+        if (all.isEmpty()) {
             return;
         }
-        Messages.LogEntry entry = new Messages.LogEntry(System.currentTimeMillis(), game.getTurnNum(), activePlayerName(), kind, RichText.parse(html));
+        GameLogEntry e = all.get(all.size() - 1);
+        addLog(e.type() == null ? "INFO" : e.type().name(), e.message());
+    }
+
+    private void addLog(String kind, String text) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+        Player active = game.getPhaseHandler().getPlayerTurn();
+        Messages.LogEntry entry = new Messages.LogEntry(System.currentTimeMillis(), game.getPhaseHandler().getTurn(),
+                active == null ? null : active.getName(), kind, RichText.parse(text));
         synchronized (logTail) {
             logTail.addLast(entry);
             while (logTail.size() > LOG_KEEP) {
@@ -2028,97 +1170,12 @@ public final class GameHost {
         emitPublic(new Messages.Log(List.of(entry)));
     }
 
-    private String activePlayerName() {
-        Player p = game.getPlayer(game.getActivePlayerId());
-        return p == null ? null : p.getName();
-    }
-
-    /** An alle Menschen. */
     private void emit(Object msg) {
         for (HumanSeat s : humans.values()) {
             send(s, msg);
         }
     }
 
-    // ------------------------------------------------------------------ Ereignisse (Animationen)
-
-    /** Game-Thread (Watcher): Ereignis einreihen. */
-    private void onFx(Messages.FxEvent e) {
-        if (fx.isEmpty()) {
-            lastFxAt = System.currentTimeMillis();
-        }
-        fx.add(e);
-        if (fxSize.incrementAndGet() > FX_MAX && fx.poll() != null) {
-            fxSize.decrementAndGet();
-        }
-    }
-
-    /**
-     * Gesammelte Ereignisse an alle Menschen: gleiche Token-Tode zu einem Eintrag (xN), Lebensverlust durch Schaden
-     * nicht doppelt, verdeckte Karten nur an den Besitzer. Laeuft auf dem Game-Thread (vor jedem State) oder dem
-     * Wachhund (wenn laenger kein State kommt) - die Queue ist thread-sicher, DTOs werden nur gelesen.
-     */
-    private void flushFx() {
-        if (fx.isEmpty()) {
-            return;
-        }
-        List<Messages.FxEvent> batch = new ArrayList<>();
-        Messages.FxEvent e;
-        while ((e = fx.poll()) != null) {
-            fxSize.decrementAndGet();
-            batch.add(e);
-        }
-        // Token-Tode gleichen Namens zusammenfassen
-        Map<String, Integer> tokenDeaths = new LinkedHashMap<>();
-        List<Messages.FxEvent> out = new ArrayList<>();
-        for (Messages.FxEvent x : batch) {
-            if ("tokenDied".equals(x.kind()) && x.name() != null) {
-                tokenDeaths.merge(x.name() + "|" + x.ownerId(), 1, Integer::sum);
-            }
-        }
-        Set<String> tokenSeen = new HashSet<>();
-        for (Messages.FxEvent x : batch) {
-            if ("tokenDied".equals(x.kind()) && x.name() != null) {
-                String key = x.name() + "|" + x.ownerId();
-                if (!tokenSeen.add(key)) {
-                    continue;
-                }
-                int n = tokenDeaths.getOrDefault(key, 1);
-                out.add(n > 1 ? x.withAmount(n) : x);
-                continue;
-            }
-            if ("life".equals(x.kind()) && x.amount() != null && x.amount() < 0) {
-                int lost = -x.amount();
-                boolean fromDamage = batch.stream().anyMatch(d -> "damage".equals(d.kind()) && d.objectId() == null
-                        && Objects.equals(d.playerId(), x.playerId()) && d.amount() != null && d.amount() == lost);
-                if (fromDamage) {
-                    continue;
-                }
-            }
-            out.add(x);
-        }
-        for (HumanSeat s : humans.values()) {
-            List<Messages.FxEvent> mine = new ArrayList<>(out.size());
-            for (Messages.FxEvent x : out) {
-                if (Boolean.TRUE.equals(x.hidden()) && !s.playerId.equals(x.ownerId())) {
-                    continue;
-                }
-                mine.add(x);
-            }
-            if (!mine.isEmpty()) {
-                send(s, new Messages.Events(mine));
-            }
-        }
-        if (!spectators.isEmpty()) {
-            // Zuschauer: nur oeffentliche Ereignisse (verdeckte gehen nur an den Besitzer)
-            List<Messages.FxEvent> pub = out.stream().filter(x -> !Boolean.TRUE.equals(x.hidden())).toList();
-            if (!pub.isEmpty()) {
-                sendSpectators(new Messages.Events(pub));
-            }
-        }
-    }
-
-    /** An einen Sitz. */
     private void send(HumanSeat seat, Object msg) {
         if (msg instanceof StateDto || msg instanceof PromptDto || msg instanceof Messages.Log) {
             lastProgressAt = System.currentTimeMillis();
@@ -2130,46 +1187,9 @@ public final class GameHost {
         }
     }
 
-    // ------------------------------------------------------------------ Wachhund (XMage-Race, Aktivitaet)
+    // ------------------------------------------------------------------ Wachhund (Aktivitaet)
 
     private static final ThreadMXBean THREADS = ManagementFactory.getThreadMXBean();
-
-    /**
-     * XMage-Race umgehen: {@code HumanPlayer.waitForResponse} setzt {@code responseOpenedForAnswer = true} bevor es in
-     * {@code response.wait()} geht. Kommt die Antwort dazwischen, verpufft {@code notifyAll()} und das Spiel wartet
-     * ewig. Darum erst antworten, wenn der Spiel-Thread wirklich wartet (oder nach Timeout wie bisher).
-     */
-    private void awaitHumanWaiting() {
-        Thread t = gameThread;
-        if (t == null || t == Thread.currentThread()) {
-            return;
-        }
-        long deadline = System.currentTimeMillis() + AWAIT_WAITING_MS;
-        while (t.isAlive() && System.currentTimeMillis() < deadline) {
-            if (inWaitForResponse(t)) {
-                return;
-            }
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-        }
-    }
-
-    /** Spiel-Thread steckt in {@code HumanPlayer.waitForResponse} -> {@code Object.wait()}. */
-    private static boolean inWaitForResponse(Thread t) {
-        if (t.getState() != Thread.State.WAITING) {
-            return false;
-        }
-        for (StackTraceElement e : t.getStackTrace()) {
-            if ("waitForResponse".equals(e.getMethodName()) && e.getClassName().startsWith("mage.player.human.")) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     private void watchdogTick() {
         try {
@@ -2178,63 +1198,30 @@ public final class GameHost {
                 return;
             }
             long now = System.currentTimeMillis();
-            boolean waiting = inWaitForResponse(t);
-            if (waiting && looksLost(now)) {
-                callExecutor.execute(this::recoverLostResponse);
-            }
-            if (!fx.isEmpty() && now - lastFxAt > FX_FLUSH_AFTER_MS) {
-                flushFx(); // kein State in Sicht (gedrosselt/wartend): Ereignisse trotzdem zeigen
-            }
-            // getrennte Mitspieler: Zaehler fuer die anderen alle 2 s aktualisieren
             if (ticks % 4 == 0 && humans.size() > 1
                     && humans.values().stream().anyMatch(s -> !s.conceded && !s.connected())) {
                 broadcastSeats();
             }
             if (++ticks % 2 == 0) {
-                sendActivity(t, waiting, now);
+                sendActivity(t, now);
             }
         } catch (Throwable e) {
             LOG.warn("Wachhund: " + e);
         }
     }
 
-    /** Antwort gesetzt, seitdem keine neue Frage, kein Fortschritt, aber XMage wartet noch -> Antwort verloren. */
-    private boolean looksLost(long now) {
-        return lastApplied != null && openPrompt.get() == null && lastAppliedAt > lastHumanQueryAt
-                && now - lastAppliedAt > RECOVER_AFTER_MS && now - lastProgressAt > RECOVER_AFTER_MS;
-    }
-
-    /** CALL-Thread: letzte Antwort erneut zustellen (weckt den wartenden Spiel-Thread). */
-    private void recoverLostResponse() {
-        Thread t = gameThread;
-        Player target = lastAppliedTarget;
-        HumanSeat seat = lastAppliedSeat;
-        Response r = lastApplied;
-        if (t == null || target == null || seat == null || r == null || recoverAttempts >= RECOVER_MAX_PER_ANSWER
-                || !looksLost(System.currentTimeMillis()) || !inWaitForResponse(t)) {
-            return;
-        }
-        recoverAttempts++;
-        recovered++;
-        LOG.warn("Antwort ging verloren (XMage-Race) - stelle erneut zu: " + r);
-        setResponse(seat, target, r);
-        lastAppliedAt = System.currentTimeMillis();
-    }
-
-    /** Herzschlag pro Sitz: "you" nur fuer den Besitzer des offenen Prompts, die anderen sehen "human" + Name. */
-    private void sendActivity(Thread t, boolean waiting, long now) {
+    private void sendActivity(Thread t, long now) {
         int cpu = cpuPercent(now);
         long idle = now - lastProgressAt;
-        UUID th = thinking;
-        HumanSeat owner = waiting && openPrompt.get() != null ? promptSeat : null;
+        Player th = thinking;
+        HumanSeat owner = parked && openPrompt.get() != null ? promptSeat : null;
         String mode;
         String who = null;
         if (owner != null) {
             mode = "you";
         } else if (th != null) {
             mode = "bot";
-            Player p = game.getPlayer(th);
-            who = p == null ? null : p.getName();
+            who = th.getName();
         } else if (t.getState() == Thread.State.RUNNABLE || cpu >= 15) {
             mode = "engine";
         } else {
@@ -2245,19 +1232,17 @@ public final class GameHost {
         }
         for (HumanSeat s : humans.values()) {
             if (owner != null && s != owner) {
-                send(s, new Messages.Activity("human", owner.name(), cpu, idle, recovered));
+                send(s, new Messages.Activity("human", owner.name(), cpu, idle, 0));
             } else {
-                send(s, new Messages.Activity(mode, who, cpu, idle, recovered));
+                send(s, new Messages.Activity(mode, who, cpu, idle, 0));
             }
         }
         if (!spectators.isEmpty()) {
-            // Zuschauer sehen wie Mitspieler "wartet auf <Name>", nie "du bist dran"
-            sendSpectators(owner != null ? new Messages.Activity("human", owner.name(), cpu, idle, recovered)
-                    : new Messages.Activity(mode, who, cpu, idle, recovered));
+            sendSpectators(owner != null ? new Messages.Activity("human", owner.name(), cpu, idle, 0)
+                    : new Messages.Activity(mode, who, cpu, idle, 0));
         }
     }
 
-    /** CPU-Last aller Engine-Threads seit dem letzten Aufruf in % eines Kerns; -1 wenn nicht messbar. */
     private int cpuPercent(long now) {
         if (!THREADS.isThreadCpuTimeSupported() || !THREADS.isThreadCpuTimeEnabled()) {
             return -1;
@@ -2281,22 +1266,23 @@ public final class GameHost {
     // ------------------------------------------------------------------ Spielende
 
     private Messages.GameOver buildGameOver(String error) {
-        List<Player> all = new ArrayList<>(game.getState().getPlayers().values());
-        // Platzierung: Sieger 1, danach in umgekehrter Ausscheide-Reihenfolge; Unentschieden/Ueberlebende teilen Platz
-        Map<UUID, Integer> place = new LinkedHashMap<>();
-        UUID winnerId = null;
+        List<Player> all = new ArrayList<>(game.getRegisteredPlayers());
+        Map<Integer, Integer> place = new LinkedHashMap<>();
+        Player winner = null;
+        // Forge markiert bei Unentschieden (Zuglimit, Abbruch) alle Uebrigen als "gewonnen"
+        boolean draw = game.getOutcome() == null || game.getOutcome().getWinCondition() == GameEndReason.Draw
+                || all.stream().filter(Player::hasWon).count() != 1;
         for (Player p : all) {
-            if (p.hasWon()) {
-                winnerId = p.getId();
+            if (!draw && p.hasWon()) {
+                winner = p;
                 place.put(p.getId(), 1);
             }
         }
-        // Wer selbst gegangen ist (und dabei nicht mehr ausgeschieden wurde), landet hinter den Ueberlebenden
-        int nextPlace = winnerId == null ? 1 : 2;
+        int nextPlace = winner == null ? 1 : 2;
         for (boolean leavers : new boolean[] {false, true}) {
             int group = 0;
             for (Player p : all) {
-                HumanSeat h = humans.get(p.getId());
+                HumanSeat h = humans.get(ids.player(p.getId()));
                 boolean left = h != null && h.left;
                 if (left == leavers && !place.containsKey(p.getId()) && !eliminatedTurn.containsKey(p.getId())) {
                     place.put(p.getId(), nextPlace);
@@ -2306,37 +1292,37 @@ public final class GameHost {
             nextPlace += group;
         }
         for (int i = eliminationOrder.size() - 1; i >= 0; i--) {
-            UUID pid = eliminationOrder.get(i);
+            int pid = eliminationOrder.get(i);
             if (!place.containsKey(pid)) {
                 place.put(pid, nextPlace++);
             }
         }
         List<Messages.Placement> placements = new ArrayList<>();
         for (Player p : all) {
-            placements.add(new Messages.Placement(p.getId(), p.getName(), place.getOrDefault(p.getId(), all.size()),
-                    humans.containsKey(p.getId()), p.getLife(), eliminatedTurn.get(p.getId()),
-                    match.getMulligan() == null ? 0 : match.getMulligan().getMulliganCount(p.getId())));
+            UUID wire = ids.player(p.getId());
+            HumanSeat h = humans.get(wire);
+            placements.add(new Messages.Placement(wire, p.getName(), place.getOrDefault(p.getId(), all.size()),
+                    h != null, p.getLife(), eliminatedTurn.get(p.getId()), h == null ? 0 : h.mulligans));
         }
         placements.sort((a, b) -> Integer.compare(a.place(), b.place()));
-        return new Messages.GameOver(winnerId, game.getWinner(), placements, game.getTurnNum(),
-                System.currentTimeMillis() - startedAt, null, error);
+        String result = winner == null ? "Unentschieden" : winner.getName() + " gewinnt";
+        return new Messages.GameOver(winner == null ? null : ids.player(winner.getId()), result, placements,
+                game.getPhaseHandler().getTurn(), System.currentTimeMillis() - startedAt, null, error);
     }
 
-    /** Zug des zuletzt gesendeten States (0 = noch keiner); thread-sicher, ohne Spiel-Thread. */
     public int currentTurn() {
         return turn;
     }
 
-    /** Startzeit (ms); 0 vor dem Start. */
     public long startedAt() {
         return startedAt;
     }
 
-    /** Menschliche Sitze (nach dem Aufbau unveraenderlich; Zustandsfelder volatile, von jedem Thread lesbar). */
     public List<HumanSeat> humanSeats() {
         return List.copyOf(humans.values());
     }
 
+    /** null bei reinen Bot-Spielen. */
     public GameSetup getSetup() {
         return setup;
     }
@@ -2354,11 +1340,23 @@ public final class GameHost {
     }
 
     public Map<UUID, Integer> getEliminatedTurns() {
-        return new LinkedHashMap<>(eliminatedTurn);
+        Map<UUID, Integer> out = new LinkedHashMap<>();
+        eliminatedTurn.forEach((pid, t) -> out.put(ids.player(pid), t));
+        return out;
     }
 
-    public MageLiteMatch getMatch() {
-        return match;
+    /** Wire-id einer Forge-Karte (Tests, Zuschauer-Pruefung). */
+    public UUID wireCardId(int forgeCardId) {
+        return ids.card(forgeCardId);
+    }
+
+    /** Diagnose fuer Spikes: nicht abgebildete bzw. automatisch beantwortete Forge-Fragen. */
+    public Map<String, Integer> unmappedCounts() {
+        return bridge.unmappedCounts();
+    }
+
+    public Map<String, Integer> autoCounts() {
+        return bridge.autoCounts();
     }
 
     public void shutdownNow() {
@@ -2367,12 +1365,6 @@ public final class GameHost {
             if (!awaitEnd(10_000)) {
                 LOG.warn("Spiel-Thread endet nicht");
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        callExecutor.shutdownNow();
-        try {
-            callExecutor.awaitTermination(1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

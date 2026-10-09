@@ -3,6 +3,8 @@ package dev.magelite.boot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import forge.StaticData;
+import forge.ai.AiProfileUtil;
+import forge.ai.AiProps;
 import forge.gui.GuiBase;
 import forge.localinstance.properties.ForgePreferences.FPref;
 import forge.model.FModel;
@@ -11,8 +13,10 @@ import org.tinylog.configuration.Configuration;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -29,6 +33,8 @@ import java.util.Properties;
 public final class ForgeBoot {
 
     private static final Logger LOG = Logger.getLogger(ForgeBoot.class);
+    /** KI-Profil der Bots ({@link #registerAiProfile}) */
+    public static final String AI_PROFILE = "MageLite";
 
     /** Kennzahlen des Boots (fuer Log, {@code forgeCheck} und spaeter /api/health). */
     public record Info(String forgeVersion, String commit, int cards, int editions, int tokens, long ms, long heapMb) {
@@ -94,6 +100,7 @@ public final class ForgeBoot {
             return null;
         });
         Thread.setDefaultUncaughtExceptionHandler(previous);
+        registerAiProfile();
 
         StaticData db = FModel.getMagicDb();
         int cards = db.getCommonCards().getUniqueCards().size();
@@ -111,6 +118,26 @@ public final class ForgeBoot {
         LOG.info("Forge " + forgeVersion + " (" + shortSha(commit) + "): " + cards + " Karten, " + editions
                 + " Editionen, " + tokens + " Token, " + ms + " ms, Heap " + heapMb + " MB");
         return info;
+    }
+
+    /**
+     * KI-Profil der Bots: Forges "Default" ohne zufaellige Blocker-Trades. Deren Bewertung zaehlt fuer jedes
+     * Angreifer-Blocker-Paar alle Kreaturen neu und braucht bei Token-Boards Minuten (Forge-POC, Befund F27).
+     * Forge kennt keine Profile aus dem Code, daher per Reflection in die geladene Profiltabelle.
+     */
+    @SuppressWarnings("unchecked")
+    private static void registerAiProfile() {
+        try {
+            Field f = AiProfileUtil.class.getDeclaredField("loadedProfiles");
+            f.setAccessible(true);
+            Map<String, Map<AiProps, String>> profiles = (Map<String, Map<AiProps, String>>) f.get(null);
+            Map<AiProps, String> base = profiles.get("Default");
+            Map<AiProps, String> mine = base == null ? new HashMap<>() : new HashMap<>(base);
+            mine.put(AiProps.ENABLE_RANDOM_FAVORABLE_TRADES_ON_BLOCK, "false");
+            profiles.put(AI_PROFILE, mine);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOG.warn("KI-Profil " + AI_PROFILE + " nicht angelegt, Bots nutzen Forge-Standardwerte: " + e);
+        }
     }
 
     private static JsonNode readManifest(Path forgeHome) throws IOException {
