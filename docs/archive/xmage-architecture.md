@@ -1,3 +1,5 @@
+> **Historisch:** beschreibt die XMage-Fassung bis 0.1.x (Engine seit dem Umbau: Forge, siehe `docs/DECISIONS.md`).
+>
 > **Hinweis:** Das ist die ursprüngliche Analyse und Planung (vor der Umsetzung), inklusive vieler verifizierter
 > XMage-Details. Die tatsächliche Implementierung beschreibt `docs/CODEMAP.md`, den Stand `docs/STATUS.md`.
 

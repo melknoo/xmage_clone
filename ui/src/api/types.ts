@@ -1,4 +1,4 @@
-// Protokoll Engine <-> UI (siehe docs/architecture.md, Abschnitt c)
+// Protokoll Engine <-> UI (siehe docs/CODEMAP.md, Abschnitt "WebSocket-Protokoll"; urspruenglich docs/archive/xmage-architecture.md, Abschnitt c)
 
 export type UUID = string
 

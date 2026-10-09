@@ -1,5 +1,8 @@
 # Plan: Online-Mehrspieler für MageLite (fly.io)
 
+> **Historisch (XMage-Zeit):** Plan der Online-Etappen E1–E5, alle umgesetzt. Er nennt XMage als Regel-Engine, die der
+> Forge-Umbau ersetzt hat (Branch `forge`); aktuelle Betriebsdetails: `docs/SERVER.md`.
+
 > **Stand 2026-10-05:** E1 umgesetzt und getestet (`scripts/e2e-login.mjs`, Screenshots). E2 fertig: live unter
 > https://magelite.fly.dev, Leistungsmessung bestanden (2,7 s/Zug Ø, Heap 1,7 GB → performance-2x/4 GB, ein
 > Spiel). Betrieb: `docs/SERVER.md`. Abweichung vom Plan: zusätzlich `--idle-exit-min`

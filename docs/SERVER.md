@@ -1,9 +1,12 @@
 # MageLite online (fly.io)
 
-Betrieb der Engine als Web-Server, damit Freunde **ohne Installation im Browser** spielen. Stand 2026-10-05:
-Server-Modus mit Konten und Einladungscodes (E1), das fly-Setup (E2), mehrere Menschen an einem Tisch (E3) und
-die Lobby mit Tischen (E4) sind gebaut; Feinschliff (E5) steht aus, siehe `ONLINE-PLAN.md`. Jeder Freund hat
-eigene Deckbibliothek, eigenen Helden und eigene Statistik. Es läuft **ein Spiel gleichzeitig** (4 GB RAM).
+Betrieb der Engine als Web-Server, damit Freunde **ohne Installation im Browser** spielen. Stand 2026-10-09:
+Server-Modus mit Konten, Einladungscodes und öffentlicher Registrierung, fly-Setup, mehrere Menschen an einem Tisch,
+Lobby mit Tischen, Zuschauen und Host-Link sind gebaut (Plan: `ONLINE-PLAN.md`, historisch). Live läuft bis zum
+Forge-Release noch die XMage-Fassung 0.1.x. Jeder Freund hat
+eigene Deckbibliothek, eigenen Helden und eigene Statistik. Es läuft **ein Spiel gleichzeitig**
+(`MAGELITE_MAX_GAMES=1`). Die Regel-Engine ist auf dem Branch `forge` (ab 0.2) **Forge** (vorher XMage); der erste
+Forge-Deploy steht noch aus (Hinweise unten, „Erster Forge-Deploy“).
 
 **So spielt man zusammen:** Unter „Spielen“ ist online die **Lobby**. Einer klickt „Eröffnen“ und ist Gastgeber,
 die anderen treten in der Lobby bei oder über den **Einladungslink** des Tisches (`…/#table=XXXXXX`). Jeder wählt
@@ -15,11 +18,14 @@ Bot-Tempo ein und startet. Nach dem Spiel führt „Zurück zum Tisch“ zur Rev
 
 ```
 Browser ──HTTPS/WSS──▶ fly-proxy (TLS, Auto-Start/Stop) ──▶ Maschine fra, performance-2x/4 GB
-                                                             java dev.magelite.Main --server --idle-exit-min=10
-                                                             /data (Volume): db/cards.h2, magelite.db, cache/images, logs
+                                                             java dev.magelite.Main --server --forge=/app/forge --idle-exit-min=10
+                                                             /app/forge (Image): Forge-Daten (res, manifest.json)
+                                                             /data (Volume): magelite.db, cache/images, forge-data, logs
 ```
 
-- Dieselbe Engine wie lokal, Flag `--server`: bindet `0.0.0.0`, kein Zufallstoken, kein Parent-Watchdog.
+- Dieselbe Engine wie lokal (Forge als Regel-Engine, im Image unter `/app/forge`, `--forge=/app/forge`), Flag
+  `--server`: bindet `0.0.0.0`, kein Zufallstoken, kein Parent-Watchdog. Arbeitsverzeichnis = `/data` (`WORKDIR`),
+  dort legt Forge sein Profil `forge-data/` an.
 - **Anmeldung per Einladungscode oder E-Mail + Passwort.** Jeder Login erzeugt eine Session (Tabelle `sessions`,
   Cookie `ml_sess` mit Zufallstoken, HttpOnly, 1 Jahr; in der DB nur der SHA-256). Ein eingeladenes Konto ist zunächst
   „Gast“ (nur Code); unter **Konto** kann der Nutzer E-Mail + Passwort setzen (PBKDF2) und sich danach auch damit
@@ -45,7 +51,8 @@ Browser ──HTTPS/WSS──▶ fly-proxy (TLS, Auto-Start/Stop) ──▶ Masc
     eingeladene Freunde spielen normal weiter. Bei 80 % und 100 % bekommt der Owner eine Mail (wenn er unter Konto
     eine E-Mail hinterlegt hat und Mailversand eingerichtet ist). Stand: Admin → Server, Kachel „Laufzeit <Monat>“.
   - Das Setup liegt nicht auf fly, sondern als GitHub-Release (kein Egress, kein Volume-Platz).
-  - Der nächste Aufruf startet die Maschine (5–10 s, die UI zeigt „Server wird gestartet …“).
+  - Der nächste Aufruf startet die Maschine (die UI zeigt „Server wird gestartet …“). Forge lädt die Kartenskripte bei
+    jedem Start: Engine bereit nach ca. 7 s (warm) bis 17 s (kalt), gemessen im Docker-Container mit 2 CPU/4 GB.
 
 ## Einmal-Setup
 
@@ -74,23 +81,41 @@ cd engine; .\gradlew.bat -q compileJava; java -cp build\classes\java\main dev.ma
 
 Den Code sicher aufbewahren (Passwort-Manager); er wird beim Login eingegeben und steht sonst nur in den fly-Secrets.
 
-Der **erste Start** auf fly baut die Karten-DB auf dem Volume (gemessen 05.10.2026: 43 s Scan, Engine bereit nach
-45 s; Health-Check hat 420 s Toleranz). Danach startet die Engine in 2–6 s; der Container braucht im Leerlauf
-≈ 1,4 GB RAM. `fly deploy` immer mit `--ha=false` (eine Maschine; das Deploy-Skript macht das).
+Es gibt keine Karten-DB und keinen langen Erststart mehr (unter XMage baute der erste Start 45–160 s lang die H2-DB
+auf). Forge liest die Kartenskripte aus dem Image bei **jedem** Start; gemessen im Docker-Container (2 CPU/4 GB):
+Kaltstart 16,8 s, Warmstart 6,7 s, Heap nach Boot 157 MB (RSS ca. 610 MB). Der Health-Check (`fly.toml`) hat für den
+ersten Forge-Deploy `grace_period = "420s"` (Migration + Kaltboot der Maschine); nach einer Messung auf fly kann er
+auf ca. 120 s sinken. `fly deploy` immer mit `--ha=false` (eine Maschine; das Deploy-Skript macht das).
 
 ## Deploy
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1        # bricht ab, wenn gerade ein Spiel laeuft
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1 -Force # trotzdem
-powershell -ExecutionPolicy Bypass -File scripts
-elease.ps1 -Fly      # neue Version: bauen, installieren, deployen
+powershell -ExecutionPolicy Bypass -File scripts\release.ps1 -Fly      # neue Version: bauen, installieren, deployen
 ```
 
-Das Skript findet `flyctl` selbst (PATH, winget-Paket, `~\.flyin`), bricht bei uncommitteten Änderungen ab
-(`-AllowDirty` erlaubt es), prüft `GET /api/health` (`games` = laufende Spiele), ruft `fly deploy` auf und wartet,
-bis Health die neue Version meldet (`desktop/package.json`). Gebaut wird lokal
-mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --remote-only`.
+Das Skript findet `flyctl` selbst (PATH, winget-Paket, `~\.fly\bin`), bricht bei uncommitteten Änderungen ab
+(`-AllowDirty` erlaubt es), prüft die **Forge-Wache** (`vendor/forge/manifest.json` hat den Commit aus `FORGE_COMMIT`,
+`res/cardsfolder/cardsfolder.zip` und `lib` sind da), prüft `GET /api/health` (`games` = laufende Spiele), ruft
+`fly deploy` auf und wartet (36 × 5 s), bis Health die neue Version meldet (`desktop/package.json`). Gebaut wird lokal
+mit Docker (`Dockerfile`, 3 Stufen) oder ohne lokales Docker mit `fly deploy --remote-only`. **Forge wird nicht im
+Docker gebaut:** `vendor/forge/{lib,res}` entstehen lokal durch `scripts\import-forge.ps1` (`build.ps1` macht das bei
+Bedarf) und kommen aus dem Build-Kontext ins Image.
+
+### Erster Forge-Deploy
+
+- Die Engine stellt beim Start alle Decks aller Konten von XMage-`.dck` auf Decktext v2 um (`DeckMigration`, Migration
+  V9). Vorher legt sie **einmal** die Sicherung `magelite.db.xmage-backup` neben der DB auf dem Volume an (`/data`) –
+  der einzige Weg zurück zu XMage; der alte Text jedes Decks bleibt zusätzlich in `decks.dck_legacy`. Danach löscht
+  `LegacyCleanup` die alte Karten-DB `db/cards.h2*` (ca. 63 MB frei).
+- `fly.toml` behält dafür `grace_period = "420s"` (Migration + Kaltboot), bis die Startzeit auf fly gemessen ist.
+- Im `fly logs` prüfen: `Forge … Karten, … Editionen`, `Deck-Umstellung: N Decks, K mit unbekannten Karten (…), F Fehler`,
+  `XMage-Karten-DB entfernt`, danach `GET /api/health` und `node scripts\e2e-tables.mjs` gegen den Live-Server. Decks mit
+  Karten, die Forge nicht kennt, sind nach der Umstellung ungültig (`valid=0`, Hinweis „Nach dem Wechsel auf Forge
+  unbekannt: …“); sie bleiben erhalten.
+- Alte Host-Apps (Version vor 0.2, ohne Engine-Kennung `X-MageLite-Engine: forge/1`) weist der Server beim Host-Link
+  mit Close-Code 4426 ab; die App zeigt „MageLite auf diesem Rechner aktualisieren“.
 
 ## Freunde einladen
 
@@ -210,18 +235,22 @@ fly machine stop <id> -a magelite      # sofort stoppen
 fly secrets set -a magelite MAGELITE_OWNER_CODE=...   # Owner-Code rotieren (Neustart)
 ```
 
-- **Leistungsmessung** (gemacht 05.10.2026): kurz `fly scale memory 8192`, dann per `fly ssh console` in einem
-  eigenen Ordner (vermeidet den H2-Lock mit der laufenden Engine, baut die Karten-DB einmal neu, 44 s):
-  `mkdir -p /data/spike && cd /data/spike && java -Xmx2g -Dmagelite.vendor=/app/vendor/xmage -cp "/app/lib/magelite-engine.jar:/app/lib/*" dev.magelite.spike.BotSpike --games=2 --tempo=BLITZ --turnCap=40`
-  Ergebnis: 3,9 bzw. 1,5 s/Zug (max 14,2 s), Heap-Spitze 1,7 GB, 0 Fehler – schneller als lokal (≈ 5 s/Zug).
-  Danach `rm -rf /data/spike` und `fly scale memory 4096`.
+- **Leistungsmessung (Forge, Docker lokal mit 2 CPU/4 GB, Phase 4):** Heap nach Boot 157 MB (RSS ca. 610 MB), ein Tisch
+  Spitze 422 MB (RSS 826 MB), zwei Tische 873 MB; mit 2 GB/1 CPU kein OOM, aber ca. 1,9 s/Zug statt ca. 1,1 s. **RAM ist
+  kein Engpass mehr, die CPU schon**; die VM-Größe wird nach einer Messung auf fly neu entschieden. Auf der Maschine
+  messen: per `fly ssh console` in einem eigenen Ordner (Forge legt `forge-data/` und `logs/` im Arbeitsverzeichnis an,
+  so stört es die laufende Engine nicht):
+  `mkdir -p /data/spike && cd /data/spike && java -Xmx2g -Dmagelite.forge=/app/forge -cp "/app/lib/magelite-engine.jar:/app/lib/*" dev.magelite.spike.BotSpike --games=2 --tempo=BLITZ --turnCap=40`
+  (oder `dev.magelite.spike.HumanSpike --games=3 --humans=3` für das Routing), danach `rm -rf /data/spike`. Die Zahlen
+  unter XMage (3,9 bzw. 1,5 s/Zug, Heap-Spitze 1,7 GB, dafür kurz `fly scale memory 8192`) sind historisch.
 - **Verbindungsabbruch eines Mitspielers:** Die anderen sehen „getrennt seit N s“ an seinem Platz; kommt er
   zurück, läuft alles weiter. Nach 60 s erscheint „aufgeben lassen“ – damit gibt sein Sitz auf und das Spiel geht
   ohne ihn weiter (sein Ergebnis landet trotzdem in seiner Statistik). Sind alle Menschen länger als 10 min weg,
   bricht die Engine das Spiel ab.
 - **Datenmenge:** REST/Statik gzip, WebSocket `permessage-deflate` (automatisch). Ein State im späten Spiel liegt
   unkomprimiert im zweistelligen kB-Bereich (siehe `STATUS.md`), also auch für Mobilfunk unkritisch.
-- **Zwei Tische parallel:** `fly scale memory 8192` und in `fly.toml` `MAGELITE_MAX_GAMES = "2"`.
+- **Zwei Tische parallel:** in `fly.toml` `MAGELITE_MAX_GAMES = "2"`. Unter Forge ist der Speicher dafür kein Problem
+  (zwei Tische: Heap-Spitze 873 MB), die Zugzeit hängt an der CPU; ob die 4-GB-VM reicht, zeigt die Messung auf fly.
 - **Leerlauf trotz offener Tabs:** Startseite/Lobby pollen (Social alle 3 s), aber nur bei sichtbarem Tab und bis
   15 min nach der letzten Maus-/Tastatureingabe; danach greift der Idle-Exit wie gewohnt.
 - **Volume voll?** `cache/images` wächst unbegrenzt (Scryfall-Bilder). Notfalls per `fly ssh console` leeren.

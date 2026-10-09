@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-08. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-09 (Branch `forge`: Engine-Umbau auf Forge, Phasen 0–5). Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -19,6 +19,9 @@ Zusätzlich umgesetzt (nicht im Plan): **Auto-Mana** (`AutoPayer`): automatische
 Fallback auf manuelles Klicken.
 
 ## Gemessen / getestet
+
+Messwerte und Tests bis 0.1.x beziehen sich auf die XMage-Fassung (historisch, XMage); die Forge-Messwerte stehen in der
+Tabelle „Forge-Umbau“ weiter unten.
 
 - Engine-Start: 2–6 s mit vorhandener Karten-DB; **erster Start** baut die DB auf: ca. 40–45 s.
 - 4-Bot-Spiele (Tempo Blitz): 3/3 ohne Fehler, Ø ca. 5 s pro Spielerzug, einzelne Züge bis ca. 50 s bei vollen Boards,
@@ -238,28 +241,28 @@ Fallback auf manuelles Klicken.
      Grenze; Dev-Engine 5 s). Kompression gemessen: REST gzip (`/api/samples` 15 kB → 3,3 kB), WebSocket
      `permessage-deflate` wird ausgehandelt. State-Größe: größter State 33 kB unkomprimiert (32 Züge, 318 States,
      7,8 MB gesamt). `e2e-online` deckt Trennung/Kick/Reconnect ab. **Online-Plan E1–E5 abgeschlossen.**
-1. **Installer / Verteilung (P5)**: `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
+1. **Installer / Verteilung (P5)** (Stand XMage, historisch; Forge: Setup 204 MB, jlink-Smoke, siehe Forge-Umbau Phase 4): `scripts\package.ps1` (NSIS-Setup.exe ~320 MB + jlink-JRE, Details
    `docs/DEVELOPMENT.md` §7). 2026-10-02 auf Windows geprüft: Build, Installation, Start, Aufbau der Karten-DB.
    Noch offen: Start auf einem PC ganz ohne Java (Log muss `resources\jre\bin\java.exe` zeigen), Spiel +
    Scryfall-Bilder in der gepackten App, Deinstallation, App-Icon (`desktop/build/icon.ico`).
    Code-Signatur bewusst weggelassen (SmartScreen-Hinweis reicht für private Weitergabe).
-2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `HumanSettings`), Auto-Passen, Auto-Mana,
+2. **Einstellungs-Screen**: Stopps pro Phase (aktuell fest in `AutoPassPolicy`; vor Forge `HumanSettings`, historisch XMage), Auto-Passen, Auto-Mana,
    Lautstärke, Bild-Cache leeren.
 3. **Bedien-Komfort**
    - Angreifen per Drag & Drop auf einen Gegner. Mehrere auf ein Ziel geht schon: Shift+Klick + Ziel
      (`GameHost.combat`).
-   - „Immer Ja/Nein“ für wiederkehrende Fragen (`REQUEST_AUTO_ANSWER_*`, UI fehlt; Engine erlaubt die Actions).
+   - „Immer Ja/Nein“ für wiederkehrende Fragen (`REQUEST_AUTO_ANSWER_*`, UI fehlt; unter XMage erlaubte die Engine die Actions, unter Forge werden sie angenommen, aber ignoriert).
      Für Ersatzeffekte (Dredge & Co.) gibt es das seit 2026-10-05 („Keinen anwenden“ + „für dieses Spiel merken“).
-   - Trigger-Reihenfolge merken (`TRIGGER_AUTO_ORDER_*`, UI fehlt).
+   - Trigger-Reihenfolge merken (`TRIGGER_AUTO_ORDER_*`, UI fehlt; unter Forge ordnet die Engine Trigger selbst automatisch).
    - Animationen fürs **Betreten** des Spielfelds (Stapel → Feld) fehlen noch; Zonenwechsel weg vom Feld, Schaden,
-     Leben gibt es seit 2026-10-06 (`FxLayer`). Sounds aus `vendor/xmage/sounds` statt Synth-Töne.
+     Leben gibt es seit 2026-10-06 (`FxLayer`). Sounds statt Synth-Töne (historisch, XMage: `vendor/xmage/sounds` ist mit dem Forge-Umbau entfallen, eine neue Quelle wäre nötig).
 4. **Moxfield-Import**: Server-Abruf wird von Cloudflare geblockt (HTTP 403). Der Fallback über Electron
    (`window.magelite.fetchText` → `net.fetch`) ist eingebaut, aber **nicht verifiziert**.
    Ersatz: Moxfield-Text-Export einfügen.
-5. **Bilder**: Set-Code-Mapping XMage → Scryfall fehlt (Fallback per Kartenname funktioniert). Optional
+5. **Bilder** (historisch, XMage; unter Forge speichert der Deck-Layer Scryfall-Codes, Token-Drucke kommen aus Forge, siehe Forge-Umbau Phase 3): Set-Code-Mapping XMage → Scryfall fehlt (Fallback per Kartenname funktioniert). Optional
    `ScryfallImageSupportCards/Tokens` aus dem XMage-Client exportieren, Vorabladen über `/cards/collection`,
    LRU-Grenze für den Cache. Token-Bilder (Scryfall-Suche) nur stichprobenhaft gesehen.
-6. **KI-Stärke**: FFA-Bewertung, `FfaAttack` und `reactInCombat` umgesetzt (2026-10-05, siehe oben). Offen:
+6. **KI-Stärke** (historisch, XMage; unter Forge vergleicht `botArena` KI-Profile): FFA-Bewertung, `FfaAttack` und `reactInCombat` umgesetzt (2026-10-05, siehe oben). Offen:
    - mehr Arena-Spiele für ein signifikantes Ergebnis (je 30 Spiele ≈ 1,5 h),
      z. B. `gradlew botArena -PspikeArgs="--games=30 --turnCap=80 --tempo=BLITZ"`,
    - Gewicht `--w` und `--elim` abstimmen, einzelne Hebel über `--levers=` messen,
@@ -269,11 +272,35 @@ Fallback auf manuelles Klicken.
 
 ## Bekannte Probleme / Grenzen
 
+- Mehrfach-Angriff markiert immer den ganzen Stapel (×N); nur einen Teil davon zu markieren geht noch nicht
+  (einzelne Karten per normalem Klick).
+- UI-Dialoge `CHOOSE_PILE`, `MULTI_AMOUNT` und die Mulligan-Unten-Auswahl sind nur über die Spikes getestet,
+  nicht visuell.
+- Statistik: Spalte `game_card_stats.cast` zählt auch gespielte Länder (Anzeige „gespielt“).
+- Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
+- Es läuft immer nur **ein** Spiel (`GameRegistry`, `--max-games`, lokal 1): ein neues eigenes Spiel beendet das
+  eigene laufende; im Server-Modus bekommt ein anderer Nutzer 409 „Gerade spielt …“.
+- **Tischspiel-Abbruch:** Wer am Tisch aufgibt und dann solo startet („Schnellstart“/„Nochmal“), beendet das
+  Tischspiel für alle (`GameRegistry.start` beendet jedes Spiel mit diesem Nutzer, auch nach Aufgabe). Für später
+  geplant, zusammen mit „2 Tische parallel“ (8 GB, `MAGELITE_MAX_GAMES=2`, `SimPool.awaitIdle` pro Spiel statt global –
+  SimPool war XMage und entfällt unter Forge).
+- Server-Modus: ein Spiel pro Nutzer, nur der Besitzer darf sich verbinden; Moxfield-Import im Browser ohne
+  Electron-Fallback (Text-Export einfügen). Kein Mailversand: „Passwort vergessen“ = Gastgeber erzeugt neuen Code.
+  Legacy-Cookie `ml_code` wird noch akzeptiert – nach ein paar Wochen entfernen (`Auth.resolve`).
+- `events`-Zwischenzustände: Ereignisse werden vor dem nächsten State gebündelt (bzw. nach 150 ms vom Wachhund);
+  bei sehr vielen gleichzeitigen Zonenwechseln zeigt die Leiste nur die letzten 6, Token-Tode werden zu „×N“.
+- `desktop/tools/shot.cjs`: Das versteckte Fenster zeichnet manchmal verzögert – bei verdächtigen Bildern
+  nochmal mit längerer Wartezeit aufnehmen.
+
+### Historisch (XMage, bis 0.1.x)
+
+Probleme und Grenzen der XMage-Fassung. Mit dem Forge-Umbau (Branch `forge`, Tabelle weiter unten) größtenteils
+gegenstandslos: Forge-KI, kein CALL-Thread, keine H2-Karten-DB. Bleiben stehen, weil sie Entscheidungen in
+`DECISIONS.md` erklären.
+
 - XMage-KI ist eher passiv und bei 40+ Permanents langsam (Log: „AI player thinks too long“).
 - In **Bedacht/Max** ist `fastStack` aus (Nutzerwunsch): Bei langen Trigger-Ketten rechnet dort jeder Bot weiter pro
   Stapelobjekt bis zur Denkzeit. „Nichts spielbar → sofort passen“ wäre auch dort verlustfrei.
-- Mehrfach-Angriff markiert immer den ganzen Stapel (×N); nur einen Teil davon zu markieren geht noch nicht
-  (einzelne Karten per normalem Klick).
 - In Blitz/Normal (`fastOpponentTurns`) reagieren Bots in fremden Zügen nur, wenn etwas auf dem Stapel liegt
   (keine Flash-Kreaturen/Removal am Zugende). Blocken funktioniert unabhängig davon. Ausnahme Normal
   (`reactInCombat`): In fremden Kampfschritten rechnen sie, wenn eine Spontanaktion möglich ist. Am Zugende handelt
@@ -282,23 +309,9 @@ Fallback auf manuelles Klicken.
   Zielkombinationen einer Fähigkeit als Kopien erzeugt („too many possible targets?“, z. B. Opfer-Fähigkeiten im
   Vampir-Deck). In der Bot-Arena betraf das ca. 15–19 % der Blitz-Spiele, mit Original-Bots genauso. `SimPool`
   verhindert nur das Stapeln mehrerer solcher Läufe, nicht den einzelnen.
-- UI-Dialoge `CHOOSE_PILE`, `MULTI_AMOUNT` und die Mulligan-Unten-Auswahl sind nur über die Spikes getestet,
-  nicht visuell.
 - Kontrollwechsel-Karten (Mindslaver & Co.) sind nur nach dem XMage-Gating-Muster umgesetzt, nicht getestet.
-- Statistik: Spalte `game_card_stats.cast` zählt auch gespielte Länder (Anzeige „gespielt“).
-- Gelöschte Decks behalten ihre Statistik (`games.deck_id` ohne Fremdschlüssel).
-- Es läuft immer nur **ein** Spiel (`GameRegistry`, `--max-games`, lokal 1): ein neues eigenes Spiel beendet das
-  eigene laufende; im Server-Modus bekommt ein anderer Nutzer 409 „Gerade spielt …“.
-- **Tischspiel-Abbruch:** Wer am Tisch aufgibt und dann solo startet („Schnellstart“/„Nochmal“), beendet das
-  Tischspiel für alle (`GameRegistry.start` beendet jedes Spiel mit diesem Nutzer, auch nach Aufgabe). Für später
-  geplant, zusammen mit „2 Tische parallel“ (8 GB, `MAGELITE_MAX_GAMES=2`, `SimPool.awaitIdle` pro Spiel statt global).
 - Sonderbezahlung: Klick-Einberufen nur für Convoke-Kreaturen ohne eigene Manafähigkeit (sonst Mana); Delve,
   Improvise, Assist nur über den Knopf (Aktion wird automatisch gewählt, Ziel/Farbe von Hand).
-- Server-Modus: ein Spiel pro Nutzer, nur der Besitzer darf sich verbinden; Moxfield-Import im Browser ohne
-  Electron-Fallback (Text-Export einfügen). Kein Mailversand: „Passwort vergessen“ = Gastgeber erzeugt neuen Code.
-  Legacy-Cookie `ml_code` wird noch akzeptiert – nach ein paar Wochen entfernen (`Auth.resolve`).
-- `events`-Zwischenzustände: Ereignisse werden vor dem nächsten State gebündelt (bzw. nach 150 ms vom Wachhund);
-  bei sehr vielen gleichzeitigen Zonenwechseln zeigt die Leiste nur die letzten 6, Token-Tode werden zu „×N“.
 - **Hänger durch verlorene Antwort (XMage-Race) – umgangen 2026-10-02:** `HumanPlayer.waitForResponse` setzt
   `responseOpenedForAnswer = true` *vor* `synchronized(response) { wait() }`. Antwortet der CALL-Thread genau
   dazwischen, geht `notifyAll()` verloren und das Spiel wartet ewig. Vorher: 3 STALLs in 9 `humanSpike`-Spielen.
@@ -310,8 +323,6 @@ Fallback auf manuelles Klicken.
   Tritt bei Karten auf, mit denen ein Spieler die Blocker eines anderen bestimmt. 1× in 6 `humanSpike`-Spielen
   (2026-10-02). **Behoben:** Rekursionssperre + eigene Logik in `MageLiteBot.selectBlockers`/`chooseBlockersByEffect`
   (Regressionstest `gradlew blockerSpike`).
-- `desktop/tools/shot.cjs`: Das versteckte Fenster zeichnet manchmal verzögert – bei verdächtigen Bildern
-  nochmal mit längerer Wartezeit aufnehmen.
 - **Neue Karten fehlen (Stand 2026-10-02):** XMage nimmt Karten aus der `unfinished`-Liste eines Sets nicht in die DB
   auf (z. B. Prepare-Karten aus Secrets of Strixhaven/SOC). Neue Sets wie Reality Fracture (FRA) sind gar nicht
   enthalten. Der Import zeigt beide Fälle getrennt an (`XmageUnfinished`). Auch 1.4.61V1 sperrt diese Karten noch;
@@ -351,6 +362,8 @@ Fallback auf manuelles Klicken.
 - **The Mighty Thor, Jane Foster:** XMage-Bug (Filter `FilterCreaturePermanent` → nur Kreaturen statt „Artefakt oder
   Kreatur“). Ersatzklasse `engine/src/main/java/mage/cards/t/TheMightyThorJaneFoster.java` (wie `GameStateEvaluator2`,
   Engine-Jar vor XMage-Jars); Test `CardOverridesTest`. Weitere Karten-Bugs nach demselben Muster überschreibbar.
+  (Historisch, XMage: Shadow-Klassen und `CardOverridesTest` sind mit dem Forge-Umbau entfallen; Karten-Fixes sind jetzt
+  Kartenskripte unter `vendor/forge-overrides`, siehe `docs/DEVELOPMENT.md`.)
 - Kartenvorschau (`ZoomPanel`) mit fester Höhe → Spielverlauf springt beim Hovern nicht mehr.
 - Eigenes Feld dreigeteilt: Kreaturen / Artefakte · Verzauberungen (nur wenn vorhanden, `battlefield-others`) / Länder.
   Gegner-Pods unverändert.
@@ -375,8 +388,8 @@ Fallback auf manuelles Klicken.
   `-Fly`). Eine Versionsquelle `desktop/package.json` → Gradle → `magelite-version.properties` → `/api/health`.
   Jar heißt fest `magelite-engine.jar` (Dockerfile/SERVER.md angepasst). `deploy-fly.ps1` findet flyctl selbst,
   bricht bei uncommitteten Änderungen ab und wartet auf die neue Version.
-- **Auto-Bezahlen:** Nutzer meldet Hänger/Endlosschleife beim automatischen Bezahlen (Henzie-Deck, Karte unbekannt).
-  Ursache noch offen; neu: INFO-Logzeilen „Auto-Bezahlen …“ (Stapelobjekt, XMage-Text, gewählte Quelle,
+- **Auto-Bezahlen (historisch, XMage – `AutoPayer` entfällt unter Forge):** Nutzer meldet Hänger/Endlosschleife beim
+  automatischen Bezahlen (Henzie-Deck, Karte unbekannt). Ursache noch offen; neu: INFO-Logzeilen „Auto-Bezahlen …“ (Stapelobjekt, XMage-Text, gewählte Quelle,
   Abbruchgrund) in `engine.log`.
 - **Frage „mehrere Spiele?“:** Jeder Eingeloggte kann allein gegen Bots spielen, aber auf fly läuft nur **ein** Spiel
   gleichzeitig (`MAGELITE_MAX_GAMES=1`, 4 GB); der Zweite bekommt 409 „Gerade spielt …“. Entscheidung 2026-10-07:
@@ -531,6 +544,7 @@ Engine-Wechsel XMage 1.4.60 → Forge (Entscheidung und Plan: Memory `forge-migr
 | 2 Deck-Layer + Daten | ✅ `deck/CardLookup` (Set: Scryfall-Code zuerst, dann Forge-Code/Code2/Alias; gespeichert wird der Scryfall-Code), `TextDeckParser` (v2, MTGA, Forge-`.dck`, Legacy-XMage-`.dck`), `DeckLoader` (+ Bannliste je Karte: Forges `getDeckConformanceProblem` prüft sie nicht), `DeckText`, `SampleDeckCatalog` aus dem Classpath (`INDEX` wird beim Build erzeugt), `DeckResolver`/`DeckRoutes`/`CardNameSuggester`/`BracketAnalyzer` auf Forge; `XmageUnfinished` weg (Vorschau liefert `unfinished: []` bis zur UI-Anpassung). 70 Samples als Decktext v2 unter `resources/sample-decks` (gleiche ids), 0 unbekannte Karten, 67/70 gültig (= XMage). `V9__forge_decks.sql` + `DeckMigration` (Sicherung `magelite.db.xmage-backup`, alter Text in `dck_legacy`; `updated_at`, Ordner, Sortierung, Meisterschaft bleiben): Kopie der echten Desktop-DB 14/14 und alte Dev-DB (Schema V4) 4/4 umgestellt, 0 unbekannt, alle gültig, Bracket unverändert, zweiter Start stellt 0 um. Host-Link-Marker `X-MageLite-Engine: forge/1` (ohne → 4426, Host-App zeigt „MageLite auf diesem Rechner aktualisieren“). Übergangs-Excludes, `vendor/xmage`, `import-xmage.ps1` gelöscht; `build.ps1` → `import-forge.ps1`, `engine.cjs` und e2e-relay/-signup → `--forge`. `gradlew test` 34/34, e2e-flow grün (48 Züge, 47 s), e2e-relay grün (2 eigene Engines, Marker, Reconnect, Belohnung je Nutzer). Dabei behoben: (1) Autopilot bei Zielwahl wählte immer die erste Option, auch wenn Forge sie ablehnt → Endlosschleife (jetzt erste angenommene; Mensch bekommt bei abgelehntem Ziel „Das geht als Ziel nicht.“); (2) Spielende während einer offenen Eingabe rollt den Spiel-Thread per `GameHost.GameEnded` aus Forge heraus (Forges `TargetSelection` fragt sonst rekursiv neu) – Relay-Abbruch durch Admin hing vorher; neuer Spike-Modus `--leave=abortTarget|abortRequiredTarget`: Spielende 0–8 ms. `SpectatorCheck`: angesehene Karten (`lookedAt`), die schon offen liegen, gelten nicht mehr als geheim (Fehlalarm bei „schau dir die obersten N an, lege eine aufs Spielfeld“). Hinweis: reine Namenszeilen bekommen Forges Art-Pref (neuester Druck), z. B. Sol Ring `[SUM:274]` (SUM kennt Forge nicht) → TMC. |
 | 3 Bilder, Skripte, e2e, UI | ✅ **Bilder:** Tokens tragen Scryfall-Token-Set (`CardEdition.getTokensCode()`, meist `T`+Code) und Nummer, `/img/token?num=` holt erst den exakten Druck, dann Namenssuche; Kopie-Tokens echter Karten (Scute Swarm) mit Kartenbild. Scryfall-Prüfung der 70 Samples: 4631/4631 Karten, 364/364 Token-Drucke. **Test-App getrennt:** nicht gepackte App (`MageLite.cmd`) nutzt `%APPDATA%\MageLite-dev` (Fenstertitel „MageLite (Test)“, `MAGELITE_USER_DATA` überschreibt); erster Start kopiert die echte DB nur lesend (`--seed-db`, `VACUUM INTO`, Quelle unverändert geprüft) und stellt die Kopie um. **UI:** `unfinished` raus, Platzhalter „Forge/XMage (.dck)“, Impressum Forge/GPL + Quellcode-Link, Host-Link-Fehler (4426/4401) sichtbar, auch wenn der Link gestoppt ist (gewolltes Trennen meldet keinen Fehler mehr). **Texte aus Forge geglättet:** Phasen-/Mana-/Match-Zeilen nicht mehr im Spielverlauf (waren > 60 %), „Wichtiges“ filtert zusätzlich Zugbeginn/Auflösen/„enters tapped“ (nach `kind`); Objekt-Nummern „(341)“ und Auslöser-Kontext „[Attacker: …]“ entfernt (`view/ForgeText`, Log, Stapel, Regeltext); einzeilige Prompts für Priorität, Ziel, Mana, Einberufen; Starthand-, Angriffs- und Block-Frage auf Deutsch (`UI_DETAILED_SPELLDESC_IN_PROMPT=false`). **Fix:** zurückgekehrter Commander stand doppelt in der Kommandozone (Forges Commander-Liste hält das alte Objekt) → doppelte React-keys. **Skripte/Steps:** e2e-signup 1536 MB; e2e-online wartet 3 s statt 15 s (Forge-Bots beenden das Spiel sonst regulär); e2e-spectate Tisch auf NORMAL, braucht `--max-games=2`; `steps-redesign-board` ohne `blocker`-Szenario, Blaze-Ziel über den Prompttext (Forge legt Zauber erst nach der Zielwahl auf den Stapel); `steps-convoke` erst Kreaturen, dann „Länder automatisch“, F9-Teil auf BEDACHT. **Verifikation:** `gradlew test` grün, `tsc -b` grün; eigene Engines (nie 7317): e2e-flow, -relay, -signup, -login, -online, -tables, -social, -spectate, -admin grün; Screenshots autoplay, redesign-board (35), swarm, dredge, necro, convoke angesehen. Offen: übrige Forge-Prompttexte englisch (Aufdecken, Auswahl-Dialoge), „Viewport nicht 1680x1000“ in `shot.cjs` (Fensterhöhe 973 px auf diesem Rechner). |
 | 4 Packaging + Docker | ✅ **Desktop:** `package.json` packt `forge` (ohne Jars: `res/**`, `manifest.json`, `forge.profile.properties`, `LICENSE-Forge.txt`; Jars über `engine/lib`), `LICENSE.txt`, `licenses`, `SOURCE.txt`; Lizenz GPL-3.0-or-later. `package.ps1`: Forge-Prüfung, `desktop/out/SOURCE.txt` (Repo- + Forge-Commit), jdeps mit `-R` (vorher still gescheitert: org.jheaps), **Smoke-Start** der Engine mit der jlink-JRE vor electron-builder (READY 6,7 s). Setup **204 MB** (XMage 322 MB), entpackt 501 MB. Entpackte App ohne System-Java mit `MAGELITE_USER_DATA` getestet: Engine bereit 7,8 s, Seed + Migration 14 Decks, echte DB hash-gleich; volles Spiel mit der gepackten JRE grün. `splash.html` ohne Karten-DB-Text (Fortschritt 20 s). `build.ps1` importiert Forge neu, wenn `manifest.commit` ≠ `FORGE_COMMIT`. **Docker/fly:** Dockerfile kopiert `vendor/forge/{lib,FORGE_COMMIT}` in die Engine-Stufe, `res` + Metadaten nach `/app/forge`, Lizenzen nach `/app`, `--forge=/app/forge`; `.dockerignore` ohne XMage-Zeilen (+ Secrets-Muster); `deploy-fly.ps1` mit Forge-Wache (manifest/Commit/cardsfolder.zip/lib) und 36×5 s Versions-Wartezeit; `fly.toml` nur Kommentar (`grace_period` 420 s bleibt für den ersten Forge-Deploy). Image **386 MB** (XMage 493 MB); im Container (2 CPU/4 GB): Kaltstart 16,8 s, Warmstart 6,7 s, e2e-tables grün; Heap nach Boot 157 MB (RSS ~610 MB), 1 Tisch Spitze 422 MB (RSS 826 MB), 2 Tische 873 MB; mit 2 GB/1 CPU kein OOM, aber ~1,9 s/Zug statt ~1,1. Kein fly-Deploy (Phase 5). Offen für Phase 5: VM-Größe entscheiden (RAM kein Engpass mehr, CPU schon), `docs/SERVER.md` auf Forge, `LICENSES/XMage-MIT.txt` behalten (Brackets-Daten, konvertierte Sample-Listen). |
+| 5 Doku + Abnahme (vor Merge) | ✅ **Doku:** CLAUDE.md auf Forge (Regeln aus Plan §5.11: vendor nur per Import, Spiel-Thread/inbox/Park, Wire-Namen, Arbeitsverzeichnis, Decktext v2, Test-App-Verzeichnis, GPL), README, DECISIONS (Forge-Eintrag, XMage-Einträge historisch), CODEMAP, DEVELOPMENT, SERVER (inkl. „Erster Forge-Deploy“), `LICENSES/THIRD-PARTY.md`, `docs/architecture.md` → `docs/archive/xmage-architecture.md`, STATUS-Altlasten unter „Historisch (XMage)“. **Parität (Plan §8):** frischer Klon → `build.ps1` (inkl. Forge-Import) 274 s, Engine 8 s, e2e-flow grün; Archidekt-URL-Import live + Spiel grün; Partner (Thrasios + Tymna) mit DFC/MDFC/Adventure/Split: Validierung (Farbidentität inkl. Rückseiten) + Spiel + Ansicht grün; Abläufe attack-undo, gemstone, modal-hover, pass-ui grün (FX-Animationen hier aus, weil Windows „Bewegung reduzieren“ an ist – UI-Absicht). **Fix:** F9/F11 übersprangen den eigenen Angriff nicht (XMage tat es, sofern kein Angriffszwang) → `AutoPassPolicy.skipsOwnAttack`. `steps-pass-ui` an Forge-Tempo und den Schnellstart-Fallback der UI angepasst. Vorschau ohne `unfinished`. **Offen (braucht Nutzer):** Test-App ausprobieren; fly-VM-Größe; Merge `forge` → `main` + Push; Release 0.2.0 (`release.ps1 -Bump minor`, `publish-setup.ps1`) + erster fly-Deploy (migriert Server-Decks, Sicherung auf dem Volume). |
 
 ## Ideen (nicht beauftragt)
 

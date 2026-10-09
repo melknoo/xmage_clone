@@ -6,7 +6,8 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 /**
- * Log4j-Konfiguration (XMage nutzt log4j 1.x / reload4j, Javalin via slf4j-reload4j).
+ * Log4j-Konfiguration (MageLite nutzt log4j 1.x / reload4j, Javalin via slf4j-reload4j; Forge loggt ueber tinylog
+ * nach logs/forge.log, siehe ForgeBoot).
  */
 public final class LogConfig {
 
@@ -30,9 +31,6 @@ public final class LogConfig {
         p.setProperty("log4j.appender.file.layout", "org.apache.log4j.PatternLayout");
         p.setProperty("log4j.appender.file.layout.ConversionPattern", "%d{yyyy-MM-dd HH:mm:ss,SSS} %-5p [%t] %c{1} - %m%n");
 
-        // AI loggt auf INFO sehr viel (printBattlefieldScore kostet Zeit)
-        p.setProperty("log4j.logger.mage.player.ai", "WARN");
-        p.setProperty("log4j.logger.com.j256.ormlite", "WARN");
         p.setProperty("log4j.logger.org.eclipse.jetty", "WARN");
         p.setProperty("log4j.logger.io.javalin", "WARN");
         p.setProperty("log4j.logger.dev.magelite", "INFO");

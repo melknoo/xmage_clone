@@ -19,7 +19,7 @@
    "wait": 3000
   },
   {
-   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='PRECOMBAT_MAIN'&&g.answeredPromptId!==p.id){clearInterval(t);g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('F9 in Main 1, nextStop='+p.nextStop)}else if(p&&p.kind==='ASK'&&g.answeredPromptId!==p.id){g.answer({bool:false})}},200);setTimeout(()=>{clearInterval(t);r('Timeout Main 1')},90000)})"
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='PRECOMBAT_MAIN'&&g.answeredPromptId!==p.id){clearInterval(t);g.setTempo('BEDACHT');g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('F9 in Main 1 (Bots BEDACHT), nextStop='+p.nextStop)}else if(p&&p.kind==='ASK'&&g.answeredPromptId!==p.id){g.answer({bool:false})}},200);setTimeout(()=>{clearInterval(t);r('Timeout Main 1')},90000)})"
   },
   {
    "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const s=g.state;const p=g.prompt;const me=s&&s.players.find(x=>x.me);if(p&&g.answeredPromptId!==p.id&&p.kind==='PICK_TARGET'){const open=(p.targets||[]).filter(x=>!(p.chosen||[]).includes(x));if(open.length)g.answer({uuid:open[0]});else g.answer({bool:false})}if(me&&me.skips&&me.skips.length&&!me.active&&!p){clearInterval(t);r('skips='+me.skips+' Zug '+s.turn)}},300);setTimeout(()=>{clearInterval(t);r('Timeout skips')},60000)})"
@@ -53,11 +53,12 @@
    "timeout": 20000
   },
   {
-   "click": "[data-testid=home-quickstart]"
+   "js": "window.__ml.api.start({deck:{type:'user',id:987654},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'}).then(()=>'kein Fehler',e=>'Fehler: '+(e&&e.message))",
+   "expect": "nicht gefunden",
+   "name": "Start mit unbekanntem Deck"
   },
   {
-   "waitFor": "[data-testid=toast][data-kind=error]",
-   "timeout": 15000
+   "wait": 300
   },
   {
    "jsFile": "wait-images.js"

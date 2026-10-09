@@ -1,3 +1,15 @@
+HINWEIS (MageLite): Diese MIT-Lizenz gilt NICHT fuer die Regel-Engine. Ab MageLite 0.2 (Branch forge) nutzt
+MageLite die Engine Forge (GPL-3.0, siehe LICENSES/Forge-GPL-3.0.txt); MageLite selbst steht unter
+GPL-3.0-or-later (LICENSE). Sie gilt nur fuer die aus XMage 1.4.60 uebernommenen Dateien:
+
+  - engine/src/main/resources/brackets/*  (game-changers.txt, infinite-combos.txt)
+  - die Commander-Sample-Decklisten engine/src/main/resources/sample-decks/**  (aus den XMage-
+    Sample-Decks in das MageLite-Textformat konvertiert)
+
+Uebersicht aller Fremdkomponenten: LICENSES/THIRD-PARTY.md
+
+---
+
 MIT License
 
 Copyright (c) 2010 betasteward@gmail.com
@@ -22,4 +34,6 @@ SOFTWARE.
 
 ---
 Used in MageLite: engine/src/main/resources/brackets/infinite-combos.txt is copied
-unchanged from XMage 1.4.60 (mage-1.4.60.jar) and is covered by the license above.
+unchanged from XMage 1.4.60 (mage-1.4.60.jar); brackets/game-changers.txt is the XMage 1.4.60
+list (BracketLegalityLabel); the sample deck lists were converted from the XMage 1.4.60
+sample decks. All are covered by the license above.

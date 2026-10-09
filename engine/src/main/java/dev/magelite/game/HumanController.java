@@ -171,6 +171,10 @@ public final class HumanController extends PlayerControllerHuman {
         if (seat.conceded()) {
             return;
         }
+        if (AutoPassPolicy.skipsOwnAttack(seat.pass, getGame(), attackingPlayer)
+                && forge.game.combat.CombatUtil.validateAttackers(combat)) {
+            return; // F9/F11: kein Angriff, solange kein Angriffszwang besteht (wie XMage)
+        }
         this.combat = combat;
         this.combatPlayer = attackingPlayer;
         try {

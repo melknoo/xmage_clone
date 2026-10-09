@@ -171,6 +171,15 @@ final class AutoPassPolicy {
     }
 
     /** Läuft ein F-Tasten-Passen noch? Beendet es, wenn sein Ziel erreicht ist. */
+    /**
+     * F9/F11 aktiv: den eigenen Angriff ueberspringen (wie XMage bei passedAllTurns/passedUntilEndStepBeforeMyTurn);
+     * F4/F5/F7 halten dort weiter an.
+     */
+    static boolean skipsOwnAttack(SeatPass sp, Game game, Player me) {
+        SkipMode m = sp.skip;
+        return (m == SkipMode.MY_TURN || m == SkipMode.END_STEP_BEFORE_MY_TURN) && skipActive(sp, game, me);
+    }
+
     private static boolean skipActive(SeatPass sp, Game game, Player me) {
         SkipMode m = sp.skip;
         if (m == SkipMode.NONE) {

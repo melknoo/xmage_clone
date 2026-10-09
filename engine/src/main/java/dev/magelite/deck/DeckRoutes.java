@@ -150,7 +150,6 @@ public final class DeckRoutes implements HttpServer.Module {
         out.put("commanders", r.commanders());
         out.put("cardCount", r.cardCount());
         out.put("unknown", r.unknown());
-        out.put("unfinished", List.of()); // Feld bleibt leer, bis die UI die Issue-Art "unfinished" nicht mehr liest
         List<Map<String, Object>> issues = new ArrayList<>();
         for (TextDeckParser.Issue i : r.issues()) {
             Map<String, Object> m = new LinkedHashMap<>();
