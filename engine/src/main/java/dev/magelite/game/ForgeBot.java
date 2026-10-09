@@ -55,17 +55,19 @@ public final class ForgeBot extends PlayerControllerAi {
 
     @Override
     public Player chooseStartingPlayer(boolean isFirstGame) {
-        return getPlayer();
+        ScenarioHooks sc = host.scenario();
+        Player p = sc == null ? null : sc.startingPlayer(host);
+        return p != null ? p : getPlayer();
     }
 
     /** Lobby-Spieler, der fuer einen Bot-Sitz den {@link ForgeBot} erzeugt (ohne Simulation). */
     static final class Lobby extends LobbyPlayerAi {
         private final GameHost host;
 
-        Lobby(String name, GameHost host) {
+        Lobby(String name, GameHost host, String profile) {
             super(name, null);
             this.host = host;
-            setAiProfile(ForgeBoot.AI_PROFILE);
+            setAiProfile(profile == null ? ForgeBoot.AI_PROFILE : profile);
         }
 
         @Override

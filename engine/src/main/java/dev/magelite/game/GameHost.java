@@ -1,6 +1,8 @@
 package dev.magelite.game;
 
+import dev.magelite.boot.ForgeBoot;
 import dev.magelite.deck.LoadedDeck;
+import dev.magelite.stats.StatsSink;
 import dev.magelite.view.ForgeViewMapper;
 import dev.magelite.view.IdCodec;
 import dev.magelite.view.RichText;
@@ -31,14 +33,17 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -272,6 +277,12 @@ public final class GameHost {
         return t;
     });
 
+    /** Spielereignisse fuer Animationen (Spiel-Thread fuellt, vor dem naechsten State bzw. per Wachhund geleert) */
+    private final ConcurrentLinkedQueue<Messages.FxEvent> fx = new ConcurrentLinkedQueue<>();
+    private final AtomicInteger fxSize = new AtomicInteger();
+    private volatile long lastFxAt;
+    private static final int FX_MAX = 200;
+    private static final long FX_FLUSH_AFTER_MS = 150;
     private final AtomicLong stateSeq = new AtomicLong();
     private final AtomicLong promptSeq = new AtomicLong();
     private final Deque<Messages.LogEntry> logTail = new ArrayDeque<>();
@@ -288,6 +299,7 @@ public final class GameHost {
     private volatile Thread gameThread;
     private volatile long startedAt;
     private volatile int turnCap;
+    private volatile ScenarioHooks scenario;
     private volatile boolean aborting;
     private volatile long lastProgressAt = System.currentTimeMillis();
     private long lastCpuNs = -1;
@@ -296,7 +308,7 @@ public final class GameHost {
     private int decisionTurn;
     private int decisionsThisTurn;
 
-    private GameHost(GameSetup setup, List<GameSetup.SeatSpec> specs, TempoSettings.Preset preset) {
+    private GameHost(GameSetup setup, List<GameSetup.SeatSpec> specs, TempoSettings.Preset preset, List<String> botProfiles) {
         this.setup = setup;
         this.tempo = new TempoSettings(preset);
         Set<String> usedNames = new HashSet<>();
@@ -317,7 +329,9 @@ public final class GameHost {
                 lobby = new HumanController.Lobby(name, this, seat);
             } else {
                 name = botName(spec.deck(), usedNames);
-                lobby = new ForgeBot.Lobby(name, this);
+                String profile = botProfiles == null || botProfiles.isEmpty() ? ForgeBoot.AI_PROFILE
+                        : botProfiles.get(Math.min(index, botProfiles.size() - 1));
+                lobby = new ForgeBot.Lobby(name, this, profile);
             }
             RegisteredPlayer rp = RegisteredPlayer.forCommander(spec.deck().newDeck());
             rp.setPlayer(lobby);
@@ -352,16 +366,25 @@ public final class GameHost {
             p.updateOpponentsForView();
         }
         game.getGameLog().addObserver((o, arg) -> onLogAdded());
+        game.subscribeToEvents(new ForgeEvents(this));
+        for (HumanSeat seat : humans.values()) {
+            StatsSink.register(id, seat.playerId);
+        }
     }
 
     public static GameHost create(GameSetup setup) {
-        return new GameHost(setup, setup.seats(), setup.tempo());
+        return new GameHost(setup, setup.seats(), setup.tempo(), null);
     }
 
     /** Spiel nur mit Bots (Spikes, Bot-Arena); kein {@link GameSetup}. */
     public static GameHost createBots(List<LoadedDeck> decks, TempoSettings.Preset preset) {
+        return createBots(decks, preset, null);
+    }
+
+    /** @param profiles KI-Profil je Sitz (Forge-Profilname, z.B. "Default", "Reckless"); null = MageLite-Profil */
+    public static GameHost createBots(List<LoadedDeck> decks, TempoSettings.Preset preset, List<String> profiles) {
         List<GameSetup.SeatSpec> specs = decks.stream().map(GameSetup.SeatSpec::bot).toList();
-        return new GameHost(null, specs, preset);
+        return new GameHost(null, specs, preset, profiles);
     }
 
     private static String botName(LoadedDeck deck, Set<String> used) {
@@ -454,6 +477,31 @@ public final class GameHost {
 
     public void setOnFinished(Consumer<GameHost> onFinished) {
         this.onFinished = onFinished;
+    }
+
+    /** Test-Szenario (Dev-Modus, Spikes); vor {@link #start()} setzen. */
+    public void setScenario(ScenarioHooks scenario) {
+        this.scenario = scenario;
+    }
+
+    ScenarioHooks scenario() {
+        return scenario;
+    }
+
+    /** Forge-Spieler zu einer Wire-id (nur Spiel-Thread, z.B. Szenarien); null wenn unbekannt. */
+    public Player forgePlayer(UUID wireId) {
+        IdCodec.Decoded d = ids.decode(wireId);
+        return d == null || d.kind() != IdCodec.Kind.PLAYER ? null : game.getPlayer(d.id());
+    }
+
+    /** Wire-id eines Forge-Spielers. */
+    public UUID wireId(Player p) {
+        return ids.player(p.getId());
+    }
+
+    /** Menschlicher Sitz eines Forge-Spielers (null = Bot). */
+    HumanSeat seatOf(Player p) {
+        return p == null ? null : humans.get(ids.player(p.getId()));
     }
 
     /** Spiel endet als Unentschieden, sobald dieser Zug vorbei ist (0 = aus). Fuer Spikes. */
@@ -692,7 +740,8 @@ public final class GameHost {
     private void runGame() {
         String error = null;
         try {
-            match.startGame(game, null);
+            ScenarioHooks sc = scenario;
+            match.startGame(game, sc == null ? null : () -> sc.startGame(this));
         } catch (Throwable e) {
             LOG.error("Spiel abgebrochen", e);
             error = e.toString();
@@ -1085,6 +1134,7 @@ public final class GameHost {
      * @return der State von {@code forSeat} (bzw. des ersten Menschen)
      */
     private StateDto sendState(HumanSeat forSeat, PromptBridge.StateMode mode) {
+        flushFx(); // Ereignisse vor dem State, der sie widerspiegelt (Outbox haelt die Reihenfolge)
         trackEliminations();
         turn = game.getPhaseHandler().getTurn();
         long seq = stateSeq.incrementAndGet();
@@ -1187,6 +1237,81 @@ public final class GameHost {
         }
     }
 
+    // ------------------------------------------------------------------ Ereignisse (Animationen)
+
+    /** Spiel-Thread ({@link ForgeEvents}): Ereignis einreihen. */
+    void onFx(Messages.FxEvent e) {
+        if (fx.isEmpty()) {
+            lastFxAt = System.currentTimeMillis();
+        }
+        fx.add(e);
+        if (fxSize.incrementAndGet() > FX_MAX && fx.poll() != null) {
+            fxSize.decrementAndGet();
+        }
+    }
+
+    /**
+     * Gesammelte Ereignisse an alle Menschen: gleiche Token-Tode zu einem Eintrag (xN), Lebensverlust durch Schaden
+     * nicht doppelt, verdeckte Karten nur an den Besitzer. Spiel-Thread (vor jedem State) oder Wachhund.
+     */
+    private void flushFx() {
+        if (fx.isEmpty()) {
+            return;
+        }
+        List<Messages.FxEvent> batch = new ArrayList<>();
+        Messages.FxEvent e;
+        while ((e = fx.poll()) != null) {
+            fxSize.decrementAndGet();
+            batch.add(e);
+        }
+        Map<String, Integer> tokenDeaths = new LinkedHashMap<>();
+        List<Messages.FxEvent> out = new ArrayList<>();
+        for (Messages.FxEvent x : batch) {
+            if ("tokenDied".equals(x.kind()) && x.name() != null) {
+                tokenDeaths.merge(x.name() + "|" + x.ownerId(), 1, Integer::sum);
+            }
+        }
+        Set<String> tokenSeen = new HashSet<>();
+        for (Messages.FxEvent x : batch) {
+            if ("tokenDied".equals(x.kind()) && x.name() != null) {
+                String key = x.name() + "|" + x.ownerId();
+                if (!tokenSeen.add(key)) {
+                    continue;
+                }
+                int n = tokenDeaths.getOrDefault(key, 1);
+                out.add(n > 1 ? x.withAmount(n) : x);
+                continue;
+            }
+            if ("life".equals(x.kind()) && x.amount() != null && x.amount() < 0) {
+                int lost = -x.amount();
+                boolean fromDamage = batch.stream().anyMatch(d -> "damage".equals(d.kind()) && d.objectId() == null
+                        && Objects.equals(d.playerId(), x.playerId()) && d.amount() != null && d.amount() == lost);
+                if (fromDamage) {
+                    continue;
+                }
+            }
+            out.add(x);
+        }
+        for (HumanSeat s : humans.values()) {
+            List<Messages.FxEvent> mine = new ArrayList<>(out.size());
+            for (Messages.FxEvent x : out) {
+                if (Boolean.TRUE.equals(x.hidden()) && !s.playerId.equals(x.ownerId())) {
+                    continue;
+                }
+                mine.add(x);
+            }
+            if (!mine.isEmpty()) {
+                send(s, new Messages.Events(mine));
+            }
+        }
+        if (!spectators.isEmpty()) {
+            List<Messages.FxEvent> pub = out.stream().filter(x -> !Boolean.TRUE.equals(x.hidden())).toList();
+            if (!pub.isEmpty()) {
+                sendSpectators(new Messages.Events(pub));
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ Wachhund (Aktivitaet)
 
     private static final ThreadMXBean THREADS = ManagementFactory.getThreadMXBean();
@@ -1201,6 +1326,9 @@ public final class GameHost {
             if (ticks % 4 == 0 && humans.size() > 1
                     && humans.values().stream().anyMatch(s -> !s.conceded && !s.connected())) {
                 broadcastSeats();
+            }
+            if (!fx.isEmpty() && now - lastFxAt > FX_FLUSH_AFTER_MS) {
+                flushFx(); // kein State in Sicht (gedrosselt/wartend): Ereignisse trotzdem zeigen
             }
             if (++ticks % 2 == 0) {
                 sendActivity(t, now);

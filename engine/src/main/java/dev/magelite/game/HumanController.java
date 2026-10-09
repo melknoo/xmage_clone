@@ -22,6 +22,7 @@ public final class HumanController extends PlayerControllerHuman {
     /** laufende Angriffs-/Block-Erklaerung (Spiel-Thread) */
     Combat combat;
     Player combatPlayer;
+    private boolean scenarioMulliganDone;
 
     HumanController(Game game, Player player, LobbyPlayer lobby, GameHost host, GameHost.HumanSeat seat) {
         super(game, player, lobby);
@@ -82,12 +83,19 @@ public final class HumanController extends PlayerControllerHuman {
         if (seat.conceded()) {
             return true;
         }
+        ScenarioHooks sc = host.scenario();
+        if (sc != null && !scenarioMulliganDone) {
+            scenarioMulliganDone = true;
+            sc.beforeMulligan(host, getPlayer());
+        }
         return super.mulliganKeepHand(player, cardsToReturn);
     }
 
     @Override
     public Player chooseStartingPlayer(boolean isFirstGame) {
-        return getPlayer(); // wie bei XMage: keine Frage, wer beginnt
+        ScenarioHooks sc = host.scenario();
+        Player p = sc == null ? null : sc.startingPlayer(host);
+        return p != null ? p : getPlayer(); // wie bei XMage: keine Frage, wer beginnt
     }
 
     /** Stapel waehlen (Fact or Fiction & Co.) als CHOOSE_PILE statt Forges Liste mit Pseudo-Karten. */
