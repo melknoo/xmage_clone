@@ -1,0 +1,39 @@
+# Forge-Umbau: voruebergehend nicht kompilierte Quellen (Ant-Muster relativ zu src/main/java bzw. "test:" + src/test/java).
+# Beim Portieren die jeweilige Zeile loeschen. Gelesen von build.gradle.kts.
+mage/**
+dev/magelite/Main.java
+dev/magelite/game/**
+dev/magelite/view/GameViewMapper.java
+dev/magelite/spike/**
+dev/magelite/api/**
+dev/magelite/relay/**
+dev/magelite/deck/BracketAnalyzer.java
+dev/magelite/deck/CardNameSuggester.java
+dev/magelite/deck/DeckLoader.java
+dev/magelite/deck/LoadedDeck.java
+dev/magelite/deck/SampleDeckCatalog.java
+dev/magelite/deck/TextDeckParser.java
+dev/magelite/deck/XmageUnfinished.java
+dev/magelite/deck/DeckRoutes.java
+dev/magelite/stats/StatsWatcher.java
+test:dev/magelite/deck/**
+test:dev/magelite/game/**
+# transitiv abhaengig (vom Compiler ermittelt)
+dev/magelite/admin/AdminRoutes.java
+dev/magelite/admin/AdminService.java
+dev/magelite/auth/AuthRoutes.java
+dev/magelite/auth/Mailer.java
+dev/magelite/auth/SignupRoutes.java
+dev/magelite/auth/Turnstile.java
+dev/magelite/deck/DeckResolver.java
+dev/magelite/deck/DeckStore.java
+dev/magelite/deck/DeckUrlImporter.java
+dev/magelite/images/ImageService.java
+dev/magelite/social/SocialRoutes.java
+dev/magelite/social/SocialService.java
+dev/magelite/stats/GameRecorder.java
+dev/magelite/stats/StatsRoutes.java
+dev/magelite/auth/SignupService.java
+dev/magelite/social/FriendStore.java
+dev/magelite/stats/ProfileService.java
+dev/magelite/auth/AccountService.java

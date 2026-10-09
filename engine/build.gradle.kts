@@ -13,11 +13,16 @@ version = appVersion
 
 repositories { mavenCentral() }
 
-val xmageLib = rootDir.resolve("../vendor/xmage/lib")
+// Forge-Engine: vendor/forge entsteht nur durch scripts/import-forge.ps1 (Commit aus vendor/forge/FORGE_COMMIT)
+val forgeDir = rootDir.resolve("../vendor/forge")
+val forgeCommit: String = forgeDir.resolve("FORGE_COMMIT").let { if (it.isFile) it.readText().trim() else "" }
 
 dependencies {
-    // XMage-Jars unveraendert einbinden (nie neu packen: CardRepository prueft Manifest-Build-Time)
-    implementation(fileTree(xmageLib) { include("*.jar") })
+    implementation(fileTree(forgeDir.resolve("lib")) { include("*.jar") })
+    // Kamen frueher ueber die XMage-Jars: Logging (log4j-API in vielen Klassen, Javalin via slf4j) und jsoup (RichText)
+    implementation("ch.qos.reload4j:reload4j:1.2.25")
+    implementation("org.slf4j:slf4j-reload4j:2.0.17")
+    implementation("org.jsoup:jsoup:1.21.2")
 
     implementation("io.javalin:javalin:6.4.0")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
@@ -28,7 +33,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
-// slf4j kommt bereits aus den XMage-Jars (slf4j-api 2.0.17 + reload4j); Javalin bringt eigenes slf4j-api mit
+// slf4j-Provider ist reload4j; Forges slf4j-tinylog ist beim Import ausgeschlossen
 configurations.all {
     exclude(group = "org.slf4j", module = "slf4j-simple")
 }
@@ -44,15 +49,27 @@ tasks.jar {
     manifest { attributes("Implementation-Version" to appVersion) }
 }
 
-// Version fuer Main.VERSION (auch bei `gradlew run` ohne Jar)
+// Version fuer Main.VERSION (auch bei `gradlew run` ohne Jar); forgeCommit prueft ForgeBoot gegen vendor/forge/manifest.json
 tasks.processResources {
     inputs.property("appVersion", appVersion)
-    filesMatching("magelite-version.properties") { expand("version" to appVersion) }
+    inputs.property("forgeCommit", forgeCommit)
+    filesMatching("magelite-version.properties") { expand("version" to appVersion, "forgeCommit" to forgeCommit) }
+}
+
+// Uebergang (Forge-Umbau): XMage-gebundener Code und alles, was davon abhaengt, bleibt aus dem Build, bis Kern
+// (Phase 1) und Deck-Layer (Phase 2) portiert sind. Liste in forge-transition.excludes; Zeilen beim Portieren loeschen,
+// am Ende die Datei samt diesem Block.
+val transitionExcludes: List<String> = file("forge-transition.excludes").let { f ->
+    if (!f.isFile) emptyList() else f.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+}
+sourceSets {
+    main { java { exclude(transitionExcludes.filter { !it.startsWith("test:") }) } }
+    test { java { exclude(transitionExcludes.filter { it.startsWith("test:") }.map { it.removePrefix("test:") }) } }
 }
 
 val runDir = layout.projectDirectory.dir("run")
-val vendorDir = rootDir.resolve("../vendor/xmage").canonicalPath
-val jvmArgsCommon = listOf("-Xmx3g", "-XX:+UseG1GC", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Dmagelite.vendor=$vendorDir")
+val forgeHome = forgeDir.canonicalPath
+val jvmArgsCommon = listOf("-Xmx3g", "-XX:+UseG1GC", "-Djava.awt.headless=true", "-Dfile.encoding=UTF-8", "-Dmagelite.forge=$forgeHome")
 
 application {
     mainClass.set("dev.magelite.Main")
@@ -106,31 +123,6 @@ tasks.register<JavaExec>("humanSpike") {
     doFirst { runDir.asFile.mkdirs() }
 }
 
-// Regressionstest: Bot bestimmt per Effekt (Odric & Co.) die Blocker eines anderen Spielers
-tasks.register<JavaExec>("blockerSpike") {
-    group = "magelite"
-    description = "Headless-Spike: Odric-Bot greift an und bestimmt die Blocker (ChooseBlockersEffect)"
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("dev.magelite.spike.BlockerSpike")
-    jvmArgs = jvmArgsCommon
-    workingDir = runDir.asFile
-    args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
-    doFirst { runDir.asFile.mkdirs() }
-}
-
-// Regressionstest: Thread.interrupt() mitten in CardRepository.getNames() darf die Karten-DB nicht kaputt machen
-// (Demonic-Consultation-Absturz; braucht unsere DatabaseUtils mit H2 retry:). Bewusst nicht Teil von `test`.
-tasks.register<JavaExec>("dbInterruptSpike") {
-    group = "magelite"
-    description = "Karten-DB ueberlebt Thread-Interrupt waehrend einer Abfrage (DatabaseUtils retry:)"
-    classpath = sourceSets["main"].runtimeClasspath
-    mainClass.set("dev.magelite.spike.DbInterruptSpike")
-    jvmArgs = jvmArgsCommon
-    workingDir = runDir.asFile
-    args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
-    doFirst { runDir.asFile.mkdirs() }
-}
-
 // KI-Vergleich: zwei Bot-Varianten (je 2 Sitze) spielen gegeneinander, Ergebnis + CSV in run/arena
 tasks.register<JavaExec>("botArena") {
     group = "magelite"
@@ -140,6 +132,18 @@ tasks.register<JavaExec>("botArena") {
     jvmArgs = jvmArgsCommon
     workingDir = runDir.asFile
     args = (project.findProperty("spikeArgs") as String?)?.split(" ")?.filter { it.isNotBlank() } ?: emptyList()
+    doFirst { runDir.asFile.mkdirs() }
+}
+
+// Forge booten (gleiche Pfade wie `run`) und Kennzahlen ausgeben: Karten, Editionen, Boot-Zeit, Heap
+tasks.register<JavaExec>("forgeCheck") {
+    group = "magelite"
+    description = "Forge-Boot pruefen: Karten > 25k, Editionen > 500, Boot-Zeit, Heap"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.magelite.boot.ForgeBoot")
+    jvmArgs = jvmArgsCommon
+    workingDir = runDir.asFile
+    args = listOf("--data=${runDir.asFile.absolutePath}", "--forge=$forgeHome")
     doFirst { runDir.asFile.mkdirs() }
 }
 
