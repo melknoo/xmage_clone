@@ -60,7 +60,8 @@ const samples = (await call('GET', '/api/samples', { cookie: owner })).json
 const sample = (i) => ({ type: 'sample', id: samples[i].id })
 
 // ---- Tisch: Owner, Bob, Bot
-r = await call('POST', '/api/tables', { cookie: owner, body: { name: `Zuschau-Test ${tag}`, tempo: 'BLITZ' } })
+// NORMAL statt BLITZ: Forge-Bots beenden ein BLITZ-Spiel sonst, bevor alle Zuschauer-Faelle durch sind
+r = await call('POST', '/api/tables', { cookie: owner, body: { name: `Zuschau-Test ${tag}`, tempo: 'NORMAL' } })
 ok(r.status === 200, `Tisch eroeffnet -> ${r.status} ${r.json?.error ?? ''}`)
 const tid = r.json?.id
 const tableName = r.json?.name
@@ -341,7 +342,7 @@ await sleep(1500)
 ok(A.seats?.spectators?.length === 1, `nach dem Schliessen: ${JSON.stringify(A.seats?.spectators)}`)
 const again = spectator(extra[7], { check: false })
 await sleep(1500)
-ok(again.open && again.closeCode === null, 'danach ist wieder Platz')
+ok(again.open && again.closeCode === null, `danach ist wieder Platz (close=${again.closeCode}, Spielende=${!!A.over})`)
 again.ws.close()
 
 // ---- spielen lassen, Lecks pruefen

@@ -41,7 +41,7 @@
    "js": "window.__hold.firstMain=false;'weiter'"
   },
   {
-   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&s.stack.length)){clearInterval(t);r('Blaze X='+s.stack[0].x)}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},30000)})"
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&(s.stack.length||/Blaze/.test(p.messageText||'')))){clearInterval(t);r('Blaze-Ziel'+(s.stack.length?' X='+s.stack[0].x:''))}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Prompt\")},30000)})"
   },
   {
    "wait": 800
@@ -68,14 +68,7 @@
    "shot": "{{OUT}}/../szenario/convoke-3-mana.png"
   },
   {
-   "click": {
-    "re": "Länder automatisch",
-    "i": true,
-    "within": "[data-testid=prompt-bar]"
-   }
-  },
-  {
-   "js": "new Promise(r=>{let n=0;const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.stack.length===0&&g.answeredPromptId!==p.id&&s.players.find(x=>x.me).battlefield.some(c=>c.name==='Guardian of Vitu-Ghazi')){clearInterval(t);r('fertig nach '+n+' Klicks, nextStop='+p.nextStop)}if(p&&p.kind==='PLAY_MANA'&&g.answeredPromptId!==p.id&&(p.specialTargets||[]).length){const id=p.specialTargets.find(x=>document.querySelector('[data-obj=\"'+x+'\"]'));const el=id&&document.querySelector('[data-obj=\"'+id+'\"]');if(el){n++;el.click()}}},600);setTimeout(()=>{clearInterval(t);r('Timeout Einberufen nach '+n)},60000)})"
+   "js": "new Promise(r=>{let n=0;let auto=null;const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.stack.length===0&&g.answeredPromptId!==p.id&&s.players.find(x=>x.me).battlefield.some(c=>c.name==='Guardian of Vitu-Ghazi')){clearInterval(t);r('fertig nach '+n+' Klicks, nextStop='+p.nextStop)}if(p&&p.kind==='PLAY_MANA'&&g.answeredPromptId!==p.id){if((p.specialTargets||[]).length){const id=p.specialTargets.find(x=>document.querySelector('[data-obj=\"'+x+'\"]'));const el=id&&document.querySelector('[data-obj=\"'+id+'\"]');if(el){n++;el.click()}}else if(auto!==p.id){auto=p.id;const b=[...document.querySelectorAll('[data-testid=prompt-bar] button')].find(x=>/Länder automatisch/i.test(x.textContent||''));if(b)b.click();else g.autoPay()}}},600);setTimeout(()=>{clearInterval(t);r('Timeout Einberufen nach '+n)},60000)})"
   },
   {
    "wait": 800
@@ -87,7 +80,7 @@
    "shot": "{{OUT}}/../szenario/convoke-4-after.png"
   },
   {
-   "js": "window.__hold.afterGuardian=false;window.__hold.convoke=false;'weiter'"
+   "js": "window.__hold.afterGuardian=false;window.__hold.convoke=false;window.__ml.game.getState().setTempo('BEDACHT');'weiter (Bots BEDACHT: Forge spielt Gegnerzuege sonst schneller als der Screenshot)'"
   },
   {
    "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&p.kind==='SELECT'&&p.mode==='priority'&&s&&s.step==='POSTCOMBAT_MAIN'){clearInterval(t);g.action('PASS_PRIORITY_UNTIL_MY_NEXT_TURN');r('Main 2 nextStop='+p.nextStop+' -> F9')}},150);setTimeout(()=>{clearInterval(t);r('Timeout Main 2')},60000)})"

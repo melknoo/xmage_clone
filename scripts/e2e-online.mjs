@@ -183,8 +183,10 @@ ok(r.status === 200, `Owner /api/games/current weiterhin -> ${r.status}`)
 r = await call('GET', '/api/health')
 ok(r.json?.games === 1, `Spiel laeuft fuer Owner weiter (games=${r.json?.games})`)
 const turnAtLeave = A.last?.turn ?? 0
-await sleep(15000)
-ok((A.last?.turn ?? 0) >= turnAtLeave && !A.over, `Owner spielt weiter (Zug ${A.last?.turn}), kein gameOver`)
+// kurz warten: Bobs Aufgabe beendet das Spiel nicht; Forge-Bots auf MAX spielen so schnell, dass es nach 15 s
+// schon regulaer vorbei sein kann - ein spaeteres Ende ist ok, solange danach noch Zuege liefen
+await sleep(3000)
+ok((A.last?.turn ?? 0) >= turnAtLeave && (!A.over || (A.last?.turn ?? 0) > turnAtLeave), `Owner spielt weiter (Zug ${turnAtLeave} -> ${A.last?.turn}), gameOver=${!!A.over}`)
 
 // Owner gibt auf -> alle Menschen weg -> Bots geben auf -> Spiel endet
 A.ws.send(JSON.stringify({ t: 'leave' }))

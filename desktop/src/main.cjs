@@ -5,6 +5,18 @@ const path = require('node:path')
 const { Engine } = require('./engine.cjs')
 
 const DEV_UI = process.env.MAGELITE_UI_DEV === '1'
+
+// Datenverzeichnis: Die nicht gepackte App (MageLite.cmd, Repo-Stand) nutzt %APPDATA%\MageLite-dev, damit sie die
+// Daten der installierten App nicht anfasst (die Forge-Engine stellt gespeicherte Decks beim Start auf Decktext v2
+// um). Beim ersten Start kopiert die Engine die echte DB nur lesend dorthin (--seed-db). MAGELITE_USER_DATA
+// ueberschreibt beides. Muss vor requestSingleInstanceLock stehen (eigene Sperre je Verzeichnis).
+const INSTALLED_USER_DATA = app.getPath('userData')
+const DEV_DATA = !app.isPackaged || !!process.env.MAGELITE_USER_DATA
+if (process.env.MAGELITE_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.MAGELITE_USER_DATA))
+} else if (!app.isPackaged) {
+  app.setPath('userData', path.join(app.getPath('appData'), 'MageLite-dev'))
+}
 const logFile = () => path.join(app.getPath('userData'), 'desktop.log')
 const settingsFile = () => path.join(app.getPath('userData'), 'settings.json')
 const DEFAULT_SERVER = 'https://magelite.fly.dev'
@@ -133,7 +145,7 @@ async function boot() {
     minWidth: 1280,
     minHeight: 760,
     backgroundColor: '#121110',
-    title: 'MageLite',
+    title: DEV_DATA ? 'MageLite (Test)' : 'MageLite',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -174,7 +186,7 @@ async function boot() {
   await win.loadFile(path.join(__dirname, 'splash.html'))
   win.show()
 
-  engine = new Engine(app, log)
+  engine = new Engine(app, log, DEV_DATA ? path.join(INSTALLED_USER_DATA, 'engine', 'magelite.db') : null)
   engine.onExit = async (code) => {
     engineInfo = null
     linkedSession = null

@@ -49,6 +49,10 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
   und springt ins Menü.
 - **Für die App** (`MageLite.cmd`) danach `scripts\build.ps1` laufen lassen (baut `ui/dist` und
   `engine/build/install`).
+- **Test-App getrennt von der installierten:** `MageLite.cmd` (nicht gepackt) nutzt `%APPDATA%\MageLite-dev`
+  (Fenstertitel „MageLite (Test)“). Beim ersten Start kopiert die Engine `%APPDATA%\MageLite\engine\magelite.db` nur
+  lesend dorthin (`--seed-db`) und stellt die Kopie auf Forge um; die installierte App bleibt unberührt. Neu
+  übernehmen: `%APPDATA%\MageLite-dev\engine\magelite.db*` löschen. Anderes Verzeichnis: `MAGELITE_USER_DATA`.
 
 ## 3. Testen
 

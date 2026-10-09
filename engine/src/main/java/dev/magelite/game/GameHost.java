@@ -1578,7 +1578,27 @@ public final class GameHost {
             return;
         }
         GameLogEntry e = all.get(all.size() - 1);
-        addLog(e.type() == null ? "INFO" : e.type().name(), e.message());
+        if (logNoise(e)) {
+            return;
+        }
+        addLog(e.type() == null ? "INFO" : e.type().name(), dev.magelite.view.ForgeText.clean(e.message()));
+    }
+
+    /**
+     * Forge-Eintraege ohne Wert fuer den Spielverlauf (XMage hatte sie nicht): jeder Phasenschritt (gut 60 % aller
+     * Zeilen), Mana-Faehigkeiten, Match-Statistik, "restored control over themself" zu Spielbeginn, Dauer/Zugzahl am Ende.
+     */
+    static boolean logNoise(GameLogEntry e) {
+        if (e.type() == null) {
+            return false;
+        }
+        String m = e.message() == null ? "" : e.message().trim();
+        return switch (e.type()) {
+            case PHASE, MANA, MATCH_RESULTS -> true;
+            case PLAYER_CONTROL -> m.endsWith("restored control over themself");
+            case GAME_OUTCOME -> m.startsWith("Match Duration") || m.matches("Turn \\d+");
+            default -> false;
+        };
     }
 
     private void addLog(String kind, String text) {

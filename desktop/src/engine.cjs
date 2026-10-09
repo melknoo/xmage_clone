@@ -37,9 +37,11 @@ function engineClasspath(engineLib) {
 }
 
 class Engine {
-  constructor(app, log) {
+  /** @param seedDb echte DB, die beim ersten Start nur lesend ins eigene Datenverzeichnis kopiert wird (Test-App), sonst null */
+  constructor(app, log, seedDb) {
     this.app = app
     this.log = log
+    this.seedDb = seedDb
     this.proc = null
     this.ready = null
     this.info = null
@@ -65,6 +67,9 @@ class Engine {
       `--ui=${ui}`,
       `--parent-pid=${process.pid}`,
     ]
+    if (this.seedDb && fs.existsSync(this.seedDb) && path.resolve(this.seedDb) !== path.resolve(dataDir, 'magelite.db')) {
+      args.push(`--seed-db=${this.seedDb}`)
+    }
     this.log(`Starte Engine: ${java} (${engineLib})`)
     this.stopping = false
     this.proc = spawn(java, args, { cwd: dataDir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })

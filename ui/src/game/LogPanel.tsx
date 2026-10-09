@@ -18,6 +18,12 @@ const ROUTINE: RegExp[] = [
   /\bannounces a value of\b/i,
 ]
 
+/**
+ * Routine nach Eintragsart (Forge): Zugbeginn (steht schon in der Gruppen-Leiste), Aufloesen (wiederholt "X cast Y"),
+ * Ersatzeffekte wie "enters tapped". Phasen, Mana und Match-Statistik filtert schon die Engine.
+ */
+const ROUTINE_KINDS = new Set(['TURN', 'STACK_RESOLVE', 'EFFECT_REPLACED'])
+
 /** Objekt-Kuerzel "[3fa]" - beim Zusammenfassen gleicher Zeilen ignoriert ("creates a Scute Swarm [998] token" ×112) */
 const OBJ_TAG = /\s*\[[0-9a-f]{3,}\]/gi
 
@@ -43,8 +49,8 @@ function plainOf(e: LogEntry): string {
   return e.rich.map((r) => r.text ?? (r.br ? ' ' : '')).join('').trim()
 }
 
-function filterOf(f: LogFilter, plain: string): boolean {
-  return f === 'all' || !ROUTINE.some((r) => r.test(plain))
+function filterOf(f: LogFilter, plain: string, kind: string): boolean {
+  return f === 'all' || (!ROUTINE_KINDS.has(kind) && !ROUTINE.some((r) => r.test(plain)))
 }
 
 /**
@@ -83,7 +89,7 @@ export function LogPanel() {
       }
       g.active ??= entry.active
       const plain = plainOf(entry)
-      if (!filterOf(filter, plain)) return
+      if (!filterOf(filter, plain, entry.kind)) return
       g.shown++
       const same = plain.replace(OBJ_TAG, '')
       const last = g.lines[g.lines.length - 1]

@@ -34,6 +34,25 @@ public final class Db implements AutoCloseable {
         migrate();
     }
 
+    /**
+     * Test-App: legt {@code dest} einmalig als Kopie von {@code src} an (nur wenn {@code dest} fehlt). Die Quelle wird
+     * nur lesend geoeffnet; {@code VACUUM INTO} liefert einen konsistenten Stand, auch wenn die andere App gerade laeuft.
+     *
+     * @return true, wenn kopiert wurde
+     */
+    public static boolean seedIfMissing(Path src, Path dest) throws SQLException {
+        if (java.nio.file.Files.exists(dest) || !java.nio.file.Files.isRegularFile(src)) {
+            return false;
+        }
+        org.sqlite.SQLiteConfig cfg = new org.sqlite.SQLiteConfig();
+        cfg.setReadOnly(true);
+        try (Connection c = cfg.createConnection("jdbc:sqlite:" + src.toAbsolutePath()); Statement st = c.createStatement()) {
+            st.execute("VACUUM INTO '" + dest.toAbsolutePath().toString().replace("'", "''") + "'");
+        }
+        LOG.info("Test-Daten: Kopie von " + src + " angelegt (Quelle unveraendert)");
+        return true;
+    }
+
     private void migrate() throws SQLException {
         int current = 0;
         try (Statement st = conn.createStatement(); ResultSet rs = st.executeQuery("SELECT MAX(version) FROM schema_version")) {

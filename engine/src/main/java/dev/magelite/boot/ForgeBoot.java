@@ -99,6 +99,8 @@ public final class ForgeBoot {
             prefs.setPref(FPref.YIELD_AUTO_PASS_NO_ACTIONS, false);
             // sonst fragt Forge bei aufgedeckten Gegner-Haenden "OK / Zug beenden" und nutzt eigene Kartenlisten-Dialoge
             prefs.setPref(FPref.UI_SELECT_FROM_CARD_DISPLAYS, false);
+            // kurze Prompttexte ("Karte - Auswahl", "Pay Mana Cost: {1}") statt mehrzeiliger Spruchbeschreibung
+            prefs.setPref(FPref.UI_DETAILED_SPELLDESC_IN_PROMPT, false);
             return null;
         });
         Thread.setDefaultUncaughtExceptionHandler(previous);

@@ -121,6 +121,8 @@ export function cardImageUrl(card: { set?: string; num?: string; token?: boolean
   const size = opts?.size ?? 'normal'
   if (card.token) {
     const q = new URLSearchParams({ name: card.image || card.name || '', set: card.set ?? '', n: String(card.imageNum ?? 0), size })
+    // Token-Set + Nummer (Forge-Token-Druck): exakter Scryfall-Druck, sonst sucht die Engine nur ueber den Namen
+    if (card.num) q.set('num', card.num)
     return apiUrl(`/img/token?${q.toString()}`)
   }
   if (!card.set || !card.num) {

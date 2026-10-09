@@ -319,11 +319,11 @@ final class ForgeEvents {
         CardDto d = new CardDto();
         d.id = host.mapper().ids().card(c.getId());
         d.name = c.getName();
-        IPaperCard pc = c.getPaperCard();
-        d.set = ForgeViewMapper.scryfallSet(pc);
-        d.num = ForgeViewMapper.number(pc);
-        d.token = c.isToken();
-        if (c.isToken()) {
+        ForgeViewMapper.Print pr = ForgeViewMapper.print(c);
+        d.set = pr.set();
+        d.num = pr.num();
+        d.token = pr.token();
+        if (pr.token()) {
             d.image = c.getName();
         }
         d.manaCost = manaCost(c);

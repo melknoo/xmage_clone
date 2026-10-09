@@ -33,6 +33,7 @@ import forge.game.spellability.SpellAbilityStackInstance;
 import forge.game.spellability.TargetChoices;
 import forge.game.zone.ZoneType;
 import forge.item.IPaperCard;
+import forge.item.PaperToken;
 import forge.player.LobbyPlayerHuman;
 
 import java.util.ArrayList;
@@ -234,8 +235,13 @@ public final class ForgeViewMapper {
     private List<CommandDto> command(Player p, Player viewer, PlayerView vv) {
         List<CommandDto> out = new ArrayList<>();
         List<Card> commanders = p.getCommanders();
+        Set<Integer> listed = new HashSet<>();
         for (Card c : p.getCardsIn(ZoneType.Command)) {
-            boolean isCommander = commanders.contains(c);
+            Card listed0 = commanders.stream().filter(x -> x.getId() == c.getId()).findFirst().orElse(null);
+            boolean isCommander = listed0 != null;
+            if (!listed.add(c.getId())) {
+                continue;
+            }
             if (!isCommander && c.isImmutable() && !c.isEmblem()) {
                 continue; // unsichtbare Effekt-Karten
             }
@@ -249,7 +255,7 @@ public final class ForgeViewMapper {
             if (isCommander) {
                 cd.kind = "commander";
                 cd.card = card;
-                cd.casts = p.getCommanderCast(c);
+                cd.casts = p.getCommanderCast(listed0);
                 cd.tax = 2 * cd.casts;
             } else if (c.isEmblem()) {
                 cd.kind = "emblem";
@@ -258,8 +264,14 @@ public final class ForgeViewMapper {
             }
             out.add(cd);
         }
-        for (Card c : commanders) {
-            if (c.isInZone(ZoneType.Command)) {
+        for (Card stale : commanders) {
+            // die Commander-Liste haelt nach Zonenwechseln ein altes Objekt (gleiche id, alte Zone): aktuelle Version nehmen,
+            // sonst steht ein zurueckgekehrter Commander doppelt da ("commander" + "commander-away", gleiche id)
+            Card c = game.getCardState(stale);
+            if (c == null) {
+                c = stale;
+            }
+            if (c.isInZone(ZoneType.Command) || !listed.add(c.getId())) {
                 continue;
             }
             CommandDto cd = new CommandDto();
@@ -269,7 +281,7 @@ public final class ForgeViewMapper {
             IPaperCard pc = c.getPaperCard();
             cd.set = scryfallSet(pc);
             cd.num = number(pc);
-            cd.casts = p.getCommanderCast(c);
+            cd.casts = p.getCommanderCast(stale);
             cd.tax = 2 * cd.casts;
             ZoneType z = c.getZone() == null ? null : c.getZone().getZoneType();
             boolean secret = (z == ZoneType.Hand || z == ZoneType.Library || c.isFaceDown()) && p != viewer;
@@ -304,16 +316,16 @@ public final class ForgeViewMapper {
                     d.name = hidden ? "" : src.getName();
                     d.sourceId = ids.card(src.getId());
                     if (!hidden) {
-                        IPaperCard pc = src.getPaperCard();
-                        d.set = scryfallSet(pc);
-                        d.num = number(pc);
-                        d.token = src.isToken();
-                        if (src.isToken()) {
+                        Print pr = print(src);
+                        d.set = pr.set();
+                        d.num = pr.num();
+                        d.token = pr.token();
+                        if (pr.token()) {
                             d.image = src.getName();
                         }
                     }
                 }
-                String desc = si.getStackDescription();
+                String desc = ForgeText.clean(si.getStackDescription());
                 d.rules = desc == null || desc.isBlank() ? null : List.of(desc);
             }
             if (si.getActivatingPlayer() != null) {
@@ -461,11 +473,11 @@ public final class ForgeViewMapper {
             }
         }
         d.name = faceDown ? c.getState(CardStateName.Original).getName() : c.getName();
-        IPaperCard pc = c.getPaperCard();
-        d.set = scryfallSet(pc);
-        d.num = number(pc);
-        d.token = c.isToken();
-        if (c.isToken()) {
+        Print pr = print(c);
+        d.set = pr.set();
+        d.num = pr.num();
+        d.token = pr.token();
+        if (pr.token()) {
             d.image = c.getName();
         }
         d.manaCost = manaCost(c);
@@ -525,8 +537,9 @@ public final class ForgeViewMapper {
         }
         List<String> out = new ArrayList<>();
         for (String line : text.split("\\r?\\n")) {
-            if (!line.isBlank()) {
-                out.add(line.trim());
+            String l = ForgeText.clean(line.trim());
+            if (!l.isBlank()) {
+                out.add(l);
             }
         }
         return out.isEmpty() ? null : out;
@@ -572,6 +585,53 @@ public final class ForgeViewMapper {
         }
         String n = pc.getCollectorNumber();
         return n == null || n.isBlank() || IPaperCard.NO_COLLECTOR_NUMBER.equals(n) ? null : n;
+    }
+
+    /**
+     * Druck fuer die Bildroute: Scryfall-Set + Sammlernummer. Bei Tokens ist {@code set} das Scryfall-<b>Token-Set</b>
+     * ({@code "T" + Scryfall-Code der Edition}, z. B. {@code TC20}) und {@code num} die Nummer darin (aus Forges
+     * {@code [tokens]}-Abschnitt der Edition, entspricht der Scryfall-Token-Nummer); beides null, wenn Forge den Token
+     * keiner Edition zuordnet (dann sucht {@code /img/token} nur ueber den Namen).
+     *
+     * @param token true = {@code /img/token} (Name/Token-Set), false = {@code /img/card} bzw. {@code /img/named}
+     */
+    public record Print(String set, String num, boolean token) {
+    }
+
+    public static Print print(Card c) {
+        IPaperCard pc = c.getPaperCard();
+        if (!c.isToken()) {
+            return new Print(scryfallSet(pc), number(pc), false);
+        }
+        if (pc instanceof PaperToken) {
+            return new Print(tokenSet(pc.getEdition()), number(pc), true);
+        }
+        // Token ohne PaperToken (aus TokenInfo wiederhergestellt): Bild-Schluessel "t:name|EDITION|num|idx"
+        String key = c.getImageKey();
+        if (key != null && key.startsWith("t:")) {
+            String[] p = key.substring(2).split("\\|");
+            String set = p.length > 1 ? tokenSet(p[1]) : null;
+            String num = set != null && p.length > 3 && !p[2].isBlank() ? p[2] : null;
+            return new Print(set, num, true);
+        }
+        // Kopie einer echten Karte (Token-Kopie): zeigt das Bild der Vorlage
+        if (pc != null && !pc.isToken()) {
+            return new Print(scryfallSet(pc), number(pc), false);
+        }
+        return new Print(null, null, true);
+    }
+
+    /**
+     * Scryfall-Token-Set (GROSS) zu einem Forge-Edition-Code: Forges {@code TokensCode} der Edition ({@code "T" +
+     * Scryfall-Code}, bei Sets mit Tokens im Set selbst wie SLD/PLST der Set-Code); null wenn unbekannt.
+     */
+    public static String tokenSet(String editionCode) {
+        if (editionCode == null || editionCode.isBlank() || CardEdition.UNKNOWN_CODE.equals(editionCode)) {
+            return null;
+        }
+        CardEdition ed = StaticData.instance().getEditions().get(editionCode);
+        String code = ed == null ? null : ed.getTokensCode();
+        return code == null || code.isBlank() ? null : code.toUpperCase(java.util.Locale.ROOT);
     }
 
     // ---- spielbare Objekte ------------------------------------------------------------------------------------------------

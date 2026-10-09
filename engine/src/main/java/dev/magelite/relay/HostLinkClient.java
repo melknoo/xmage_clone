@@ -351,7 +351,9 @@ public final class HostLinkClient {
 
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            if (statusCode == 4401) {
+            if (!enabled) {
+                // gewollt getrennt (Abmelden): kein Fehler fuer die Anzeige
+            } else if (statusCode == 4401) {
                 lastError = "Anmeldung abgelaufen – in der App neu anmelden";
                 enabled = false;
             } else if (statusCode == 4426) {

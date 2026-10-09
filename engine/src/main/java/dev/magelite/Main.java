@@ -59,7 +59,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus), auf fly im Server-Modus.
  * <p>
- * Args: {@code --port=0 --data=<dir> --forge=<dir> --ui=<dist> --parent-pid=<pid> --dev}
+ * Args: {@code --port=0 --data=<dir> --forge=<dir> --ui=<dist> --parent-pid=<pid> --dev [--seed-db=<magelite.db>]}
  * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10 --anon-exit-min=3}; Owner-Konto aus
  * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}; Monatsbudget {@code MAGELITE_BUDGET_HOURS} (Standard 100,
  * Test: {@code --budget-min}), Preis fuer die Anzeige {@code MAGELITE_PRICE_PER_HOUR}.
@@ -107,6 +107,14 @@ public final class Main {
 
         ForgeBoot.init(forge, data); // prueft auch Arbeitsverzeichnis == data
 
+        if (opt.containsKey("seed-db")) {
+            // Test-App (nicht gepackt): echte Daten der installierten App einmalig nur lesend uebernehmen
+            try {
+                Db.seedIfMissing(Path.of(opt.get("seed-db")), data.resolve("magelite.db"));
+            } catch (Exception e) {
+                log.warn("Test-Daten nicht uebernommen: " + e.getMessage());
+            }
+        }
         Db db = new Db(data.resolve("magelite.db"));
         DeckStore deckStore = new DeckStore(db);
         DeckMigration.run(db, data);

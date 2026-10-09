@@ -78,7 +78,7 @@ function startEngine({ fresh = false, args = [], env = {} } = {}) {
   }
   const java = process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin', 'java') : 'java'
   const jvm = [
-    '-Xmx768m', '-XX:+UseG1GC', '-Djava.awt.headless=true', '-Dfile.encoding=UTF-8', `-Dmagelite.forge=${forge}`,
+    '-Xmx1536m', '-XX:+UseG1GC', '-Djava.awt.headless=true', '-Dfile.encoding=UTF-8', `-Dmagelite.forge=${forge}`,
     '-cp', `${path.join(lib, 'magelite-engine.jar')}${path.delimiter}${path.join(lib, '*')}`,
     'dev.magelite.Main', `--data=${dataDir}`, `--port=${PORT}`, `--forge=${forge}`, '--dev', '--server', ...args,
   ]

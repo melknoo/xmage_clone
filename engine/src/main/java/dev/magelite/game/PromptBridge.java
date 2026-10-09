@@ -170,6 +170,60 @@ final class PromptBridge {
         }
     }
 
+    private static final java.util.regex.Pattern GOING_FIRST = java.util.regex.Pattern.compile("^(.+?) is going first\\.", java.util.regex.Pattern.MULTILINE);
+    private static final java.util.regex.Pattern GOING_POS = java.util.regex.Pattern.compile("you are going (\\d+)");
+
+    /** Forges Starthand-Frage auf Deutsch ("X is going first. Du, you are going 4th. Do you want to keep your hand?") */
+    static String mulliganText(String forge) {
+        if (forge == null) {
+            return null;
+        }
+        String head;
+        java.util.regex.Matcher first = GOING_FIRST.matcher(forge);
+        java.util.regex.Matcher pos = GOING_POS.matcher(forge);
+        if (forge.contains("you are going first")) {
+            head = "Du beginnst.";
+        } else if (first.find() && pos.find()) {
+            head = first.group(1).trim() + " beginnt, du bist als " + pos.group(1) + ". dran.";
+        } else if (forge.contains("keep your hand")) {
+            head = "";
+        } else {
+            return forge;
+        }
+        return (head.isEmpty() ? "" : head + "\n") + "Starthand behalten?";
+    }
+
+    /** Forges Bezahl-Text einzeilig: "Force Spike (222)
+Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
+    static String manaText(String forge) {
+        if (forge == null) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        for (String line : forge.split("\r?\n")) {
+            String l = dev.magelite.view.ForgeText.clean(line.trim());
+            if (!l.isEmpty() && !parts.contains(l)) {
+                parts.add(l.replace("Pay Mana Cost:", "Mana zahlen:"));
+            }
+        }
+        return String.join(" – ", parts);
+    }
+
+    /** Forges Standardtexte fuer Angriff/Block auf Deutsch; Fehlermeldungen (ungueltige Angriffe/Blocks) bleiben. */
+    static String combatText(String forge) {
+        if (forge == null) {
+            return null;
+        }
+        String t = forge.trim();
+        if (t.startsWith("Select creatures to attack")) {
+            return "Angreifer wählen: Kreaturen anklicken, dann bestätigen.";
+        }
+        if (t.startsWith("Select creatures to block") || t.startsWith("Select another attacker to declare blockers for")) {
+            return "Blocker wählen: eigene Kreatur anklicken, dann den Angreifer.";
+        }
+        return forge;
+    }
+
     private static PromptDto prompt(String kind, String message) {
         PromptDto p = new PromptDto();
         p.kind = kind;
@@ -239,7 +293,12 @@ final class PromptBridge {
         @Override
         PromptDto build() {
             if (input instanceof InputPassPriority) {
-                PromptDto p = prompt("SELECT", gui().message);
+                // Forges Text ("Priority: … Turn: … Phase: … Stack: …") wiederholt nur Kopfzeile und Stapel
+                var top = game().getStack().peek();
+                Card topCard = top == null ? null : top.getSourceCard();
+                String topName = topCard == null ? "?" : topCard.isFaceDown() ? "ein verdecktes Objekt" : topCard.getName();
+                PromptDto p = prompt("SELECT", top == null ? "Zauber und Fähigkeiten spielen."
+                        : "Reagieren oder passen – oben auf dem Stapel: " + topName + ".");
                 p.mode = "priority";
                 p.stopReason = seat.pass.promptStopReason;
                 p.nextStop = seat.pass.promptNextStop;
@@ -255,7 +314,7 @@ final class PromptBridge {
                 return buildMana();
             }
             if (input instanceof InputConfirmMulligan) {
-                PromptDto p = prompt("ASK", gui().message);
+                PromptDto p = prompt("ASK", mulliganText(gui().message));
                 p.mulligan = true;
                 p.leftBtn = "Mulligan";
                 p.rightBtn = "Keep";
@@ -452,7 +511,7 @@ final class PromptBridge {
                 p.cards = cards.isEmpty() ? null : mapper().cards(cards, seat.player().getView());
                 return p;
             }
-            PromptDto p = prompt("SELECT", gui().message);
+            PromptDto p = prompt("SELECT", combatText(gui().message));
             p.mode = "attackers";
             List<UUID> possible = new ArrayList<>();
             boolean anyAttacking = false;
@@ -589,7 +648,7 @@ final class PromptBridge {
                 p.targets = pendingOptions.stream().map(mapper()::entityId).toList();
                 return p;
             }
-            PromptDto p = prompt("SELECT", gui().message);
+            PromptDto p = prompt("SELECT", combatText(gui().message));
             p.mode = "blockers";
             List<UUID> possible = new ArrayList<>();
             if (combat != null && me != null) {
@@ -683,7 +742,7 @@ final class PromptBridge {
                 }
                 host.toast(seat, "info", "Automatisches Bezahlen nicht möglich – bitte Manaquellen anklicken.");
             }
-            PromptDto p = prompt("PLAY_MANA", gui().message);
+            PromptDto p = prompt("PLAY_MANA", manaText(gui().message));
             p.required = !gui().btn2Enabled;
             p.sourceId = stackSource();
             return p;
@@ -726,8 +785,13 @@ final class PromptBridge {
         // ---- Einberufen / Improvisieren (Forge fragt vor dem Mana)
 
         private PromptDto buildConvoke(InputSelectCardsForConvokeOrImprovise conv) {
-            PromptDto p = prompt("PLAY_MANA", gui().message);
             String desc = field(conv, "description", String.class);
+            // Forges Text ist mehrzeilig (Karte, Typ, Anweisung) und sprengt die Fussleiste
+            java.util.regex.Matcher rest = java.util.regex.Pattern.compile("Remaining mana cost is (\\S+?)\\.?\\s*$")
+                    .matcher(gui().message == null ? "" : gui().message.trim());
+            String open = rest.find() ? " (offen: " + rest.group(1) + ")" : "";
+            PromptDto p = prompt("PLAY_MANA", "Improvise".equals(desc) ? "Improvisieren: Artefakte wählen, die mitbezahlen" + open + "."
+                    : "Convoke".equals(desc) ? "Einberufen: Kreaturen wählen, die mitbezahlen" + open + "." : gui().message);
             p.specialBtn = "Improvise".equals(desc) ? "Improvisieren" : "Convoke".equals(desc) ? "Einberufen" : desc;
             List<UUID> targets = new ArrayList<>();
             Iterable<?> avail = field(conv, "availableCards", Iterable.class);
@@ -846,8 +910,14 @@ final class PromptBridge {
         // ---- Ziele
 
         private PromptDto buildTargets() {
-            PromptDto p = prompt("PICK_TARGET", gui().message);
             SpellAbility sa = field(input, "sa", SpellAbility.class);
+            // Forges Text ist mehrzeilig (Karte - Beschreibung, Auswahl, "Targeted: ..."); gewaehlte Ziele zeigt die UI selbst
+            String msg = gui().message;
+            if (sa != null && sa.getHostCard() != null && sa.getTargetRestrictions() != null) {
+                Card host = sa.getHostCard();
+                msg = (host.isFaceDown() ? "Verdecktes Objekt" : host.getName()) + " – " + sa.getTargetRestrictions().getVTSelection();
+            }
+            PromptDto p = prompt("PICK_TARGET", msg);
             Set<UUID> targets = new LinkedHashSet<>();
             List<Card> offBoard = new ArrayList<>();
             for (CardView cv : gui().selectablesView()) {

@@ -331,7 +331,7 @@
    "js": "window.__hold.firstMain=false;'weiter'"
   },
   {
-   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&s.stack.length&&s.stack[0].name==='Blaze')){clearInterval(t);r('Blaze-Ziel')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Ziel waehlen\")},30000)})",
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&(/Blaze/.test(p.messageText||'')||(s.stack.length&&s.stack[0].name==='Blaze')))){clearInterval(t);r('Blaze-Ziel')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Ziel waehlen\")},30000)})",
    "name": "Ziel waehlen"
   },
   {
@@ -780,7 +780,7 @@
    "name": "Piloten aus"
   },
   {
-   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'blocker'})",
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})",
    "expect": "^[0-9a-f]{8}-",
    "name": "Spiel starten"
   },
