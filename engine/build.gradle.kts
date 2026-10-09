@@ -56,16 +56,27 @@ tasks.processResources {
     filesMatching("magelite-version.properties") { expand("version" to appVersion, "forgeCommit" to forgeCommit) }
 }
 
-// Uebergang (Forge-Umbau): XMage-gebundener Code und alles, was davon abhaengt, bleibt aus dem Build, bis Kern
-// (Phase 1) und Deck-Layer (Phase 2) portiert sind. Liste in forge-transition.excludes; Zeilen beim Portieren loeschen,
-// am Ende die Datei samt diesem Block.
-val transitionExcludes: List<String> = file("forge-transition.excludes").let { f ->
-    if (!f.isFile) emptyList() else f.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+// Sample-Decks (Decktext v2) liegen als Ressourcen im Classpath (src/main/resources/sample-decks/**, Jar, `gradlew run`,
+// Tests). Die Liste der ids (INDEX) wird bei jedem Build erzeugt, nie von Hand gepflegt: so kann sie nicht veralten und
+// jede neue Datei ist automatisch im Katalog.
+val sampleDecksDir = layout.projectDirectory.dir("src/main/resources/sample-decks")
+val sampleIndex = tasks.register("sampleIndex") {
+    group = "magelite"
+    description = "Schreibt build/generated/sample-index/sample-decks/INDEX (ids aller Sample-Decks)"
+    val outDir = layout.buildDirectory.dir("generated/sample-index")
+    inputs.files(fileTree(sampleDecksDir) { include("**/*.dck") })
+    outputs.dir(outDir)
+    doLast {
+        val root = sampleDecksDir.asFile
+        val ids = if (root.isDirectory) {
+            root.walkTopDown().filter { it.isFile && it.name.endsWith(".dck") }.map { it.relativeTo(root).invariantSeparatorsPath }.sorted().toList()
+        } else emptyList()
+        val f = outDir.get().file("sample-decks/INDEX").asFile
+        f.parentFile.mkdirs()
+        f.writeText(ids.joinToString(separator = "\n", postfix = "\n"), Charsets.UTF_8)
+    }
 }
-sourceSets {
-    main { java { exclude(transitionExcludes.filter { !it.startsWith("test:") }) } }
-    test { java { exclude(transitionExcludes.filter { it.startsWith("test:") }.map { it.removePrefix("test:") }) } }
-}
+tasks.processResources { from(sampleIndex) }
 
 val runDir = layout.projectDirectory.dir("run")
 val forgeHome = forgeDir.canonicalPath

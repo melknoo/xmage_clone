@@ -63,7 +63,6 @@ public final class BotArena {
         String a = opt.getOrDefault("a", ForgeBoot.AI_PROFILE);
         String b = opt.getOrDefault("b", "Reckless");
 
-        Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
         Path forge = Path.of(System.getProperty("magelite.forge", "../../vendor/forge")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
         Files.createDirectories(logs);
@@ -83,7 +82,7 @@ public final class BotArena {
         }
 
         List<LoadedDeck> valid = new ArrayList<>();
-        for (Path f : PocDecks.files(vendor.resolve("sample-decks"))) {
+        for (PocDecks.Ref f : PocDecks.list(null)) {
             try {
                 LoadedDeck d = PocDecks.load(f);
                 if (d.valid()) {

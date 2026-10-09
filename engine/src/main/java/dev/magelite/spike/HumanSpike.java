@@ -83,8 +83,6 @@ public final class HumanSpike {
             throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
         }
 
-        // Forge-POC: Sample-Decks noch aus vendor/xmage (Phase 2: Classpath, Decktext v2)
-        Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
         Path forge = Path.of(System.getProperty("magelite.forge", "../../vendor/forge")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
         Files.createDirectories(logs);
@@ -92,7 +90,7 @@ public final class HumanSpike {
         ForgeBoot.Info boot = ForgeBoot.init(forge, Path.of("").toAbsolutePath());
         out("Forge %s: %d Karten, Boot %d ms", boot.forgeVersion(), boot.cards(), boot.ms());
 
-        List<Path> files = new ArrayList<>(PocDecks.files(vendor.resolve("sample-decks")));
+        List<PocDecks.Ref> files = new ArrayList<>(PocDecks.list(null));
         Random rnd = new Random(seed);
         out("Seed=%d", seed);
         int failures = 0;
@@ -100,8 +98,8 @@ public final class HumanSpike {
             Collections.shuffle(files, rnd);
             List<LoadedDeck> decks = new ArrayList<>();
             for (String want : opt.getOrDefault("decks", "").replace('_', ' ').split(";")) {
-                for (Path f : files) {
-                    if (!want.isBlank() && f.getFileName().toString().contains(want.trim())) {
+                for (PocDecks.Ref f : files) {
+                    if (!want.isBlank() && f.fileName().contains(want.trim())) {
                         LoadedDeck d = PocDecks.load(f);
                         if (d.valid()) {
                             decks.add(d);
@@ -110,8 +108,8 @@ public final class HumanSpike {
                     }
                 }
             }
-            for (Path f : files) {
-                if (decks.stream().anyMatch(x -> f.getFileName().toString().startsWith(x.name()))) {
+            for (PocDecks.Ref f : files) {
+                if (decks.stream().anyMatch(x -> f.fileName().startsWith(x.name()))) {
                     continue;
                 }
                 LoadedDeck d = PocDecks.load(f);
@@ -157,7 +155,9 @@ public final class HumanSpike {
 
     /**
      * @param leave {@code prompt}: der erste Mensch verlaesst das Spiel ab Zug 4 statt einen Prompt zu beantworten;
-     *              {@code bot}: ab Zug 4 waehrend eines Bot-Zugs; {@code abort}: Spiel ab Zug 4 im Bot-Zug abbrechen
+     *              {@code bot}: ab Zug 4 waehrend eines Bot-Zugs; {@code abort}: Spiel ab Zug 4 im Bot-Zug abbrechen;
+     *              {@code abortTarget}: Spiel abbrechen, waehrend der Tester ein Ziel waehlen soll (offene Eingabe);
+     *              {@code abortRequiredTarget}: dasselbe nur bei Pflicht-Zielen (ohne Abbrechen-Knopf, z. B. Ausloeser)
      */
     private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, int humans, Random rnd,
                                    boolean verbose, String dumpJson, String scenario, boolean spectate, String leave) throws Exception {
@@ -314,6 +314,13 @@ public final class HumanSpike {
                     chains.accept(s);
                 }
             } else if (msg instanceof PromptDto p) {
+                if (("abortTarget".equals(leave) || ("abortRequiredTarget".equals(leave) && p.required)) && leftAt == 0 && d == driver
+                        && "PICK_TARGET".equals(p.kind) && !p.defenderPick) {
+                    leftAt = System.currentTimeMillis();
+                    out("  -> Abbruch waehrend Zielwahl in Zug %d (Pflicht: %s)", d.state == null ? 0 : d.state.turn, p.required);
+                    host.abort();
+                    continue;
+                }
                 if ("prompt".equals(leave) && leftAt == 0 && d == driver && d.state != null && d.state.turn >= 4) {
                     leftAt = System.currentTimeMillis();
                     out("  -> verlasse waehrend Prompt %s in Zug %d", p.kind, d.state.turn);

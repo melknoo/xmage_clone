@@ -816,6 +816,8 @@ public final class GameHost {
         try {
             ScenarioHooks sc = scenario;
             match.startGame(game, sc == null ? null : () -> sc.startGame(this));
+        } catch (GameEnded e) {
+            // Spielende waehrend einer Eingabe: regulaer, Ergebnis steht schon im Spiel
         } catch (Throwable e) {
             LOG.error("Spiel abgebrochen", e);
             error = e.toString();
@@ -944,7 +946,9 @@ public final class GameHost {
         try {
             if (++f.answers > MAX_ANSWERS_PER_FRAME) {
                 // Antwort-Schleife (Client und Forge drehen sich im Kreis): sicher beenden statt ewig zu haengen
-                bridge.unmapped(f.seat, "loop", f.getClass().getSimpleName() + " nach " + MAX_ANSWERS_PER_FRAME + " Antworten");
+                if (f.answers == MAX_ANSWERS_PER_FRAME + 1) {
+                    bridge.unmapped(f.seat, "loop", f.describe() + " nach " + MAX_ANSWERS_PER_FRAME + " Antworten, letzte: " + r);
+                }
                 f.autopilot();
                 return;
             }
@@ -1275,9 +1279,24 @@ public final class GameHost {
      * Haelt den Spiel-Thread in einer Frage fest, bis sie beantwortet ist: Prompt senden, Kommandos aus der inbox
      * ausfuehren (auch verschachtelte Fragen), bei aufgegebenem Sitz den Autopiloten antworten lassen.
      */
+    /**
+     * Spielende waehrend einer offenen Eingabe (Abbruch, Aufgabe, Zuglimit): rollt den Spiel-Thread aus Forge heraus.
+     * Eine Eingabe kehrt nach Spielende sofort zurueck, und manche Aufrufer fragen dann endlos neu (z. B.
+     * {@code TargetSelection.chooseTargets} ruft sich rekursiv auf, solange nicht abgebrochen wurde). Kein Fehler,
+     * {@link #runGame} faengt es still ab.
+     */
+    static final class GameEnded extends Error {
+        GameEnded() {
+            super("Spielende waehrend einer Eingabe", null, false, false);
+        }
+    }
+
     void park(PromptBridge.Frame frame) {
         if (!isGameThread()) {
             throw new IllegalStateException("park() ausserhalb des Spiel-Threads: " + Thread.currentThread().getName());
+        }
+        if (game.isGameOver()) {
+            throw new GameEnded();
         }
         frames.push(frame);
         parked = true;
@@ -1326,6 +1345,9 @@ public final class GameHost {
             }
             parked = outer != null;
         }
+        if (game.isGameOver()) {
+            throw new GameEnded();
+        }
     }
 
     private void publish(PromptBridge.Frame frame) {
@@ -1353,6 +1375,8 @@ public final class GameHost {
     private void run(Runnable cmd) {
         try {
             cmd.run();
+        } catch (GameEnded e) {
+            throw e;
         } catch (Throwable e) {
             LOG.error("Kommando fehlgeschlagen", e);
         }

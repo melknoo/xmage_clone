@@ -36,7 +36,6 @@ public final class BotSpike {
         long seed = Long.parseLong(opt.getOrDefault("seed", String.valueOf(System.nanoTime())));
         int parallel = Math.max(1, Integer.parseInt(opt.getOrDefault("parallel", "1")));
 
-        Path vendor = Path.of(System.getProperty("magelite.vendor", "../../vendor/xmage")).toAbsolutePath().normalize();
         Path forge = Path.of(System.getProperty("magelite.forge", "../../vendor/forge")).toAbsolutePath().normalize();
         Path logs = Path.of("logs").toAbsolutePath();
         Files.createDirectories(logs);
@@ -47,8 +46,8 @@ public final class BotSpike {
         long tDecks = System.currentTimeMillis();
         List<LoadedDeck> valid = new ArrayList<>();
         int invalid = 0;
-        Path deckDir = opt.containsKey("deckDir") ? Path.of(opt.get("deckDir")) : vendor.resolve("sample-decks");
-        for (Path f : PocDecks.files(deckDir)) {
+        Path deckDir = opt.containsKey("deckDir") ? Path.of(opt.get("deckDir")) : null;
+        for (PocDecks.Ref f : PocDecks.list(deckDir)) {
             LoadedDeck d = PocDecks.load(f);
             if (d.valid()) {
                 valid.add(d);
@@ -57,7 +56,7 @@ public final class BotSpike {
             }
             if (!d.valid() || opt.containsKey("validate")) {
                 out("  %s %-45s main=%d cmd=%s %s %s", d.valid() ? "OK " : "ERR", trim(d.name(), 45), d.mainCount(), d.commanders(),
-                        trim(d.validationErrors().replace('\n', ' '), 140), trim(d.importErrors(), 140));
+                        trim(String.valueOf(d.validationErrors()).replace('\n', ' '), 140), trim(String.valueOf(d.importErrors()), 140));
             }
         }
         out("Decks: %d gueltig, %d ungueltig (%d ms)", valid.size(), invalid, System.currentTimeMillis() - tDecks);

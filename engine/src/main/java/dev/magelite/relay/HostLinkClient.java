@@ -279,6 +279,7 @@ public final class HostLinkClient {
                 WebSocket socket = client.newWebSocketBuilder()
                         .header("Cookie", "ml_sess=" + session)
                         .header("Origin", server)
+                        .header(HostLinks.ENGINE_HEADER, HostLinks.ENGINE_MARKER)
                         .connectTimeout(Duration.ofSeconds(10))
                         .buildAsync(URI.create(wsUrl), new Listener(latch))
                         .join();
@@ -352,6 +353,9 @@ public final class HostLinkClient {
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             if (statusCode == 4401) {
                 lastError = "Anmeldung abgelaufen – in der App neu anmelden";
+                enabled = false;
+            } else if (statusCode == 4426) {
+                lastError = "Der Server nutzt eine andere Engine – MageLite auf diesem Rechner aktualisieren";
                 enabled = false;
             } else if (statusCode == 4000) {
                 lastError = "Von einer neueren Verbindung ersetzt";
@@ -535,7 +539,7 @@ public final class HostLinkClient {
         } catch (RuntimeException e) {
             LOG.error("Relay-Spielende konnte nicht gemeldet werden", e);
         } finally {
-            StatsSink.unregister(host.getGame().getId());
+            StatsSink.unregister(host.getId());
             if (h != null) {
                 h.sinks.values().forEach(RelaySink::close);
             }

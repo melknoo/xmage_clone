@@ -26,9 +26,9 @@ if ($javaVersion -match 'version "(1\.)?(\d+)') {
 }
 Write-Host "Node: $(& node --version)"
 
-if (-not (Test-Path (Join-Path $root 'vendor\xmage\lib'))) {
-    Write-Host '== XMage-Dateien importieren'
-    & (Join-Path $PSScriptRoot 'import-xmage.ps1')
+if (-not (Test-Path (Join-Path $root 'vendor\forge\res\cardsfolder\cardsfolder.zip'))) {
+    Write-Host '== Forge bauen und importieren (einmalig, braucht Git und JDK 17+)'
+    & (Join-Path $PSScriptRoot 'import-forge.ps1')
 }
 
 Write-Host '== UI'
@@ -59,4 +59,3 @@ try {
 
 Write-Host ''
 Write-Host 'Fertig. Start: MageLite.cmd (Doppelklick)' -ForegroundColor Green
-Write-Host 'Der allererste Start baut die Kartendatenbank auf und dauert 1-2 Minuten.'

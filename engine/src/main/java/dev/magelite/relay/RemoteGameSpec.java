@@ -7,7 +7,7 @@ import java.util.UUID;
 
 /**
  * Beschreibung eines Spiels, das auf dem Rechner eines Gastgebers laeuft (Host-Link). fly schickt sie mit
- * {@code start} (Decks als .dck-Text, noch ohne {@code gameId}); die Host-Engine antwortet mit {@code started}
+ * {@code start} (Decks als MageLite-Text v2 im Feld {@code dck}, noch ohne {@code gameId}); die Host-Engine antwortet mit {@code started}
  * (mit {@code gameId}, Spieler-ids, ohne Deck-Text) und wiederholt sie nach einem Reconnect in {@code resume}.
  *
  * @param gameId    id des Spiels (von der Host-Engine vergeben)

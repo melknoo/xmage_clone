@@ -41,14 +41,14 @@ public final class DeckRoutes implements HttpServer.Module {
             if (r.commanders().isEmpty()) {
                 throw new IllegalArgumentException("Bitte zuerst einen Commander wählen");
             }
-            LoadedDeck loaded = DeckLoader.fromLists(r.toLists(), "import", "");
+            LoadedDeck loaded = DeckLoader.fromParsed(r, "import");
             TextDeckParser.Resolved first = r.commanders().get(0);
             Long id = b.hasNonNull("id") ? b.get("id").asLong() : null;
             long userId = Auth.user(ctx).id();
             long saved = store.save(userId, id, r.name(), r.commanders().stream().map(TextDeckParser.Resolved::name).toList(),
                     SampleDeckCatalog.colorsOf(r.commanders().stream().map(TextDeckParser.Resolved::name).toList()),
                     first.set(), first.number(), text(b, "source") == null ? "text" : text(b, "source"), text(b, "sourceUrl"),
-                    r.toDck(), r.cardCount(), loaded.valid(), loaded.validationErrors(), bracketOf(r));
+                    r.toText(), r.cardCount(), loaded.valid(), loaded.validationErrors(), bracketOf(r));
             if (b.has("folder") || b.has("bracket")) {
                 store.patchMeta(userId, saved, text(b, "folder") == null ? (b.has("folder") ? "" : null) : text(b, "folder"),
                         b.hasNonNull("bracket") ? b.get("bracket").asInt() : null);
@@ -84,13 +84,13 @@ public final class DeckRoutes implements HttpServer.Module {
         app.get("/api/decks/{id}/text", ctx -> {
             long id = Long.parseLong(ctx.pathParam("id"));
             String dck = store.getDck(Auth.user(ctx).id(), id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
-            ctx.json(Map.of("text", dckToText(dck)));
+            ctx.json(Map.of("text", DeckText.toEditable(dck)));
         });
     }
 
     /**
      * Bracket-Vorschlag fuer Decks aus der Zeit vor V6 nachtragen (einmalig, im Hintergrund nach dem Start; braucht die
-     * Karten-DB).
+     * Karten-DB). Der Parser liest Decktext v2 ebenso wie Altbestand im XMage-.dck.
      */
     public void backfillBrackets() {
         Thread t = new Thread(() -> {
@@ -98,7 +98,7 @@ public final class DeckRoutes implements HttpServer.Module {
             int done = 0;
             for (var e : todo.entrySet()) {
                 try {
-                    TextDeckParser.Result r = TextDeckParser.parse(dckToText(e.getValue()), null, null);
+                    TextDeckParser.Result r = TextDeckParser.parse(e.getValue(), null, null);
                     store.setBracketAuto(e.getKey(), bracketOf(r));
                     done++;
                 } catch (RuntimeException ex) {
@@ -114,9 +114,7 @@ public final class DeckRoutes implements HttpServer.Module {
     }
 
     static BracketAnalyzer.Result bracketOf(TextDeckParser.Result r) {
-        List<TextDeckParser.Resolved> all = new ArrayList<>(r.commanders());
-        all.addAll(r.main());
-        return BracketAnalyzer.analyze(all);
+        return BracketAnalyzer.analyze(r);
     }
 
     private void fromUrl(Context ctx) throws Exception {
@@ -152,7 +150,7 @@ public final class DeckRoutes implements HttpServer.Module {
         out.put("commanders", r.commanders());
         out.put("cardCount", r.cardCount());
         out.put("unknown", r.unknown());
-        out.put("unfinished", r.unfinished());
+        out.put("unfinished", List.of()); // Feld bleibt leer, bis die UI die Issue-Art "unfinished" nicht mehr liest
         List<Map<String, Object>> issues = new ArrayList<>();
         for (TextDeckParser.Issue i : r.issues()) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -178,7 +176,7 @@ public final class DeckRoutes implements HttpServer.Module {
         out.put("bracketAuto", bracket.bracket());
         out.put("bracketInfo", bracket.reasons());
         if (!r.commanders().isEmpty()) {
-            LoadedDeck loaded = DeckLoader.fromLists(r.toLists(), "preview", "");
+            LoadedDeck loaded = DeckLoader.fromParsed(r, "preview");
             out.put("valid", loaded.valid());
             out.put("validation", loaded.validationErrors());
             List<String> names = r.commanders().stream().map(TextDeckParser.Resolved::name).toList();
@@ -189,27 +187,6 @@ public final class DeckRoutes implements HttpServer.Module {
             out.put("valid", false);
         }
         return out;
-    }
-
-    /** .dck -> lesbarer Text (zum Bearbeiten). */
-    static String dckToText(String dck) {
-        StringBuilder cmd = new StringBuilder();
-        StringBuilder deck = new StringBuilder();
-        for (String line : dck.split("\\r?\\n")) {
-            String l = line.trim();
-            if (l.isEmpty() || l.startsWith("NAME:") || l.startsWith("LAYOUT")) {
-                continue;
-            }
-            boolean sb = l.startsWith("SB:");
-            if (sb) {
-                l = l.substring(3).trim();
-            }
-            java.util.regex.Matcher m = java.util.regex.Pattern.compile("^(\\d+)\\s*\\[([^]:]+):([^]]+)]\\s*(.+)$").matcher(l);
-            if (m.matches()) {
-                (sb ? cmd : deck).append(m.group(1)).append(' ').append(m.group(4)).append(" (").append(m.group(2)).append(") ").append(m.group(3)).append('\n');
-            }
-        }
-        return "Commander\n" + cmd + "\nDeck\n" + deck;
     }
 
     private static String text(JsonNode b, String field) {

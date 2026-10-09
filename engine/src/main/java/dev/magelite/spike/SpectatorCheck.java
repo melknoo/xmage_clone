@@ -76,8 +76,25 @@ final class SpectatorCheck implements GameHost.Sink {
             st.hand.forEach(c -> ids.add(c.id));
         }
         if (st.lookedAt != null) {
+            // angesehene Karten bleiben bis Phasenende in lookedAt; liegen sie inzwischen offen (z. B. "schau dir die
+            // obersten N an, lege eine aufs Spielfeld"), sind sie nicht mehr geheim (verdeckte zaehlen weiter)
+            Set<UUID> open = new HashSet<>();
+            for (PlayerDto p : st.players) {
+                if (p.battlefield != null) {
+                    p.battlefield.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+                if (p.graveyard != null) {
+                    p.graveyard.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+                if (p.exile != null) {
+                    p.exile.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+                }
+            }
+            if (st.stack != null) {
+                st.stack.stream().filter(c -> !c.faceDown).forEach(c -> open.add(c.id));
+            }
             for (NamedCardsDto n : st.lookedAt) {
-                n.cards().forEach(c -> ids.add(c.id));
+                n.cards().stream().filter(c -> !open.contains(c.id)).forEach(c -> ids.add(c.id));
             }
         }
         for (PlayerDto p : st.players) {

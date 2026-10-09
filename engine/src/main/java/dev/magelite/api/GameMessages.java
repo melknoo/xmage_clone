@@ -2,8 +2,8 @@ package dev.magelite.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.magelite.game.GameHost;
+import dev.magelite.game.ManaColor;
 import dev.magelite.game.TempoSettings;
-import mage.constants.ManaType;
 import org.apache.log4j.Logger;
 
 import java.util.ArrayList;
@@ -103,7 +103,11 @@ public final class GameMessages {
         if (m.hasNonNull("mana")) {
             JsonNode mana = m.get("mana");
             UUID pid = mana.hasNonNull("playerId") ? UUID.fromString(mana.get("playerId").asText()) : null;
-            return GameHost.Response.ofMana(pid, ManaType.valueOf(mana.path("type").asText().toUpperCase(Locale.ROOT)));
+            ManaColor color = ManaColor.parse(mana.path("type").asText());
+            if (color == null) {
+                throw new IllegalArgumentException("Unbekannte Manafarbe: " + mana.path("type").asText());
+            }
+            return GameHost.Response.ofMana(pid, color);
         }
         return GameHost.Response.ofBool(false);
     }

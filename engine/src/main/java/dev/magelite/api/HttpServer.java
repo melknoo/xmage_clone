@@ -3,7 +3,7 @@ package dev.magelite.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.magelite.auth.Limits;
 import dev.magelite.auth.User;
-import dev.magelite.deck.DeckLoader;
+import dev.magelite.deck.DeckResolver;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.LoadedDeck;
 import dev.magelite.deck.SampleDeckCatalog;
@@ -19,7 +19,6 @@ import io.javalin.http.HttpStatus;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.json.JavalinJackson;
 import io.javalin.websocket.WsContext;
-import mage.constants.ManaType;
 import org.apache.log4j.Logger;
 
 import java.nio.file.Files;
@@ -98,6 +97,7 @@ public final class HttpServer {
     private final GameRegistry games;
     private final DeckStore deckStore;
     private final SampleDeckCatalog samples;
+    private final DeckResolver deckResolver;
     private final List<Module> modules = new ArrayList<>();
     private final Map<WsContext, Session> sockets = new ConcurrentHashMap<>();
     private final Random random = new Random();
@@ -127,6 +127,7 @@ public final class HttpServer {
         this.games = games;
         this.deckStore = deckStore;
         this.samples = samples;
+        this.deckResolver = new DeckResolver(deckStore, samples);
     }
 
     public void addModule(Module m) {
@@ -504,46 +505,14 @@ public final class HttpServer {
         }
 
         GameHost host = games.start(new GameSetup(seatSpecs, tempo), onGameFinished,
-                scenario == null ? null : h -> Scenarios.apply(scenario, h.getGame(), h.getHumanId()));
+                scenario == null ? null : h -> h.setScenario(Scenarios.hooks(scenario)));
         onGameStarted.started(host, humanDeckId);
         ctx.json(Map.of("gameId", host.getId()));
     }
 
+    /** Deck eines Sitzes (eigenes, Sample, Zufall) - eine Logik mit den Tischen ({@link DeckResolver}). */
     private LoadedDeck resolveDeck(long userId, JsonNode spec, List<String> usedSamples) throws Exception {
-        String type = spec.path("type").asText("random");
-        switch (type) {
-            case "user" -> {
-                long id = spec.path("id").asLong();
-                DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
-                String dck = deckStore.getDck(userId, id).orElseThrow();
-                return DeckLoader.fromDckText(dck, d.name(), "user:" + id);
-            }
-            case "sample" -> {
-                String id = spec.path("id").asText();
-                samples.find(id).orElseThrow(() -> new IllegalArgumentException("Sample-Deck nicht gefunden: " + id));
-                if (usedSamples != null) {
-                    usedSamples.add(id);
-                }
-                return DeckLoader.loadFile(samples.resolve(id));
-            }
-            default -> {
-                List<SampleDeckCatalog.Entry> pool = new ArrayList<>(samples.list());
-                if (usedSamples != null) {
-                    pool.removeIf(e -> usedSamples.contains(e.id()));
-                }
-                while (!pool.isEmpty()) {
-                    SampleDeckCatalog.Entry e = pool.remove(random.nextInt(pool.size()));
-                    LoadedDeck d = DeckLoader.loadFile(samples.resolve(e.id()));
-                    if (d.valid() || pool.isEmpty()) {
-                        if (usedSamples != null) {
-                            usedSamples.add(e.id());
-                        }
-                        return d;
-                    }
-                }
-                throw new IllegalStateException("Keine Sample-Decks gefunden");
-            }
-        }
+        return deckResolver.resolve(userId, spec, usedSamples);
     }
 
     // ------------------------------------------------------------------ WebSocket

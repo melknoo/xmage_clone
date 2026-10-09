@@ -160,6 +160,11 @@ final class PromptBridge {
         /** sichere Standard-Antwort fuer aufgegebene Sitze */
         abstract void autopilot();
 
+        /** Kurzbeschreibung fuer Warnungen */
+        String describe() {
+            return getClass().getSimpleName();
+        }
+
         StateMode stateMode() {
             return StateMode.NONE;
         }
@@ -201,6 +206,11 @@ final class PromptBridge {
         @Override
         boolean done() {
             return latch.getCount() == 0 || game().isGameOver();
+        }
+
+        @Override
+        String describe() {
+            return "InputFrame/" + (input == null ? "null" : input.getClass().getSimpleName()) + " '" + gui().message + "'";
         }
 
         private SeatGui gui() {
@@ -346,7 +356,12 @@ final class PromptBridge {
                 answerConvoke(conv, r);
             } else if (input instanceof InputSelectEntitiesFromList<?> || input instanceof InputSelectTargets) {
                 if (r.uuid() != null) {
+                    PromptDto before = build();
                     select(r.uuid());
+                    PromptDto after = done() ? null : build();
+                    if (before != null && after != null && java.util.Objects.equals(before.chosen, after.chosen)) {
+                        host.toast(seat, "info", "Das geht als Ziel nicht.");
+                    }
                 } else {
                     okOrCancel();
                 }
@@ -373,13 +388,24 @@ final class PromptBridge {
                 } else if (gui().btn1Enabled) {
                     hc().selectButtonOk();
                 } else {
-                    List<UUID> t = new ArrayList<>(); // erste waehlbare Option
+                    // erstes Ziel, das Forge annimmt (eine abgelehnte Option immer wieder zu waehlen, liefe endlos)
                     PromptDto p = build();
-                    if (p != null && p.targets != null) {
-                        t.addAll(p.targets);
+                    if (p == null || p.targets == null) {
+                        return;
                     }
-                    if (!t.isEmpty()) {
-                        select(t.get(0));
+                    int before = p.chosen == null ? 0 : p.chosen.size();
+                    for (UUID id : p.targets) {
+                        if (p.chosen != null && p.chosen.contains(id)) {
+                            continue;
+                        }
+                        select(id);
+                        if (done() || gui().btn1Enabled) {
+                            return;
+                        }
+                        PromptDto after = build();
+                        if (after == null || (after.chosen == null ? 0 : after.chosen.size()) != before) {
+                            return;
+                        }
                     }
                 }
             } else {

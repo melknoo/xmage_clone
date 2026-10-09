@@ -8,6 +8,9 @@ import dev.magelite.api.DownloadRoutes;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
 import dev.magelite.api.TableRoutes;
+import dev.magelite.deck.CardLookup;
+import dev.magelite.deck.CardNameSuggester;
+import dev.magelite.deck.DeckMigration;
 import dev.magelite.deck.DeckResolver;
 import dev.magelite.game.TableManager;
 import dev.magelite.social.FriendStore;
@@ -24,7 +27,6 @@ import dev.magelite.boot.LogConfig;
 import dev.magelite.deck.DeckRoutes;
 import dev.magelite.deck.DeckStore;
 import dev.magelite.deck.SampleDeckCatalog;
-import dev.magelite.game.BotTuning;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameRegistry;
 import dev.magelite.images.ImageService;
@@ -93,8 +95,6 @@ public final class Main {
         Map<String, String> opt = parseArgs(args);
         Path data = Path.of(opt.getOrDefault("data", ".")).toAbsolutePath().normalize();
         Path forge = Path.of(opt.getOrDefault("forge", System.getProperty("magelite.forge", "../../vendor/forge"))).toAbsolutePath().normalize();
-        // TODO Forge-Umbau Phase 2: Sample-Decks aus dem Classpath, dann vendor/xmage und --vendor entfernen
-        Path vendor = Path.of(opt.getOrDefault("vendor", System.getProperty("magelite.vendor", "../../vendor/xmage"))).toAbsolutePath().normalize();
         boolean dev = opt.containsKey("dev");
         boolean server = opt.containsKey("server");
         String host = opt.getOrDefault("host", "127.0.0.1");
@@ -106,11 +106,11 @@ public final class Main {
         Logger log = Logger.getLogger(Main.class);
 
         ForgeBoot.init(forge, data); // prueft auch Arbeitsverzeichnis == data
-        BotTuning.checkFfaEvaluator();
 
         Db db = new Db(data.resolve("magelite.db"));
         DeckStore deckStore = new DeckStore(db);
-        SampleDeckCatalog samples = new SampleDeckCatalog(vendor.resolve("sample-decks"));
+        DeckMigration.run(db, data);
+        SampleDeckCatalog samples = new SampleDeckCatalog();
         GameRegistry games = new GameRegistry(server ? maxGames : 1);
         ProfileService profile = new ProfileService(db);
         GameRecorder recorder = new GameRecorder(db, profile);
@@ -185,10 +185,12 @@ public final class Main {
         }
         int port = httpServer.start();
 
-        // Sample-Katalog im Hintergrund vorbereiten
+        // Sample-Katalog und Kartenindizes (Set-Codes, Namen fuer "Meintest du ...?") im Hintergrund vorbereiten
         Thread warmup = new Thread(() -> {
             try {
                 samples.list();
+                CardLookup.warmup();
+                CardNameSuggester.warmup();
             } catch (Exception e) {
                 log.warn("Warmup fehlgeschlagen: " + e);
             }

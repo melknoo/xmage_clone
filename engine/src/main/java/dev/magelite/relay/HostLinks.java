@@ -99,6 +99,10 @@ public final class HostLinks implements HttpServer.Module {
         ses.scheduleWithFixedDelay(this::closeSilent, 15, 15, TimeUnit.SECONDS);
     }
 
+    /** Engine-Kennung des Gastgebers beim Verbinden; fehlt sie oder weicht sie ab, schliesst der Server mit 4426. */
+    public static final String ENGINE_HEADER = "X-MageLite-Engine";
+    public static final String ENGINE_MARKER = "forge/1";
+
     public void setListener(Listener l) {
         this.listener = l;
     }
@@ -118,6 +122,11 @@ public final class HostLinks implements HttpServer.Module {
                 User user = auth.resolve(ctx.cookie(Auth.SESSION_COOKIE), ctx.cookie(Auth.COOKIE)).orElse(null);
                 if (user == null) {
                     ctx.closeSession(4401, "login");
+                    return;
+                }
+                if (!ENGINE_MARKER.equals(ctx.header(ENGINE_HEADER))) {
+                    // Gastgeber mit anderer Engine (XMage bis 0.1.x): Decktexte und Spielablauf passen nicht zusammen
+                    ctx.closeSession(4426, "MageLite auf diesem Rechner aktualisieren");
                     return;
                 }
                 Link link = new Link(ctx, user);

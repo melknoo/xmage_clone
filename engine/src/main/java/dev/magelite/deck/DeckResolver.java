@@ -37,16 +37,16 @@ public final class DeckResolver {
             case "user" -> {
                 long id = spec.path("id").asLong();
                 DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
-                String dck = deckStore.getDck(userId, id).orElseThrow();
-                return DeckLoader.fromDckText(dck, d.name(), "user:" + id);
+                String text = deckStore.getDck(userId, id).orElseThrow();
+                return DeckLoader.fromText(text, d.name(), "user:" + id);
             }
             case "sample" -> {
                 String id = spec.path("id").asText();
-                samples.find(id).orElseThrow(() -> new IllegalArgumentException("Sample-Deck nicht gefunden: " + id));
+                SampleDeckCatalog.Entry entry = samples.find(id).orElseThrow(() -> new IllegalArgumentException("Sample-Deck nicht gefunden: " + id));
                 if (usedSamples != null) {
                     usedSamples.add(id);
                 }
-                return DeckLoader.loadFile(samples.resolve(id));
+                return DeckLoader.fromText(samples.text(id), entry.name(), "sample:" + id);
             }
             default -> {
                 List<SampleDeckCatalog.Entry> pool = new ArrayList<>(samples.list());
@@ -55,7 +55,7 @@ public final class DeckResolver {
                 }
                 while (!pool.isEmpty()) {
                     SampleDeckCatalog.Entry e = pool.remove(random.nextInt(pool.size()));
-                    LoadedDeck d = DeckLoader.loadFile(samples.resolve(e.id()));
+                    LoadedDeck d = DeckLoader.fromText(samples.text(e.id()), e.name(), "sample:" + e.id());
                     if (d.valid() || pool.isEmpty()) {
                         if (usedSamples != null) {
                             usedSamples.add(e.id());
