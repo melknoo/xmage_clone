@@ -1,5 +1,5 @@
 // Bruecke Renderer <-> Hauptprozess.
-// Lokale UI (127.0.0.1/localhost): Port/Token stehen in der URL (?port=&token=&server=), dazu "Online spielen".
+// Lokale UI (127.0.0.1/localhost): Port/Token stehen in der URL (?port=&token=&server=), dazu Online an-/abmelden.
 // Fremde Seite (der Online-Server im selben Fenster): nur ein kleiner Hinweis, dass wir in der App sind, mit
 // "Zurueck zur App" - nie Port/Token (sonst liefe die Server-UI gegen 127.0.0.1).
 const { contextBridge, ipcRenderer } = require('electron')
@@ -16,6 +16,7 @@ if (local) {
     serverUrl: params.get('server') || undefined,
     fetchText: (url) => ipcRenderer.invoke('magelite:fetchText', url),
     openOnline: () => ipcRenderer.send('magelite:openOnline'),
+    logoutOnline: () => ipcRenderer.invoke('magelite:logoutOnline'),
   })
 } else {
   contextBridge.exposeInMainWorld('mageliteDesktop', {

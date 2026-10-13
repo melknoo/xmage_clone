@@ -6,6 +6,7 @@ import { useGame } from '../store/game'
 import { useNav, type Screen } from '../store/nav'
 import { useSocial } from '../store/social'
 import { useTable } from '../store/table'
+import { LocalAccountButton } from './LocalAccountButton'
 
 interface NavItem {
   key: Screen
@@ -28,7 +29,7 @@ function isActive(key: Screen, screen: Screen): boolean {
 
 /**
  * Navigationsleiste links (<nav>, 84 px): ML (= zur Startseite), Start, Spielen, Decks, Statistik, (Admin), "Zum Tisch",
- * Konto, Version. Aktiver Punkt: fg-1 + 2-px-Ember-Leiste am rechten Rand. Badge an Start: ungelesene
+ * Konto (Server) bzw. Online-Konto der Desktop-App (LocalAccountButton), Version. Aktiver Punkt: fg-1 + 2-px-Ember-Leiste am rechten Rand. Badge an Start: ungelesene
  * Lobby-Chat-Nachrichten, solange man nicht auf einem Screen mit Lobby-Chat ist (Start, Lobby; Server-Modus).
  * Liest alle Stores selbst.
  */
@@ -47,12 +48,15 @@ export function NavRail() {
   const items = server && me?.admin ? [...NAV, ADMIN] : NAV
   // Electron zeigt den Online-Server: zurueck zur lokalen App
   const desktop = typeof window !== 'undefined' ? window.mageliteDesktop : undefined
+  // Lokale Desktop-App: Online-Konto (anmelden, Lobby, abmelden)
+  const openOnline = !server && typeof window !== 'undefined' ? window.magelite?.openOnline : undefined
+  const account = server || !!openOnline
   // Zum Tisch: laufendes Spiel -> Brett; sonst (Server) eigener Tisch
   const toTable: Screen | null = gameId ? 'game' : server && tableId ? 'table' : null
   const accountActive = screen === 'account'
 
   return (
-    <nav className="flex w-[84px] flex-none flex-col items-center gap-1 border-r border-line-2 pt-[22px]" style={{ paddingBottom: server ? 14 : 16 }}>
+    <nav className="flex w-[84px] flex-none flex-col items-center gap-1 border-r border-line-2 pt-[22px]" style={{ paddingBottom: account ? 14 : 16 }}>
       <button type="button" className="mb-[22px] cursor-pointer transition-opacity duration-1 hover:opacity-80" aria-label="Zur Startseite" title="Zur Startseite" onClick={() => go('home')} data-testid="nav-logo">
         <Wordmark size={20} short />
       </button>
@@ -94,7 +98,7 @@ export function NavRail() {
         <button
           type="button"
           className="flex w-[68px] cursor-pointer flex-col items-center gap-1.5 rounded-sm py-2.5 text-ember shadow-[inset_0_0_0_1px_var(--color-ember)] transition-colors duration-1 hover:bg-bg-4"
-          style={{ marginBottom: server ? 8 : 0 }}
+          style={{ marginBottom: account ? 8 : 0 }}
           onClick={() => go(toTable)}
           title={toTable === 'game' ? 'Zur laufenden Partie' : 'Zu deinem Tisch'}
         >
@@ -119,6 +123,7 @@ export function NavRail() {
           <span className="font-display text-[11px] font-semibold uppercase leading-none tracking-[.1em]">Konto</span>
         </button>
       )}
+      {openOnline && <LocalAccountButton openOnline={openOnline} />}
       {version && (
         <span className="mt-2.5 font-mono text-[10px] leading-none text-fg-5" title={`MageLite ${version}`} data-testid="nav-version">
           v{version}

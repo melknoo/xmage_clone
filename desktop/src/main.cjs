@@ -124,6 +124,29 @@ function watchCookies() {
   }
 }
 
+/**
+ * Online abmelden aus der lokalen App (Konto-Menue): Session am Server beenden (best effort; Node-fetch, weil das
+ * Cookie dort per Header mitgeht), Cookie loeschen, Link trennen. Laufende Relay-Spiele enden mit dem Link.
+ */
+async function logoutOnline() {
+  const cookies = await session.defaultSession.cookies.get({ url: settings.serverUrl, name: 'ml_sess' })
+  const token = cookies.find((c) => c.value)?.value
+  if (token) {
+    try {
+      const res = await fetch(`${settings.serverUrl}/api/auth/logout`, {
+        method: 'POST',
+        headers: { Cookie: `ml_sess=${token}` },
+        signal: AbortSignal.timeout(8000),
+      })
+      log(`Abmelden am Server: HTTP ${res.status}`)
+    } catch (e) {
+      log(`Abmelden am Server: ${e.message}`)
+    }
+  }
+  await session.defaultSession.cookies.remove(settings.serverUrl, 'ml_sess')
+  await syncHostLink()
+}
+
 function openOnline() {
   if (!win) return
   log(`Online: ${settings.serverUrl}`)
@@ -218,6 +241,7 @@ async function boot() {
 
 ipcMain.on('magelite:openOnline', () => openOnline())
 ipcMain.on('magelite:openLocal', () => openLocal())
+ipcMain.handle('magelite:logoutOnline', () => logoutOnline())
 
 // Entwickler: MAGELITE_AUTOSHOT=<datei.png>;<ms> speichert nach <ms> einen Screenshot und beendet die App
 function autoShot() {

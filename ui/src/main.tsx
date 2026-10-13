@@ -10,6 +10,7 @@ import { useNav, type LastSetup } from './store/nav'
 import { useSocial } from './store/social'
 import { useTable } from './store/table'
 import { useConn } from './store/conn'
+import { useHostLink } from './store/hostLink'
 import { useUi } from './store/ui'
 
 if (import.meta.env.DEV) {
@@ -22,6 +23,7 @@ if (import.meta.env.DEV) {
     table: useTable,
     ui: useUi,
     conn: useConn,
+    hostLink: useHostLink,
     api: {
       /** Spiel starten (POST /api/games), verbinden und zum Brett wechseln; liefert die gameId */
       start: async (spec: LastSetup) => {
