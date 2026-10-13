@@ -600,6 +600,8 @@ Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und wora
   Angreifern und nach Blockern; eigener Angriff → nach Angreifern und nach Blockern, dann Schaden; fremder Kampf →
   beide Stopps. Danach alle Szenarien, `--humans=2 --spectate --noAutoPass`, 2 Zufallsspiele grün; `steps-attack-undo`,
   `-pass-ui`, `-autoplay`, `-arrows` grün.
+- **Release 0.2.2** (`15fdcd9`, zusammen mit dem Konto-Button `00fd91c`): Setup 204 MB lokal installiert und auf GitHub
+  (`magelite-releases` v0.2.2, HTTP 200), fly live mit 0.2.2 (`/api/health` ok, Modus server).
 - Offen (niedrig): Vorschau nicht für aktivierte Fähigkeiten von Permanents; `payPreview` über den Host-Link nur
   indirekt geprüft (gleicher `GameMessages.dispatch`); Bei Auto-Passen sieht man den Zielpfeil des eigenen Zaubers
   auf dem Stapel nur kurz (Engine passt nach eigenem Zauber weiter).
