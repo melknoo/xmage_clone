@@ -9,6 +9,7 @@ import { shortName } from './format'
 import type { Interaction } from './interaction'
 import type { BoardLayoutState } from './layout'
 import { stepIndex, stepLabel } from './PhaseBar'
+import { PlayToggles } from './PlayToggles'
 import { isOpeningHandAsk, SKIP_LABEL, SKIPS, usePromptButtons, type PromptButton } from './promptActions'
 
 export interface PromptBarProps {
@@ -46,7 +47,8 @@ function phaseContext(s: GameState, spectator: boolean): { left: string; mine: b
 
 /**
  * Aktionsleiste unter der Hand: Status-Chip, Kontext (nur volles Layout), Engine-Text (eine Zeile, Ellipse, Hover-Zoom
- * auf Kartenlinks), Passen-Knoepfe, Prompt-Knoepfe (Primaer rechts). Ohne Prompt: Wartezustand (ActivityIndicator).
+ * auf Kartenlinks), Auto-Mana/Auto-Passen (PlayToggles), Passen-Knoepfe, Prompt-Knoepfe (Primaer rechts).
+ * Ohne Prompt: Wartezustand (ActivityIndicator).
  * Zuschauer: Chip "Zuschauer", "Du schaust {Tisch} zu", "Zuschauen beenden" (Esc).
  */
 export function PromptBar({ inter, layout }: PromptBarProps) {
@@ -72,6 +74,7 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
   const skips = state?.players.find((pl) => pl.me)?.skips
   const skipText = !spectator && skips && skips.length > 0 ? (SKIP_LABEL[skips[0]] ?? 'Passe automatisch') : null
   const full = !layout.compact
+  const toggles = <PlayToggles layout={layout} />
 
   const bar = (children: ReactNode) => (
     <div className="flex shrink-0 items-center gap-[10px] border-t border-line-2 bg-bg-3" style={{ height: layout.promptH + 1, padding: '0 12px 0 14px' }} data-testid="prompt-bar">
@@ -130,6 +133,7 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
         <>
           {status({ text: 'Pause', tone: 'outline' })}
           <span className="min-w-0 flex-1 truncate pl-1 text-body-l font-medium text-fg-2">Das Spiel läuft im Hintergrund weiter</span>
+          {toggles}
           {stopBtn}
         </>,
       )
@@ -144,11 +148,12 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
           <span className="min-w-0 flex-1 truncate pl-1 text-body-l font-medium text-fg-2" title="F3 oder „Stopp“ hält wieder an">
             {skipText}
           </span>
+          {toggles}
           {stopBtn}
         </>,
       )
     }
-    return bar(<ActivityIndicator context={full ? ctx.left || null : null} />)
+    return bar(<ActivityIndicator context={full ? ctx.left || null : null} extra={toggles} />)
   }
 
   // ---- offener Prompt ----
@@ -195,11 +200,14 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
   const skipBtns = priority ? SKIPS.filter((s) => (s.action === 'PASS_PRIORITY_UNTIL_STACK_RESOLVED' ? full && stackSize >= 2 : full || s.hotkey === 'F5')) : []
   const primary = buttons.filter((b) => b.kind === 'primary')
   const others = buttons.filter((b) => b.kind !== 'primary')
+  // volle Leiste (Schalter + viele Passen-Knoepfe): Kontext weglassen (steht auch in der Phasenleiste), sonst bleibt
+  // vom Engine-Text kaum etwas
+  const crowded = skipBtns.length >= (layout.showInlineTempo ? 4 : 3)
 
   return bar(
     <>
       {status(st)}
-      {context(ctxText)}
+      {!crowded && context(ctxText)}
       <span className="min-w-0 flex-1 truncate pl-1 text-body-l font-medium text-fg-1" title={title || undefined}>
         {marks > 0 ? (
           <>
@@ -215,6 +223,7 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
           </span>
         )}
       </span>
+      {toggles}
       {stopBtn}
       {skipBtns.map((s) => (
         <Button key={s.action} variant="secondary" kbd={s.hotkey} game className="shrink-0" title={`${s.title} (${s.hotkey})`} onClick={() => action(s.action)}>
@@ -234,8 +243,18 @@ export function PromptBar({ inter, layout }: PromptBarProps) {
 }
 
 function PromptBtn({ b }: { b: PromptButton }) {
+  const showPayPreview = useGame((s) => s.showPayPreview)
+  const clearPayPreview = useGame((s) => s.clearPayPreview)
+  // "Automatisch bezahlen": geplante Quellen leuchten, solange Maus/Fokus auf dem Knopf liegt
+  const preview = b.preview?.length ? b.preview : null
+  const on = preview ? () => showPayPreview('prompt', preview) : undefined
+  const off = preview ? () => clearPayPreview('prompt') : undefined
   return (
     <Button
+      onMouseEnter={on}
+      onMouseLeave={off}
+      onFocus={on}
+      onBlur={off}
       variant={b.kind}
       kbd={b.hotkey}
       confirm={b.confirm}

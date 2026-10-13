@@ -88,9 +88,12 @@
 
   --animate-target: target-dash 1.6s linear infinite;
   --animate-think: think 1.2s var(--ease-in-out) infinite;
+  --animate-arrow-dash: arrow-dash .9s linear infinite;
 }
 
 @keyframes target-dash { to { stroke-dashoffset: -24; } }
+/* Zielpfeile (ArrowLayer): Strichelung 7/5 laeuft Richtung Ziel */
+@keyframes arrow-dash { to { stroke-dashoffset: -12; } }
 @keyframes think { 0%,100% { opacity: .35 } 50% { opacity: 1 } }
 
 :root { color-scheme: dark; }

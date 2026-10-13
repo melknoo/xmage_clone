@@ -1,0 +1,510 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 1500000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 90000
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();if(g.gameId){g.leave();g.reset&&g.reset();window.__ml.nav.getState().go('home');return 'altes Spiel beendet'}return 'frisch'})()"
+  },
+  {
+   "localStorage": {
+    "magelite.autoMana": "0",
+    "magelite.arrows": "1",
+    "magelite.fx": "1"
+   },
+   "reload": true
+  },
+  {
+   "waitFor": "#root nav",
+   "timeout": 60000
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'convoke'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (convoke)"
+  },
+  {
+   "js": "window.__hold={convoke:true,firstMain:true,blazeTarget:true,afterGuardian:true,mana:true};'hold'"
+  },
+  {
+   "jsFile": "scenario-pilot.js",
+   "expect": "started|already"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='priority'&&s.step==='PRECOMBAT_MAIN')){clearInterval(t);r('Main 1')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Main 1\")},120000)})",
+   "name": "Main 1"
+  },
+  {
+   "js": "(()=>{const a=document.querySelector('[data-testid=toggle-auto-mana]'),b=document.querySelector('[data-testid=toggle-auto-pass]');const bar=document.querySelector('[data-testid=prompt-bar]');return a&&b&&bar.contains(a)&&bar.contains(b)&&!document.querySelector('[data-testid=game-header] [aria-pressed]')?'Schalter in der Leiste, Auto-Mana '+a.getAttribute('aria-pressed'):'kein Schalter in der Leiste'})()",
+   "expect": "^Schalter in der Leiste",
+   "name": "Schalter unten"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-01-leiste.png",
+   "name": "arrows-01-leiste"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-01-leiste-1280.png",
+   "name": "arrows-01-leiste-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=hand] img[alt=Blaze]"
+   }
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const v=window.__ml.game.getState().payPreview;if(v&&v.ids.size&&v.for!=='prompt'){clearInterval(t);r('Vorschau '+v.ids.size)}},100);setTimeout(()=>{clearInterval(t);r('Timeout Vorschau')},5000)})",
+   "name": "Vorschau da"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-02-hover-hand.png",
+   "name": "arrows-02-hover-hand"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=hand] img[alt=Blaze]"
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-02-hover-hand-1280.png",
+   "name": "arrows-02-hover-hand-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=hand] img[alt=Blaze]"
+   }
+  },
+  {
+   "hover": "[data-testid=game-header]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.game.getState().payPreview?'Vorschau noch da':'Vorschau weg'",
+   "expect": "Vorschau weg",
+   "name": "Vorschau endet"
+  },
+  {
+   "js": "window.__hold.firstMain=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PICK_TARGET'&&/Blaze/.test(p.messageText||''))){clearInterval(t);r('Blaze-Ziel')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Blaze-Ziel\")},30000)})",
+   "name": "Blaze-Ziel"
+  },
+  {
+   "hover": "[data-testid=opp-pod]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(()=>{const n=document.querySelectorAll('[data-testid=arrow-layer] [data-arrow=live]').length;return n?'Live: '+n:'kein Live-Pfeil'})()",
+   "name": "Live"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-03-live-snap.png",
+   "name": "arrows-03-live-snap"
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=battlefield-creatures] [data-obj]",
+    "nth": 0
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-03b-live-eigene-kreatur.png",
+   "name": "arrows-03b-live-eigene-kreatur"
+  },
+  {
+   "hover": "[data-testid=game-header]"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-03c-live-frei.png",
+   "name": "arrows-03c-live-frei"
+  },
+  {
+   "js": "window.__hold.blazeTarget=false;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PLAY_MANA'&&!p.specialBtn)){clearInterval(t);r('Mana Blaze')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Mana Blaze\")},30000)})",
+   "name": "Mana Blaze"
+  },
+  {
+   "js": "'autoPaySources: '+((window.__ml.game.getState().prompt.autoPaySources||[]).length)",
+   "expect": "autoPaySources: [1-9]",
+   "name": "Plan im Prompt"
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=prompt-bar] button",
+    "text": "Automatisch bezahlen",
+    "prefix": true
+   }
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const v=window.__ml.game.getState().payPreview;if(v&&v.ids.size&&v.for==='prompt'){clearInterval(t);r('Vorschau '+v.ids.size)}},100);setTimeout(()=>{clearInterval(t);r('Timeout Vorschau')},5000)})",
+   "name": "Vorschau da"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-04-autopay-hover.png",
+   "name": "arrows-04-autopay-hover"
+  },
+  {
+   "hover": "[data-testid=game-header]"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();g.action('HOLD_PRIORITY');g.setAutoPass(false);window.__hold.stack=1;window.__hold.mana=false;return 'weiter (Prioritaet halten)'})()"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='priority'&&s.stack.length>0&&s.stack[0].name==='Blaze')){clearInterval(t);r('Blaze auf dem Stapel')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Blaze auf dem Stapel\")},30000)})",
+   "name": "Blaze auf dem Stapel"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "js": "(()=>{const n=document.querySelectorAll('[data-testid=arrow-layer] [data-arrow=target]').length;return n?'Ziel: '+n:'kein Ziel-Pfeil'})()",
+   "name": "Ziel"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-05-stapel-ziel.png",
+   "name": "arrows-05-stapel-ziel"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-05-stapel-ziel-1280.png",
+   "name": "arrows-05-stapel-ziel-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();g.action('UNHOLD_PRIORITY');g.setAutoPass(true);window.__hold.stack=0;return 'weiter'})()"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='PLAY_MANA'&&!!p.specialBtn)){clearInterval(t);r('Mana Guardian (Einberufen)')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Mana Guardian (Einberufen)\")},60000)})",
+   "name": "Mana Guardian (Einberufen)"
+  },
+  {
+   "js": "(()=>{window.__ml.game.getState().setArrows(false);return 'aus'})()"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "document.querySelector('[data-testid=arrow-layer]')?'Ebene noch da':'Pfeile aus'",
+   "expect": "Pfeile aus",
+   "name": "Schalter Pfeile"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();g.setArrows(true);g.leave();g.reset();window.__ml.nav.getState().go('home');return 'Teil A fertig'})()"
+  },
+  {
+   "wait": 2500
+  },
+  {
+   "js": "Object.assign(window.__hold,{convoke:false,mana:false,afterGuardian:false,stack:3,attack:true});'hold swarm'"
+  },
+  {
+   "js": "window.__ml.api.start({deck:{type:'random'},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ',scenario:'swarm'})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel starten (swarm)"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='priority'&&s.stack.length>=3)){clearInterval(t);r('Ausloeser auf dem Stapel')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Ausloeser auf dem Stapel\")},120000)})",
+   "name": "Ausloeser auf dem Stapel"
+  },
+  {
+   "wait": 100
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-07-ausloeser-frisch.png",
+   "name": "arrows-07-ausloeser-frisch"
+  },
+  {
+   "wait": 1200
+  },
+  {
+   "js": "(()=>{const n=document.querySelectorAll('[data-testid=arrow-layer] [data-arrow=source]').length;return n?'Quelle: '+n:'kein Quelle-Pfeil'})()",
+   "name": "Quelle"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-07b-ausloeser.png",
+   "name": "arrows-07b-ausloeser"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-07b-ausloeser-1280.png",
+   "name": "arrows-07b-ausloeser-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "hover": {
+    "sel": "[data-stack]",
+    "nth": 0
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-08-stapel-fokus.png",
+   "name": "arrows-08-stapel-fokus"
+  },
+  {
+   "hover": "[data-testid=game-header]"
+  },
+  {
+   "js": "window.__hold.stack=0;'weiter'"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers')){clearInterval(t);r('Angriff')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Angriff\")},120000)})",
+   "name": "Angriff"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();const pa=new Set(g.prompt.possibleAttackers);document.querySelectorAll('[data-shot-target]').forEach(e=>e.removeAttribute('data-shot-target'));const el=[...document.querySelectorAll('[data-objs]')].find(e=>e.getAttribute('data-objs').split(' ').some(id=>pa.has(id)));if(!el)return 'kein Stapel gefunden';el.querySelector('[data-obj]').setAttribute('data-shot-target','1');return 'Stapel markiert'})()"
+  },
+  {
+   "click": "[data-shot-target]",
+   "shift": true
+  },
+  {
+   "wait": 400
+  },
+  {
+   "js": "(()=>{const s=window.__ml.game.getState().state;const opp=s.players.find(p=>!p.me&&!p.lost);document.querySelectorAll('[data-shot-target]').forEach(e=>e.removeAttribute('data-shot-target'));const el=document.querySelector('[data-testid=opp-pod][data-player=\"'+opp.id+'\"]')||document.querySelector('[data-player=\"'+opp.id+'\"]');if(!el)return 'kein Pod';el.setAttribute('data-shot-target','1');return 'Ziel '+opp.name})()"
+  },
+  {
+   "click": "[data-shot-target]"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='SELECT'&&p.mode==='attackers'&&s.combat.some(c=>c.attackers.length))){clearInterval(t);r('Angreifer erklaert')}},150);setTimeout(()=>{clearInterval(t);r(\"Timeout Angreifer erklaert\")},30000)})",
+   "name": "Angreifer erklaert"
+  },
+  {
+   "hover": "[data-testid=game-header]"
+  },
+  {
+   "js": "(()=>{const n=document.querySelectorAll('[data-testid=arrow-layer] [data-arrow=attack]').length;return n?'Angriff: '+n:'kein Angriff-Pfeil'})()",
+   "name": "Angriff"
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-09-kampf.png",
+   "name": "arrows-09-kampf"
+  },
+  {
+   "size": [
+    1280,
+    760
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-09-kampf-1280.png",
+   "name": "arrows-09-kampf-1280"
+  },
+  {
+   "size": [
+    1680,
+    1000
+   ]
+  },
+  {
+   "wait": 400
+  },
+  {
+   "hover": {
+    "sel": "[data-testid=battlefield-creatures] [data-obj]",
+    "nth": 0
+   }
+  },
+  {
+   "wait": 400
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/../arrows/arrows-09b-kampf-hover.png",
+   "name": "arrows-09b-kampf-hover"
+  },
+  {
+   "js": "(()=>{const g=window.__ml.game.getState();g.leave();g.reset();window.__ml.nav.getState().go('home');clearInterval(window.__pilot);window.__pilot=null;return 'fertig'})()"
+  }
+ ]
+}

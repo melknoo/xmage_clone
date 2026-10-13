@@ -44,6 +44,8 @@ export interface Card {
   /** Ziele mit Namen (nur Stapelobjekte) */
   targetRefs?: TargetRef[]
   kind?: 'spell' | 'ability'
+  /** Stapel: Zauber wird gerade gewirkt (Ziele/Kosten offen, noch kein Stapelobjekt) */
+  casting?: boolean
   /**
    * nur Stapel-Faehigkeiten (kind=ability): vereinfachter XMage-AbilityType. Engine sendet heute
    * triggered | activated | static | special | spell | land (Fallback: Enum-Name klein). Fehlt bei Zaubern/alten Engines.
@@ -250,6 +252,8 @@ export interface Prompt {
   specialBtn?: string
   /** PLAY_MANA: Kreaturen, die per Klick eingeberufen werden koennen (Convoke) */
   specialTargets?: UUID[]
+  /** PLAY_MANA: Quellen, die "Automatisch bezahlen" tappen wuerde (Forges Plan, Hover-Vorschau) */
+  autoPaySources?: UUID[]
   mode?: 'priority' | 'attackers' | 'blockers'
   /** Prioritaet im eigenen Zug bei leerem Stapel: wohin "Weiter" fuehrt */
   nextStop?: 'main1' | 'combat' | 'main2' | 'end'
@@ -460,6 +464,8 @@ export type ServerMessage =
   | { t: 'pong' }
   | { t: 'events'; items: FxEvent[] }
   | { t: 'chat'; entries: ChatEntry[] }
+  /** Antwort auf {t:'payPreview', id}: Quellen, die Auto-Bezahlen fuer die Karte id tappen wuerde */
+  | { t: 'payPreview'; id: UUID; stateSeq: number; sources: UUID[] }
 
 export type Answer =
   | { uuid: UUID }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Chip } from '../components/ui'
 import type { IconName } from '../lib/icons'
 import { useGame } from '../store/game'
@@ -90,10 +90,10 @@ export function useActivity(): ActivityInfo {
 
 /**
  * Wartezustand der Aktionsleiste (kein Prompt offen): Kontur-Chip, optional Kontext, Aktivitaetszeile,
- * CPU-Balken 2 px und ein Platzhalter an der Stelle des Primaer-Buttons ("Bot rechnet").
+ * CPU-Balken 2 px, optional `extra` (Schalter) und ein Platzhalter an der Stelle des Primaer-Buttons ("Bot rechnet").
  * Rendert die Kinder der Leiste direkt (Fragment), die Leiste selbst liegt in PromptBar.
  */
-export function ActivityIndicator({ context }: { context: string | null }) {
+export function ActivityIndicator({ context, extra }: { context: string | null; extra?: ReactNode }) {
   const info = useActivity()
   return (
     <>
@@ -112,6 +112,7 @@ export function ActivityIndicator({ context }: { context: string | null }) {
           <span className="font-mono text-kbd font-medium tabular-nums text-fg-4">CPU {info.cpu} %</span>
         </span>
       )}
+      {extra}
       <Button variant="wait" game icon={info.tone === 'work' ? 'thinking' : undefined} className="shrink-0">
         {info.tone === 'work' ? 'Bot rechnet' : 'Warten'}
       </Button>

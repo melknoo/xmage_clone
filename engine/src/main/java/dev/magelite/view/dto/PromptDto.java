@@ -29,6 +29,8 @@ public class PromptDto {
     public String specialBtn;
     /** PLAY_MANA: Kreaturen, die per Klick eingeberufen werden koennen (Convoke, {@code GameHost.specialPay}) */
     public List<UUID> specialTargets;
+    /** PLAY_MANA: Quellen, die "Automatisch bezahlen" tappen wuerde (Forges Plan; Hover-Vorschau in der UI) */
+    public List<UUID> autoPaySources;
 
     /** SELECT: priority | attackers | blockers */
     public String mode;

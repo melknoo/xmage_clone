@@ -284,3 +284,23 @@ als „(historisch, XMage)“ gekennzeichnet und bleiben als Begründung der dam
     > 3000 Entscheidungen in einem Zug beenden das Spiel als Remis (Regel 104.4b), > 200 Antworten auf eine Frage
     schalten den Sitz auf Autopilot, KI-Profil „MageLite“ ohne Zufalls-Trades beim Blocken (sonst Minuten auf
     Token-Boards).
+
+- **Spielablauf: Pfeile zurück, Schalter unten, Bezahl-Vorschau (2026-10-13, Nutzerwunsch, Vorbild MTG Arena):**
+  - **Pfeile kontextuell statt dauerhaft** (`ArrowLayer`): nur das Stapelobjekt unter der Maus bzw. das oberste,
+    Quellen von Fähigkeiten (frisch ausgelöst mit Puls), Kampf gedämpft (das gehoverte Objekt voll) und der Live-Pfeil
+    bei der Zielwahl. Start/Ende an der Kartenkante, Stapelzeilen links – damit gilt der Einwand vom Redesign
+    (Pfeile verdecken Karten) weniger; Etiketten bleiben, Schalter „Pfeile“ im Pausemenü.
+  - **Zauber im Wirken sichtbar:** Forge legt die Karte vor Zielwahl/Bezahlen in die Stapel-Zone, das Stapelobjekt
+    entsteht erst danach. Die Engine zeigt sie oben im Stapel als `casting` („Wird gewirkt“, öffentlich wie im echten
+    Spiel), damit Zielpfeil und Bezahl-Hinweis eine Quelle haben (wie früher unter XMage).
+  - **Auto-Mana/Auto-Passen in der Aktionsleiste** neben F5/F4/F9, untereinander (Breite für den Engine-Text);
+    das Pausemenü behält sie.
+  - **Bezahl-Vorschau:** Hover über „Automatisch bezahlen“ zeigt Forges eigenen Plan (`autoPayManaSources`, schon
+    berechnet); Hover über eine wirkbare Handkarte/den Commander fragt die Engine (`payPreview`, gleicher Testpfad,
+    jüngste Anfrage gewinnt, Fingerabdruck-Prüfung gegen Seiteneffekte). Unscharf bei X (= 0) und mehreren
+    Wirkweisen (erste); Einberufen-Prompt hat keinen Plan (anderer Forge-Input).
+  - **Kampf-Stopps** (Playtest: nach dem Blocken kam sofort der Schaden, obwohl Auto-Passen aus war): bei leerem
+    Stapel hält `AutoPassPolicy` jetzt in **jedem** Kampf mit Angreifern – auch Bot gegen Bot (Nutzerwahl) – nach
+    der Angreifer-Erklärung, nach den Blockern und nach Erstschlag-Schaden (Regel 508.8/509.4/510.4). Mit Auto-Passen
+    nur, wenn eine Nicht-Mana-Aktion möglich ist; F-Tasten überspringen weiter. Einstellbare Stopps je Phase bleiben
+    offen (STATUS „Einstellungs-Screen“).

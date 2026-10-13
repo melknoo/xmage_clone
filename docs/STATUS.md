@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-09 – Version 0.2.1 (Forge-Engine) live und als Setup veröffentlicht. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-13 – Version 0.2.1 (Forge-Engine) live und als Setup veröffentlicht; danach Konto-Button der Desktop-App (noch nicht released). Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -547,6 +547,62 @@ Engine-Wechsel XMage 1.4.60 → Forge (Entscheidung und Plan: Memory `forge-migr
 | 5 Doku + Abnahme (vor Merge) | ✅ **Doku:** CLAUDE.md auf Forge (Regeln aus Plan §5.11: vendor nur per Import, Spiel-Thread/inbox/Park, Wire-Namen, Arbeitsverzeichnis, Decktext v2, Test-App-Verzeichnis, GPL), README, DECISIONS (Forge-Eintrag, XMage-Einträge historisch), CODEMAP, DEVELOPMENT, SERVER (inkl. „Erster Forge-Deploy“), `LICENSES/THIRD-PARTY.md`, `docs/architecture.md` → `docs/archive/xmage-architecture.md`, STATUS-Altlasten unter „Historisch (XMage)“. **Parität (Plan §8):** frischer Klon → `build.ps1` (inkl. Forge-Import) 274 s, Engine 8 s, e2e-flow grün; Archidekt-URL-Import live + Spiel grün; Partner (Thrasios + Tymna) mit DFC/MDFC/Adventure/Split: Validierung (Farbidentität inkl. Rückseiten) + Spiel + Ansicht grün; Abläufe attack-undo, gemstone, modal-hover, pass-ui grün (FX-Animationen hier aus, weil Windows „Bewegung reduzieren“ an ist – UI-Absicht). **Fix:** F9/F11 übersprangen den eigenen Angriff nicht (XMage tat es, sofern kein Angriffszwang) → `AutoPassPolicy.skipsOwnAttack`. `steps-pass-ui` an Forge-Tempo und den Schnellstart-Fallback der UI angepasst. Vorschau ohne `unfinished`. **Offen (braucht Nutzer):** Test-App ausprobieren; fly-VM-Größe; Merge `forge` → `main` + Push; Release 0.2.0 (`release.ps1 -Bump minor`, `publish-setup.ps1`) + erster fly-Deploy (migriert Server-Decks, Sicherung auf dem Volume). |
 | Release 0.2.0 | ✅ 2026-10-09: Merge `forge` → `main` (`ae95689`), Version `cb59e7b`, gepusht. `release.ps1 -Bump none -Fly`: Smoke 6,5 s, Setup 204 MB (`SOURCE.txt` = `cb59e7b`, Arbeitsbaum sauber), lokal installiert, GitHub-Release `melknoo/magelite-releases` v0.2.0 (HTTP 200), fly-Deploy: `LegacyCleanup` 286 MB XMage-Karten-DB entfernt, Forge-Boot 5,7 s, V9 + `DeckMigration` 5 Server-Decks / 0 unbekannt / 0 Fehler (Sicherung `magelite.db.xmage-backup` auf dem Volume), bereit 7,4 s, `/api/health` 0.2.0. VM bleibt performance-2x/4 GB. Später: `grace_period` auf ~120 s senken (gemessen 7,4 s), lokale Reste `vendor/xmage/{db,tools-lib}` + zugehörige `.gitignore`/`.dockerignore`-Zeilen löschen. |
 | Nachlauf 0.2.1 | ✅ **Übersetzungen:** `view/ForgeText.german` übersetzt die häufigen festen Forge-Sätze zeilenweise (Auslöser-, Commander-, Bezahl-Fragen, X/Anzahl/Marken, Modus, Reihenfolge, Zielwahl, Abwerfen/Aufräumen, Karte aus Zone wählen, Aufdecken/Ansehen, Münzwurf/Wahl-Hinweise); Knöpfe Yes/No/Keep/Top/Bottom → Ja/Nein/Behalten/Oben/Unten; Karten- und Regeltexte bleiben englisch, Unbekanntes unverändert. Angewendet zentral in `PromptBridge.prompt`, `GameHost.publish` (Knöpfe), Aufdeck-Titel und `SeatGui`-Hinweise. Bestand per `--dumpJson` vorher/nachher geprüft. Konsumenten angepasst: UI `OPENING_HAND_RE` (Starthand-Dialog), `scenario-pilot.js`, `steps-gemstone`/`-design-gemstone`, HumanSpike-Gemstone-Check; `steps-necro` timing-fest. **Sonst:** `fly.toml` `grace_period` 420 s → 120 s (gemessen 7,4 s); lokale `vendor/xmage`-Reste (126 MB) und die zugehörigen `.gitignore`/`.dockerignore`-Zeilen entfernt. **Release 0.2.1** (`f959c10`): Smoke 6,7 s, Setup 204 MB installiert und auf GitHub (HTTP 200), fly live mit 0.2.1. |
+
+## Konto-Button der Desktop-App (2026-10-13)
+
+- Lokale Startseite ohne Karte „Online · … · als …“ (`OnlineCard` entfernt). Stattdessen unten in der NavRail
+  `shell/LocalAccountButton` (nur Electron, `window.magelite.openOnline`): nicht angemeldet „Anmelden“ (lädt den
+  Server im Fenster, dort Login); angemeldet Initiale + grüner Punkt, Ember-Punkt bei offenem Online-Tisch, roter Punkt
+  bei Link-Fehler. Menü rechts neben der Leiste: Konto + Server, offener Tisch mit „Zum Tisch“/„Tisch schließen“, sonst
+  „Zur Lobby“, „Abmelden“ (Zwei-Klick, wenn auf dem Rechner eine Online-Partie läuft).
+- `store/hostLink.ts`: Poll `GET /api/host/link` alle 5 s, ruht bei verstecktem Fenster oder 15 min ohne Eingabe
+  (`lib/activity.ts`; die Engine fragt dafür fly, zählt dort als Aktivität).
+- Abmelden aus der lokalen App: IPC `magelite:logoutOnline` (`main.cjs`): `POST /api/auth/logout` mit dem Cookie
+  (Node-fetch), Cookie `ml_sess` löschen, `syncHostLink` → `DELETE /api/host/link`.
+- Geprüft: `tsc -b`; Screenshots gegen eigene Relay-Engines (7411/7412, Vite 5176): verbunden mit Tisch, Menü,
+  Tisch schließen, abgemeldet; echte Electron-App (`MAGELITE_USER_DATA` im Scratch, `MAGELITE_SERVER_URL` 7411,
+  `MAGELITE_DEV_SESSION`) per CDP abgemeldet: Server-Session danach 401, Link getrennt. `steps-relay-home.json`
+  auf das Menü umgestellt.
+
+## Spielablauf: Pfeile, Schalter unten, Bezahl-Vorschau (2026-10-13)
+
+Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und worauf es zielt. Entscheidung in DECISIONS.
+- **Pfeile** (`game/ArrowLayer.tsx`, SVG z-8, Schalter „Pfeile“ im Pausemenü, `store.arrows`): Stapelobjekt unter der
+  Maus bzw. oberstes → Ziele (gelb, laufende Strichelung, Spitze); Fähigkeit ← Quellkarte (Ember-Linie + Rahmen,
+  frisch ausgelöst mit Puls über `store.stackNew`); fremder Zauber ← Pod des Wirkenden (blendet aus); Kampf
+  Angreifer → Verteidiger, Blocker → Angreifer (gedämpft, Hover voll); **Live-Pfeil bei der Zielwahl** von der Quelle
+  zur Maus, rastet auf gültigen Zielen ein. Start/Ende an Kartenkanten (`overlayGeometry.edgeToward`/`curve`),
+  Stapelzeilen links. Etiketten/Pod-Chips bleiben.
+- **„Wird gewirkt“:** Forge legt einen Zauber vor Zielwahl/Bezahlen in die Stapel-Zone, das Stapelobjekt kommt erst
+  danach. `ForgeViewMapper.stack` zeigt solche Karten oben mit `casting` (öffentlich, verdeckt Gewirktes bleibt
+  verdeckt); PLAY_MANA setzt `sourceId` auf den gewirkten Zauber. Damit hat der Live-Pfeil eine Quelle und der
+  Stapel zeigt wieder „Wird gewirkt“ wie unter XMage.
+- **Auto-Mana/Auto-Passen** aus der Kopfleiste in die Aktionsleiste (`game/PlayToggles.tsx`, untereinander vor
+  F5/F4/F9, testids `toggle-auto-mana`/`-pass`); bei voller Leiste entfällt das Kontext-Label (steht in der
+  Phasenleiste), damit der Engine-Text lesbar bleibt.
+- **Bezahl-Vorschau:** Hover über „Automatisch bezahlen“ (Auto-Mana aus) → Forges Plan `autoPayManaSources` im Prompt
+  (`autoPaySources`); Hover über wirkbare Handkarte/Commander bei Priorität → WS `payPreview` → `GameHost.payPreview`
+  (nur offener Prioritäts-Prompt des Sitzes, jüngste Anfrage gewinnt, Cache je State) → `game/PayPreview`
+  (`ComputerUtilMana.getManaSourcesToPayCost` unter KI-Controller) → Antwort nur an den Sitz. UI: weicher
+  Ember-Schein (`CardView` Rahmen `pay`), ×N-Gruppen mit Chip „N“ (wie viele getappt würden), Gruppierung bleibt
+  stabil (`interaction.highlightBase`). Grenzen: X = 0, bei mehreren Wirkweisen die erste; Einberufen-Prompt ohne Plan.
+- Geprüft: `gradlew test` 51/51; `humanSpike --payPreview` (neu: Vorschau je Priorität für bis zu 3 Handkarten,
+  Engine-Fingerabdruck Leben/Pool/getappt/Hand/Stapel vorher = nachher) 2 Spiele + Szenarien necro, gemstone, swarm,
+  dredge, convoke + `--humans=2 --spectate` (2 Spiele): 0 Fehler, keine STALLs, `UNMAPPED` leer, 0 Zustandsänderungen,
+  Vorschau max. 22 ms, Zuschauer 0 Lecks; `tsc -b`; Screenshots `steps-arrows.json` (eigene Engine 7400, Vite 5173,
+  17 Bilder in `design/redesign-shots/arrows/`, 1680 + 1280) sowie `steps-autoplay`/`steps-pass-ui` grün;
+  `e2e-relay` grün.
+- **Kampf-Stopps** (Playtest: „Blocker bestätigen“ führte direkt zum Schaden, Auto-Passen aus): Bei leerem Stapel gab
+  `AutoPassPolicy.isStop` nur in eigenen Mains und der Gegner-Endphase Priorität, Kampftricks waren unmöglich. Jetzt
+  zusätzlich in jedem Kampf mit Angreifern (auch Bot gegen Bot): nach der Angreifer-Erklärung, nach den Blockern, nach
+  Erstschlag-Schaden; mit Auto-Passen nur bei möglicher Aktion. „Weiter“ im eigenen Kampf: nach Angreifern „Weiter“,
+  nach Blockern „Zu Main 2“. Geprüft per `humanSpike --noAutoPass --dumpJson` (neu): angegriffen → Prompt nach
+  Angreifern und nach Blockern; eigener Angriff → nach Angreifern und nach Blockern, dann Schaden; fremder Kampf →
+  beide Stopps. Danach alle Szenarien, `--humans=2 --spectate --noAutoPass`, 2 Zufallsspiele grün; `steps-attack-undo`,
+  `-pass-ui`, `-autoplay`, `-arrows` grün.
+- Offen (niedrig): Vorschau nicht für aktivierte Fähigkeiten von Permanents; `payPreview` über den Host-Link nur
+  indirekt geprüft (gleicher `GameMessages.dispatch`); Bei Auto-Passen sieht man den Zielpfeil des eigenen Zaubers
+  auf dem Stapel nur kurz (Engine passt nach eigenem Zauber weiter).
 
 ## Ideen (nicht beauftragt)
 

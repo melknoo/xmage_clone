@@ -15,6 +15,8 @@ export interface PromptButton {
   testId?: string
   /** ausgegraut; Space/Enter/F2 loesen ihn dann nicht aus */
   disabled?: boolean
+  /** Hover/Fokus zeigt diese Quellen als Auto-Bezahlen-Vorschau ("Automatisch bezahlen") */
+  preview?: string[]
 }
 
 /** Pregame-Frage zu einer Starthand-Aktion (Gemstone Caverns, Leylines, Chancellors): eigener Dialog, keine Leisten-Knoepfe */
@@ -117,8 +119,8 @@ export function usePromptButtons(inter: Interaction): PromptButton[] {
       case 'PLAY_MANA':
         out.push(
           p.specialBtn
-            ? { label: 'Länder automatisch', run: autoPay, kind: 'primary', hotkey: 'Space', title: `Nur Manaquellen automatisch tappen – Rest per ${p.specialBtn}` }
-            : { label: 'Automatisch bezahlen', run: autoPay, kind: 'primary', hotkey: 'Space' },
+            ? { label: 'Länder automatisch', run: autoPay, kind: 'primary', hotkey: 'Space', title: `Nur Manaquellen automatisch tappen – Rest per ${p.specialBtn}`, preview: p.autoPaySources }
+            : { label: 'Automatisch bezahlen', run: autoPay, kind: 'primary', hotkey: 'Space', preview: p.autoPaySources },
         )
         if (p.specialBtn) out.push({ label: p.specialBtn, run: () => answer({ str: 'special' }), kind: 'secondary' })
         out.push({ label: 'Abbrechen', run: () => answer({ bool: false }), kind: 'ghost', hotkey: 'Esc' })

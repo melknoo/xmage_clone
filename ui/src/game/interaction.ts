@@ -9,6 +9,10 @@ export interface Interaction {
   prompt: Prompt | null
   mode: Mode
   highlight: (id: UUID) => Highlight
+  /** wie highlight, aber ohne Auto-Bezahlen-Vorschau (Gruppierung gleicher Permanents bleibt beim Hovern stabil) */
+  highlightBase: (id: UUID) => Highlight
+  /** Quellen der Auto-Bezahlen-Vorschau (nur bei Prioritaet/Bezahlen), sonst leer */
+  payPreview: Set<UUID>
   canClick: (id: UUID) => boolean
   /**
    * Klick auf ein Objekt. Im Angriffs-/Blockmodus markiert Shift+Klick die Kreatur (bzw. mit {@code group} den ganzen
@@ -39,6 +43,8 @@ function onTable(s: GameState | null): Set<UUID> {
   return ids
 }
 
+const NO_IDS = new Set<UUID>()
+
 const DIALOG_KINDS = new Set(['CHOOSE_ABILITY', 'CHOOSE_MODE', 'CHOOSE_CHOICE', 'AMOUNT', 'MULTI_AMOUNT', 'CHOOSE_PILE', 'PICK_ABILITY'])
 
 export function useInteraction(): Interaction {
@@ -52,6 +58,7 @@ export function useInteraction(): Interaction {
   const combatMany = useGame((s) => s.combatMany)
   const specialPay = useGame((s) => s.specialPay)
   const autoMana = useGame((s) => s.autoMana)
+  const payPreview = useGame((s) => s.payPreview)
 
   return useMemo(() => {
     const active = prompt && answered !== prompt.id ? prompt : null
@@ -132,9 +139,12 @@ export function useInteraction(): Interaction {
       }
     }
 
+    // Auto-Bezahlen-Vorschau nur bei Prioritaet (Hover ueber Handkarte) bzw. offenen Kosten (Hover ueber den Knopf)
+    const payIds = payPreview && (mode === 'priority' || mode === 'mana') ? payPreview.ids : NO_IDS
+
     // Rahmen nach Designsystem (CardView rangiert): Markierte tragen den Rahmen ihres Modus (Etikett "Markiert" kommt aus
     // boardDecor); Mana-Quellen nur bei offenen Kosten oder wenn Auto-Mana aus ist.
-    const highlight = (id: UUID): Highlight => {
+    const highlightBase = (id: UUID): Highlight => {
       if (marks.has(id)) return mode === 'attack' ? 'attacking' : 'blocking'
       if (markTargets.has(id)) return 'target'
       if (attacking.has(id) && mode !== 'target') return 'attacking'
@@ -154,11 +164,14 @@ export function useInteraction(): Interaction {
           return 'none'
       }
     }
+    const highlight = (id: UUID): Highlight => (payIds.has(id) ? 'payPreview' : highlightBase(id))
 
     return {
       prompt: active,
       mode,
       highlight,
+      highlightBase,
+      payPreview: payIds,
       canClick: (id: UUID) => clickable.has(id) || markTargets.has(id),
       click: (id: UUID, e?: MouseEvent, group?: UUID[]) => {
         if (combatMode && e?.shiftKey) {
@@ -181,5 +194,5 @@ export function useInteraction(): Interaction {
       modalCards,
       marked: marks,
     }
-  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay, autoMana])
+  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay, autoMana, payPreview])
 }

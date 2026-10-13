@@ -42,6 +42,8 @@ public class CardDto {
     public List<TargetRefDto> targetRefs;
     /** z.B. "ability" fuer Stack-Faehigkeiten */
     public String kind;
+    /** Stapel: Zauber wird gerade gewirkt (Ziele/Kosten offen, noch kein Stapelobjekt) */
+    public boolean casting;
     /** nur Stapel-Faehigkeiten: triggered | activated | static | mana | ... (XMage AbilityType, klein) */
     public String abilityType;
     public UUID sourceId;

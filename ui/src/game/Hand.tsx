@@ -6,6 +6,7 @@ import { me as meOf, useGame } from '../store/game'
 import { useUi } from '../store/ui'
 import type { Interaction } from './interaction'
 import type { BoardLayoutState } from './layout'
+import { usePayPreviewHover } from './payPreview'
 
 const NO_CARDS: Card[] = []
 /** Innenabstand links/rechts der Reihe */
@@ -61,6 +62,8 @@ export const Hand = memo(function Hand({ inter, onHover, layout }: HandProps) {
   const [ref, { w: width, h: height }] = useSize()
   const labelRef = useRef<HTMLSpanElement>(null)
   const [labelW, setLabelW] = useState(0)
+  // Hover ueber wirkbare Karte: Auto-Bezahlen-Vorschau (geplante Laender leuchten)
+  const hover = usePayPreviewHover(inter, onHover)
 
   const mulligan = !spectator && !!inter.prompt?.mulligan && !minimized
   const hiddenN = spectator ? (owner?.handCount ?? 0) : 0
@@ -121,7 +124,7 @@ export const Hand = memo(function Hand({ inter, onHover, layout }: HandProps) {
                 onMouseEnter={() => setHovered(c.id)}
                 onMouseLeave={() => setHovered((x) => (x === c.id ? null : x))}
               >
-                <CardView card={c} width={layout.handW} lift={false} highlight={h} onHover={onHover} onClick={() => inter.click(c.id)} />
+                <CardView card={c} width={layout.handW} lift={false} highlight={h} onHover={hover} onClick={() => inter.click(c.id)} />
               </div>
             )
           })}

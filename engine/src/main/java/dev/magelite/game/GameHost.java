@@ -29,6 +29,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -148,6 +149,11 @@ public final class GameHost {
         final Map<String, String> replDeclineAlways = new ConcurrentHashMap<>();
         /** Antwort auf die naechste "Effekt anwenden?"-Frage (Spiel-Thread), null = fragen */
         Boolean replConfirm;
+        /** juengste Anfrage "Auto-Bezahlen-Vorschau" (Karten-id); aeltere werden verworfen */
+        final AtomicReference<UUID> payPreviewReq = new AtomicReference<>();
+        /** Vorschau-Cache je State (Spiel-Thread) */
+        long payPreviewSeq = -1;
+        final Map<UUID, List<UUID>> payPreviewCache = new HashMap<>();
         // Forge (Spiel-Thread; gesetzt beim Anlegen des Spiels)
         private Player player;
         private HumanController controller;
@@ -1271,6 +1277,77 @@ public final class GameHost {
                 }
             }
         });
+    }
+
+    /**
+     * Vorschau "Automatisch bezahlen" fuer eine Hand-/Kommandozonen-Karte (Hover in der UI): welche Quellen Forge
+     * tappen wuerde. Nur bei offenem Prioritaets-Prompt dieses Sitzes; nur die juengste Anfrage wird berechnet
+     * (Spiel-Thread, {@link PayPreview}); Antwort nur an den Sitz.
+     */
+    public void payPreview(HumanSeat seat, UUID cardId) {
+        PromptDto p = openPrompt.get();
+        if (cardId == null || p == null || promptSeat != seat || !"SELECT".equals(p.kind) || !"priority".equals(p.mode)) {
+            return;
+        }
+        if (seat.payPreviewReq.getAndSet(cardId) != null) {
+            return; // laeuft schon ein Auftrag, der die juengste id abholt
+        }
+        inbox.add(() -> {
+            UUID id = seat.payPreviewReq.getAndSet(null);
+            if (id == null || game.isGameOver()) {
+                return;
+            }
+            long seq = stateSeq.get();
+            if (seat.payPreviewSeq != seq) {
+                seat.payPreviewSeq = seq;
+                seat.payPreviewCache.clear();
+            }
+            List<UUID> out = seat.payPreviewCache.get(id);
+            if (out == null) {
+                IdCodec.Decoded d = ids.decode(id);
+                forge.game.card.Card c = d == null || d.kind() != IdCodec.Kind.CARD ? null : game.findById(d.id());
+                Player pl = seat.player();
+                if (c == null || pl == null || c.getController() != pl
+                        || !(c.isInZone(forge.game.zone.ZoneType.Hand) || c.isInZone(forge.game.zone.ZoneType.Command))) {
+                    return;
+                }
+                out = new ArrayList<>();
+                String before = payFingerprint(pl);
+                long t0 = System.nanoTime();
+                for (forge.game.card.Card src : PayPreview.sourcesFor(pl, c)) {
+                    out.add(ids.card(src.getId()));
+                }
+                payPreviewMaxMs.accumulateAndGet((System.nanoTime() - t0) / 1_000_000, Math::max);
+                payPreviews.incrementAndGet();
+                if (!before.equals(payFingerprint(pl))) {
+                    payPreviewSideEffects.incrementAndGet();
+                    LOG.warn("Auto-Bezahlen-Vorschau hat den Spielzustand veraendert (" + c.getName() + "): " + before + " -> " + payFingerprint(pl));
+                }
+                seat.payPreviewCache.put(id, out);
+            }
+            send(seat, new Messages.PayPreview(id, seq, out));
+        });
+    }
+
+    private final AtomicInteger payPreviews = new AtomicInteger();
+    private final AtomicInteger payPreviewSideEffects = new AtomicInteger();
+    private final AtomicLong payPreviewMaxMs = new AtomicLong();
+
+    /** Leben, Manapool, getappte Karten, Hand, Stapel: darf sich durch die Vorschau nicht aendern (Spiel-Thread). */
+    private String payFingerprint(Player p) {
+        StringBuilder b = new StringBuilder();
+        b.append(p.getLife()).append('|').append(p.getManaPool().totalMana()).append('|');
+        for (forge.game.card.Card c : p.getCardsIn(forge.game.zone.ZoneType.Battlefield)) {
+            if (c.isTapped()) {
+                b.append(c.getId()).append(',');
+            }
+        }
+        return b.append('|').append(p.getCardsIn(forge.game.zone.ZoneType.Hand).size()).append('|').append(game.getStack().size()).toString();
+    }
+
+    /** Diagnose fuer Spikes: berechnete Vorschauen, davon mit veraendertem Spielzustand, laengste Rechnung (ms). */
+    public long[] payPreviewDiag() {
+        return new long[] {payPreviews.get(), payPreviewSideEffects.get(), payPreviewMaxMs.get()};
     }
 
     // ------------------------------------------------------------------ Park-Schleife (Spiel-Thread)

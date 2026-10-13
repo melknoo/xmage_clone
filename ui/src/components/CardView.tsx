@@ -8,7 +8,7 @@ import { ManaCost, RulesText } from '../lib/mana'
  * Karte nach prototypes/BoardCard.dc.html (Variante c) und README "Kartenzustände".
  * 'special' (Convoke-Bezahlung) wird wie die Mana-Quelle dargestellt.
  */
-export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking' | 'special'
+export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking' | 'special' | 'payPreview'
 
 /** Groessenstufe (Alias aus der Zeit vor `width`): xs 38 · sm 50 · md 80 · lg 104 · xl 120 · zoom 250 px */
 export type CardSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'zoom'
@@ -36,9 +36,9 @@ export const cardHeight = (w: number) => Math.round((w * 88) / 63)
  * Rahmen-Zustaende und Rang (niedrigster Rang gewinnt)
  * ------------------------------------------------------------------------------------------- */
 
-type Frame = 'none' | 'chosen' | 'target' | 'targetStatic' | 'attack' | 'block' | 'play' | 'mana'
+type Frame = 'none' | 'chosen' | 'target' | 'targetStatic' | 'attack' | 'block' | 'pay' | 'play' | 'mana'
 
-const RANK: Record<Frame, number> = { chosen: 1, target: 2, targetStatic: 2, attack: 3, block: 3, play: 4, mana: 5, none: 9 }
+const RANK: Record<Frame, number> = { chosen: 1, target: 2, targetStatic: 2, attack: 3, block: 3, pay: 4, play: 5, mana: 6, none: 9 }
 
 const FRAME_OF: Record<Highlight, Frame> = {
   none: 'none',
@@ -49,6 +49,7 @@ const FRAME_OF: Record<Highlight, Frame> = {
   chosen: 'chosen',
   attacking: 'attack',
   blocking: 'block',
+  payPreview: 'pay',
 }
 
 const RING = (color: string) => `0 0 0 2px ${color}, 0 0 0 4px var(--color-bg-1)`
@@ -63,6 +64,8 @@ const FRAME_SHADOW: Record<Frame, string> = {
   chosen: RING('var(--color-chosen)'),
   attack: RING('var(--color-attack)'),
   block: RING('var(--color-block)'),
+  // Auto-Bezahlen-Vorschau: weicher Ember-Schein statt hartem Ring ("wuerde getappt")
+  pay: '0 0 0 2px color-mix(in oklab, var(--color-ember) 80%, transparent), 0 0 14px 4px color-mix(in oklab, var(--color-ember) 45%, transparent)',
 }
 
 /** Abzeichen oben mittig: Klasse (ausgeschrieben fuer Tailwind) + Icon */
@@ -90,6 +93,7 @@ const CHIP = 'chip-count pointer-events-none absolute z-[2] leading-none'
 
 const CHIP_INVERTED: CSSProperties = { background: 'var(--color-fg-1)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
 const CHIP_DAMAGE: CSSProperties = { left: -4, top: -4, background: 'var(--color-attack)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
+const CHIP_PAY: CSSProperties = { left: -4, top: -4, background: 'var(--color-ember)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
 const CHIP_SICK: CSSProperties = { right: -4, top: -4, padding: 3, color: 'var(--color-fg-3)' }
 
 function counterText(name: string, count: number, short: boolean): string {
@@ -174,6 +178,8 @@ export interface CardViewProps {
   className?: string
   /** Anzahl gleicher Karten (Chip ×N unten links) */
   count?: number
+  /** ×N-Stapel in der Auto-Bezahlen-Vorschau: so viele davon wuerden getappt (Ember-Chip oben links) */
+  payCount?: number
   /** getappt-Zustand ignorieren (z.B. grosse Vorschau) */
   upright?: boolean
   /** false: kein data-obj (Duplikat, z.B. Commander ausserhalb der Kommandozone) - FX suchen das Original */
@@ -195,6 +201,7 @@ export const CardView = memo(function CardView({
   dim,
   className = '',
   count,
+  payCount,
   upright,
   anchor = true,
   lift = true,
@@ -339,6 +346,11 @@ export const CardView = memo(function CardView({
         {count !== undefined && count > 1 && (
           <div className={CHIP} style={{ left: -4, bottom: -4 }}>
             ×{count}
+          </div>
+        )}
+        {payCount !== undefined && payCount > 0 && count !== undefined && count > 1 && (
+          <div className={CHIP} style={CHIP_PAY} title={`${payCount} von ${count} würden getappt`} data-pay-count={payCount}>
+            {payCount}
           </div>
         )}
         {showPt && (

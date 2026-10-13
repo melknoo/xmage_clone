@@ -10,6 +10,7 @@
 //   { blockers: true }    Blocker-Prompt nicht beantworten (Bots greifen an -> Screenshot "Blocker waehlen")
 //   { stack: N }          bei Prioritaet mit >= N Stapelobjekten nicht passen (F10-Knopf, Stapel-Screenshot)
 //   { cast: true }        wie autoplay.js auch Commander/Zauber wirken (aber nie angreifen) - fuer eigene Blocker
+//   { mana: true }        Mana-Prompt ohne Einberufen nicht beantworten (Hover-Vorschau "Automatisch bezahlen")
 // Die steps duerfen window.__hold spaeter aendern (gleiches Objekt), z. B. window.__hold.stack = 0.
 (() => {
   if (window.__pilot) return 'already'
@@ -81,7 +82,8 @@
       }
       case 'PICK_TARGET': {
         if (hold.attack && p.defenderPick) return
-        if (hold.blazeTarget && s.stack.length && s.stack[0].name === 'Blaze') return
+        // Forge legt Blaze erst nach der Zielwahl auf den Stapel: am Prompttext erkennen
+        if (hold.blazeTarget && (/Blaze/.test(p.messageText || '') || (s.stack.length && s.stack[0].name === 'Blaze'))) return
         const open = (p.targets || []).filter((t) => !(p.chosen || []).includes(t))
         if (open.length && (p.required || !(p.chosen || []).length)) return ans({ uuid: open[0] })
         return ans({ bool: false })
@@ -97,6 +99,7 @@
       case 'CHOOSE_PILE': return ans({ bool: true })
       case 'PLAY_MANA':
         if (hold.convoke && p.specialBtn) return
+        if (hold.mana && !p.specialBtn) return
         return g.autoPay()
       case 'PLAY_X_MANA': return ans({ bool: false })
     }

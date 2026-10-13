@@ -8,6 +8,7 @@ import { DUR, EASE_OUT } from '../lib/motion'
 import { me as meOf, opponents as oppsOf, useGame } from '../store/game'
 import { useNav } from '../store/nav'
 import { useTable } from '../store/table'
+import { ArrowLayer } from './ArrowLayer'
 import { FxLayer } from './FxLayer'
 import { GameOverOverlay } from './GameOverOverlay'
 import { Hand } from './Hand'
@@ -26,8 +27,8 @@ import { TopBar } from './TopBar'
 import { ZoneViewer } from './ZoneViewer'
 
 /*
- * Ebenen: Brett 0-6 (Ember-Leiste 2, Stapel 6) · FX 10 · Ausgeschieden-Banner 15 · Dialoge/Pille 20 (eigene Ebene in der
- * linken Spalte) · Aufdeckungen 25. Toasts haengen global in App.tsx (ueber allem).
+ * Ebenen: Brett 0-6 (Ember-Leiste 2, Stapel 6) · Pfeile 8 · FX 10 · Ausgeschieden-Banner 15 · Dialoge/Pille 20 (eigene
+ * Ebene in der linken Spalte) · Aufdeckungen 25. Toasts haengen global in App.tsx (ueber allem).
  */
 
 /**
@@ -98,7 +99,8 @@ export function GameScreen() {
         <SidePanel layout={layout} />
       </div>
 
-      {/* FX (z-10) und Aufdeckungen (z-25) positionieren sich selbst (fixed, CSS-Variablen von boardCssVars) */}
+      {/* Pfeile (z-8), FX (z-10) und Aufdeckungen (z-25) positionieren sich selbst (fixed, CSS-Variablen von boardCssVars) */}
+      <ArrowLayer inter={inter} />
       <FxLayer />
       <RevealPopups />
     </div>

@@ -9,6 +9,7 @@ import forge.game.Game;
 import forge.game.GameEntity;
 import forge.game.GameEntityView;
 import forge.game.card.Card;
+import forge.game.card.CardCollection;
 import forge.game.card.CardView;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
@@ -746,6 +747,19 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
             PromptDto p = prompt("PLAY_MANA", manaText(gui().message));
             p.required = !gui().btn2Enabled;
             p.sourceId = stackSource();
+            SpellAbility paid = field(input, "saPaidFor", SpellAbility.class);
+            if (p.sourceId == null && paid != null && paid.isSpell() && paid.getHostCard() != null
+                    && paid.getHostCard().isInZone(ZoneType.Stack)) {
+                p.sourceId = mapper().cardId(paid.getHostCard()); // Zauber wird gerade gewirkt (state.stack: casting)
+            }
+            // Forges Auto-Bezahlen-Plan (InputPayMana.ensureAutoPayManaSources, vor showMessage berechnet): Vorschau in der UI
+            CardCollection plan = gui().btn1Enabled ? field(input, "autoPayManaSources", CardCollection.class) : null;
+            if (plan != null && !plan.isEmpty()) {
+                p.autoPaySources = new ArrayList<>();
+                for (Card c : plan) {
+                    p.autoPaySources.add(mapper().cardId(c));
+                }
+            }
             return p;
         }
 

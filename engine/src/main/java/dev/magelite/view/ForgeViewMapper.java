@@ -298,6 +298,27 @@ public final class ForgeViewMapper {
 
     private List<CardDto> stack(PlayerView vv) {
         List<CardDto> out = new ArrayList<>();
+        // Zauber, die gerade gewirkt werden: Forge legt die Karte vor Zielwahl und Bezahlen in die Stapel-Zone, das
+        // Stapelobjekt entsteht erst danach. Oben zeigen ("Wird gewirkt"), damit Zielpfeil und Bezahl-Hinweis eine
+        // Quelle haben (oeffentlich wie im echten Spiel, verdeckt gewirkte Karten bleiben ueber card() verdeckt).
+        Set<Integer> instances = new HashSet<>();
+        for (SpellAbilityStackInstance si : game.getStack()) {
+            if (si.isSpell() && si.getSourceCard() != null) {
+                instances.add(si.getSourceCard().getId());
+            }
+        }
+        for (Card c : game.getCardsIn(ZoneType.Stack)) {
+            if (instances.contains(c.getId())) {
+                continue;
+            }
+            CardDto d = card(c, vv);
+            d.kind = "spell";
+            d.casting = true;
+            if (c.getController() != null) {
+                d.controllerId = ids.player(c.getController().getId());
+            }
+            out.add(d);
+        }
         for (SpellAbilityStackInstance si : game.getStack()) {
             Card src = si.getSourceCard();
             SpellAbility sa = si.getSpellAbility();

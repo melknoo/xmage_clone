@@ -3,6 +3,7 @@ import { CardView } from '../components/CardView'
 import { Icon } from '../lib/icons'
 import { commandCard } from './format'
 import type { Interaction } from './interaction'
+import { usePayPreviewHover } from './payPreview'
 
 const CARD_W = 44
 
@@ -21,6 +22,7 @@ export interface CommandZoneProps {
  * Krone + "Command Zone" und "Steuer +N" je Commander. Commander auf dem Feld/anderswo: abgedunkelt, ohne data-obj.
  */
 export function CommandZone({ objects, inter, onHover, interactive = true }: CommandZoneProps) {
+  const hover = usePayPreviewHover(inter, onHover)
   if (objects.length === 0) return null
   const commanders = objects.filter(isCommander)
   return (
@@ -36,7 +38,7 @@ export function CommandZone({ objects, inter, onHover, interactive = true }: Com
               dim={away}
               anchor={!away}
               highlight={away ? 'none' : inter.highlight(o.id)}
-              onHover={onHover}
+              onHover={hover}
               onClick={interactive && !away ? (e) => inter.click(o.id, e) : undefined}
             />
           )

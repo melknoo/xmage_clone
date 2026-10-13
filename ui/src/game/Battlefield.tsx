@@ -44,7 +44,7 @@ function group(perms: Permanent[], inter: Interaction, targeted: Set<string>, ci
     const label = labelOf(p.id)
     const fight = p.attacking ? `att:${ci.defenderOf.get(p.id) ?? ''}` : p.blocking ? `blk:${ci.blockedBy.get(p.id) ?? ''}` : ''
     const key = simple
-      ? `${p.name}|${p.tapped ? 1 : 0}|${p.sick ? 1 : 0}|${inter.highlight(p.id)}|${p.power ?? ''}/${p.toughness ?? ''}|${fight}|${label ? `${label.tone}:${label.text}` : ''}`
+      ? `${p.name}|${p.tapped ? 1 : 0}|${p.sick ? 1 : 0}|${inter.highlightBase(p.id)}|${p.power ?? ''}/${p.toughness ?? ''}|${fight}|${label ? `${label.tone}:${label.text}` : ''}`
       : p.id
     const g = index.get(key)
     if (g && simple) {
@@ -97,6 +97,8 @@ function Row({ perms, width, gap, rowGap, opponent, interactive, inter, onHover,
         // ×N-Stapel: ein neues Mitglied laesst den ganzen Stapel eintreten
         const isNew = ids.some((id) => fx.entered[id] !== undefined)
         const lunger = ids.find((id) => fx.lunging[id] !== undefined)
+        // Auto-Bezahlen-Vorschau: der Stapel leuchtet, wenn eine seiner Karten getappt wuerde (Chip = wie viele)
+        const planned = inter.payPreview.size ? ids.filter((id) => inter.payPreview.has(id)).length : 0
         return (
           <GroupBox
             key={g.key}
@@ -125,10 +127,11 @@ function Row({ perms, width, gap, rowGap, opponent, interactive, inter, onHover,
                 width={width}
                 label={g.label}
                 labelVariant={opponent ? 'opponent' : 'own'}
-                highlight={inter.highlight(first.id)}
+                highlight={planned > 0 ? 'payPreview' : inter.highlightBase(first.id)}
                 onHover={onHover}
                 onClick={interactive ? (e) => inter.click(first.id, e, ids) : undefined}
                 count={g.cards.length}
+                payCount={planned}
               />
             </div>
           </GroupBox>

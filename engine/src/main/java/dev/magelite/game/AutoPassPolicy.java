@@ -30,7 +30,8 @@ import java.util.Set;
  *   <li>Eigener Zauber/eigene aktivierte Fähigkeit oben auf dem Stapel → einmal passen (Gegner dürfen antworten),
  *       außer der Sitz hält die Priorität (Mehrfach-Aktivierung).</li>
  *   <li>Gleiches Stapelobjekt wie eines, auf das schon gepasst wurde ({@link #sig}) → passen.</li>
- *   <li>Leerer Stapel: Stopps nur in den eigenen Hauptphasen und in der Endphase der Gegner.</li>
+ *   <li>Leerer Stapel: Stopps in den eigenen Hauptphasen, in der Endphase der Gegner und in jedem Kampf mit Angreifern
+ *       nach der Angreifer-Erklärung, nach den Blockern und nach Erstschlag-Schaden (Kampftricks, Regel 508.8/509.4).</li>
  *   <li>Auto-Passen: keine Nicht-Mana-Aktion → passen (nie in den eigenen Hauptphasen).</li>
  * </ol>
  */
@@ -142,7 +143,7 @@ final class AutoPassPolicy {
             return true;
         }
         boolean ownMain = myTurn && empty && (phase == PhaseType.MAIN1 || phase == PhaseType.MAIN2);
-        if (empty && !isStop(myTurn, phase)) {
+        if (empty && !isStop(myTurn, phase, ph)) {
             return true;
         }
         if (seat.autoPass() && actions.isEmpty() && !ownMain) {
@@ -155,8 +156,16 @@ final class AutoPassPolicy {
         return false;
     }
 
-    /** Leerer Stapel: wo der Mensch Priorität bekommt (eigene Hauptphasen, Endphase der Gegner). */
-    private static boolean isStop(boolean myTurn, PhaseType phase) {
+    /**
+     * Leerer Stapel: wo der Mensch Priorität bekommt – eigene Hauptphasen, Endphase der Gegner und jeder Kampf mit
+     * Angreifern (auch fremde Kämpfe): nach der Angreifer-Erklärung, nach den Blockern (vor dem Schaden) und nach
+     * Erstschlag-Schaden. Mit Auto-Passen hält er dort nur, wenn eine Nicht-Mana-Aktion möglich ist.
+     */
+    private static boolean isStop(boolean myTurn, PhaseType phase, PhaseHandler ph) {
+        if (phase == PhaseType.COMBAT_DECLARE_ATTACKERS || phase == PhaseType.COMBAT_DECLARE_BLOCKERS
+                || phase == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE) {
+            return ph.inCombat() && !ph.getCombat().getAttackers().isEmpty();
+        }
         if (myTurn) {
             return phase == PhaseType.MAIN1 || phase == PhaseType.MAIN2;
         }
@@ -293,7 +302,9 @@ final class AutoPassPolicy {
         return switch (phase) {
             case UNTAP, UPKEEP, DRAW -> "main1";
             case MAIN1, COMBAT_BEGIN -> !autoPass || hasAttackers(me) ? "combat" : "main2";
-            case COMBAT_DECLARE_ATTACKERS, COMBAT_DECLARE_BLOCKERS, COMBAT_FIRST_STRIKE_DAMAGE, COMBAT_DAMAGE -> autoPass ? "main2" : null;
+            // nach der Angreifer-Erklaerung folgt der Blocker-Stopp; danach geht es (ausser bei Erstschlag) zu Main 2
+            case COMBAT_DECLARE_ATTACKERS -> null;
+            case COMBAT_DECLARE_BLOCKERS, COMBAT_FIRST_STRIKE_DAMAGE, COMBAT_DAMAGE -> "main2";
             case COMBAT_END -> "main2";
             default -> "end";
         };

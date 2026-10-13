@@ -70,6 +70,8 @@ interface GameStore {
   entered: Record<UUID, number>
   /** Brett-FX: frisch erklaerte Angreifer (id -> ms), solange der Angriffsstoss laeuft */
   lunging: Record<UUID, number>
+  /** Pfeile: frisch auf den Stapel gelegte Objekte (id -> ms), solange Quelle/Linie nachleuchten */
+  stackNew: Record<UUID, number>
   /** Animationen an/aus (Leiste bleibt) */
   fxEnabled: boolean
   setFxEnabled: (on: boolean) => void
@@ -88,6 +90,20 @@ interface GameStore {
   /** Stapelobjekt unter der Maus (Ziel-Etiketten); null = alle */
   stackFocus: UUID | null
   setStackFocus: (id: UUID | null) => void
+  /**
+   * Auto-Bezahlen-Vorschau: Quellen, die getappt wuerden - fuer eine gehoverte Hand-/Commander-Karte (Engine-Antwort
+   * "payPreview") bzw. 'prompt' (Hover ueber "Automatisch bezahlen", Plan aus prompt.autoPaySources)
+   */
+  payPreview: { for: UUID | 'prompt'; ids: Set<UUID> } | null
+  /** Vorschau fuer eine wirkbare Karte anfragen (Hover, entprellt; Antwort per WS) */
+  requestPayPreview: (cardId: UUID) => void
+  /** Vorschau direkt zeigen (Knopf "Automatisch bezahlen") */
+  showPayPreview: (forId: UUID | 'prompt', ids: UUID[]) => void
+  /** Vorschau beenden (nur wenn sie zu forId gehoert; ohne forId immer) */
+  clearPayPreview: (forId?: UUID | 'prompt') => void
+  /** Pfeile (Ziele, Ausloeser, Zielwahl, Kampf) an/aus (localStorage 'magelite.arrows') */
+  arrows: boolean
+  setArrows: (on: boolean) => void
   /** Spielverlauf-Filter (localStorage 'magelite.logFilter') */
   logFilter: LogFilter
   setLogFilter: (f: LogFilter) => void
@@ -185,6 +201,11 @@ const LOG_MAX = 600
 const REVEAL_MS = 12000
 /** schon gezeigte Aufdeckungen (pro Spiel), damit sie nach dem Schliessen nicht erneut aufpoppen */
 let seenReveals = new Set<string>()
+/** Auto-Bezahlen-Vorschau: gehoverte Karte, Entprell-Timer, Antworten je `${stateSeq}:${id}` */
+let previewWant: UUID | null = null
+let previewTimer: number | undefined
+const PREVIEW_DEBOUNCE_MS = 120
+const previewCache = new Map<string, UUID[]>()
 
 function indexObjects(s: GameState): Map<UUID, Card> {
   const m = new Map<UUID, Card>()
@@ -221,15 +242,17 @@ function newReveals(s: GameState): Reveal[] {
 /** erster State nach "hello" (Verbinden/Reconnect) ist ein Komplettstand - kein Betreten/Angriff animieren */
 let afterHello = true
 
-/** Brett-Diff aller Spieler: neue Permanent-ids (Betreten) und neu erklaerte Angreifer (Angriffsstoss) */
-function boardDiff(prev: GameState, next: GameState): { entered: UUID[]; attackers: UUID[] } {
+/** Brett-Diff aller Spieler: neue Permanent-ids (Betreten), neu erklaerte Angreifer (Angriffsstoss), neue Stapelobjekte */
+function boardDiff(prev: GameState, next: GameState): { entered: UUID[]; attackers: UUID[]; stack: UUID[] } {
   const before = new Set<UUID>()
   for (const p of prev.players) for (const c of p.battlefield) before.add(c.id)
   const entered: UUID[] = []
   for (const p of next.players) for (const c of p.battlefield) if (!before.has(c.id)) entered.push(c.id)
   const wasAttacking = new Set((prev.combat ?? []).flatMap((g) => g.attackers))
   const attackers = (next.combat ?? []).flatMap((g) => g.attackers).filter((id) => !wasAttacking.has(id))
-  return { entered, attackers }
+  const wasStack = new Set(prev.stack.map((c) => c.id))
+  const stack = next.stack.filter((c) => !wasStack.has(c.id)).map((c) => c.id)
+  return { entered, attackers, stack }
 }
 
 export const useGame = create<GameStore>((set, get) => {
@@ -250,7 +273,7 @@ export const useGame = create<GameStore>((set, get) => {
    * Brett-FX vormerken: liefert die neue Tabelle (ids -> at) fuer set() und traegt die ids nach der CSS-Animation
    * wieder aus (sonst liefe sie beim naechsten Neuaufbau der Gruppe, z. B. Tappen, noch einmal).
    */
-  function pulse(field: 'entered' | 'lunging', ids: UUID[], at: number, ms: number): Record<UUID, number> {
+  function pulse(field: 'entered' | 'lunging' | 'stackNew', ids: UUID[], at: number, ms: number): Record<UUID, number> {
     // Reste verpasster Timer (z. B. Tab im Hintergrund) gleich mit aufraeumen
     const next = Object.fromEntries(Object.entries(get()[field]).filter(([, t]) => at - t < 2000))
     for (const id of ids) next[id] = at
@@ -259,7 +282,7 @@ export const useGame = create<GameStore>((set, get) => {
       const left = Object.entries(cur).filter(([, t]) => t !== at)
       if (left.length === Object.keys(cur).length) return
       const v = Object.fromEntries(left)
-      set(field === 'entered' ? { entered: v } : { lunging: v })
+      set(field === 'entered' ? { entered: v } : field === 'lunging' ? { lunging: v } : { stackNew: v })
     }, ms + 60)
     return next
   }
@@ -269,7 +292,7 @@ export const useGame = create<GameStore>((set, get) => {
       case 'hello':
         // nach einem Reconnect schickt die Engine Verlauf, State, offenen Prompt und ggf. "seat" erneut
         afterHello = true
-        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0, hostLost: null })
+        set({ hello: msg, tempo: (msg.tempo as Tempo) ?? 'NORMAL', log: [], prompt: null, answeredPromptId: null, conceded: false, fx: [], recent: [], entered: {}, lunging: {}, stackNew: {}, chat: [], unreadChat: 0, hostLost: null })
         break
       case 'state': {
         const prev = get().state
@@ -285,9 +308,12 @@ export const useGame = create<GameStore>((set, get) => {
         set({
           state: msg,
           objects: indexObjects(msg),
+          // Hand-Vorschau gilt nur fuer den State, fuer den sie gerechnet wurde
+          ...(get().payPreview && get().payPreview?.for !== 'prompt' ? { payPreview: null } : {}),
           ...(fresh.length ? { reveals: [...get().reveals, ...fresh].slice(-4) } : {}),
           ...(board?.entered.length ? { entered: pulse('entered', board.entered, now, t.enter) } : {}),
           ...(board?.attackers.length ? { lunging: pulse('lunging', board.attackers, now, t.lunge) } : {}),
+          ...(board?.stack.length ? { stackNew: pulse('stackNew', board.stack, now, t.trigger) } : {}),
         })
         for (const r of fresh) window.setTimeout(() => get().dismissReveal(r.key), REVEAL_MS)
         break
@@ -298,12 +324,18 @@ export const useGame = create<GameStore>((set, get) => {
         const marked = get().marked
         const nextMarked = marked.size && keep ? new Set([...marked].filter((id) => keep.includes(id))) : marked.size ? new Set<UUID>() : marked
         promptAt = Date.now()
-        set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null, marked: nextMarked })
+        set({ prompt: msg, answeredPromptId: null, thinking: null, waitingFor: null, marked: nextMarked, payPreview: null })
         if (msg.kind !== 'SELECT' || msg.mode !== 'priority') play('prompt')
+        // Maus liegt noch auf einer wirkbaren Karte: Vorschau fuer den neuen Stand neu anfragen
+        if (previewWant && msg.kind === 'SELECT' && msg.mode === 'priority') get().requestPayPreview(previewWant)
         break
       }
       case 'promptClosed':
-        if (get().prompt?.id === msg.id) set({ prompt: null })
+        if (get().prompt?.id === msg.id) set({ prompt: null, payPreview: null })
+        break
+      case 'payPreview':
+        previewCache.set(`${msg.stateSeq}:${msg.id}`, msg.sources)
+        if (previewWant === msg.id && get().state?.seq === msg.stateSeq) set({ payPreview: { for: msg.id, ids: new Set(msg.sources) } })
         break
       case 'log': {
         const log = get().log.concat(msg.entries)
@@ -516,6 +548,34 @@ export const useGame = create<GameStore>((set, get) => {
     setStackFocus: (id) => {
       if (get().stackFocus !== id) set({ stackFocus: id })
     },
+    payPreview: null,
+    requestPayPreview: (cardId) => {
+      previewWant = cardId
+      window.clearTimeout(previewTimer)
+      const seq = get().state?.seq
+      const hit = seq !== undefined ? previewCache.get(`${seq}:${cardId}`) : undefined
+      if (hit) {
+        set({ payPreview: { for: cardId, ids: new Set(hit) } })
+        return
+      }
+      previewTimer = window.setTimeout(() => {
+        if (previewWant === cardId) send({ t: 'payPreview', id: cardId })
+      }, PREVIEW_DEBOUNCE_MS)
+    },
+    showPayPreview: (forId, ids) => set({ payPreview: { for: forId, ids: new Set(ids) } }),
+    clearPayPreview: (forId) => {
+      if (!forId || previewWant === forId) {
+        previewWant = null
+        window.clearTimeout(previewTimer)
+      }
+      const cur = get().payPreview
+      if (cur && (!forId || cur.for === forId)) set({ payPreview: null })
+    },
+    arrows: loadBool('magelite.arrows', true),
+    setArrows: (on) => {
+      saveBool('magelite.arrows', on)
+      set({ arrows: on })
+    },
     logFilter: loadLogFilter(),
     setLogFilter: (f) => {
       try {
@@ -535,17 +595,20 @@ export const useGame = create<GameStore>((set, get) => {
     recent: [],
     entered: {},
     lunging: {},
+    stackNew: {},
     fxEnabled: loadBool('magelite.fx', true),
     setFxEnabled: (on) => {
       saveBool('magelite.fx', on)
-      set({ fxEnabled: on, ...(on ? {} : { fx: [], entered: {}, lunging: {} }) })
+      set({ fxEnabled: on, ...(on ? {} : { fx: [], entered: {}, lunging: {}, stackNew: {} }) })
     },
 
     connect: (gameId, opts) => {
       get().disconnect()
       seenReveals = new Set()
+      previewCache.clear()
+      previewWant = null
       afterHello = true
-      set({ gameId, spectator: !!opts?.spectate, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
+      set({ gameId, spectator: !!opts?.spectate, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, waitingFor: null, hover: null, reveals: [], objects: new Map(), marked: new Set(), conceded: false, menuOpen: false, seatConn: {}, spectators: [], viewer: null, stackFocus: null, payPreview: null, fx: [], recent: [], entered: {}, lunging: {}, stackNew: {}, chat: [], unreadChat: 0 })
       open(gameId)
     },
     stopSpectating: () => {
@@ -659,7 +722,7 @@ export const useGame = create<GameStore>((set, get) => {
     },
     reset: () => {
       get().disconnect()
-      set({ gameId: null, spectator: false, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, spectators: [], viewer: null, stackFocus: null, fx: [], recent: [], entered: {}, lunging: {}, chat: [], unreadChat: 0 })
+      set({ gameId: null, spectator: false, hello: null, state: null, prompt: null, answeredPromptId: null, log: [], gameOver: null, thinking: null, activity: null, hover: null, reveals: [], marked: new Set(), conceded: false, menuOpen: false, spectators: [], viewer: null, stackFocus: null, payPreview: null, fx: [], recent: [], entered: {}, lunging: {}, stackNew: {}, chat: [], unreadChat: 0 })
     },
   }
 })

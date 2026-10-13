@@ -44,6 +44,8 @@ export function PauseMenu() {
   const setStopOppUpkeep = useGame((s) => s.setStopOppUpkeep)
   const stopOnTargeted = useGame((s) => s.stopOnTargeted)
   const setStopOnTargeted = useGame((s) => s.setStopOnTargeted)
+  const arrows = useGame((s) => s.arrows)
+  const setArrows = useGame((s) => s.setArrows)
   const fxEnabled = useGame((s) => s.fxEnabled)
   const setFxEnabled = useGame((s) => s.setFxEnabled)
   const muted = useGame((s) => s.muted)
@@ -157,6 +159,12 @@ export function PauseMenu() {
               />
             </>
           )}
+          <Toggle
+            checked={arrows}
+            onChange={setArrows}
+            label="Pfeile"
+            title="Ziel-, Auslöser- und Kampfpfeile sowie den Pfeil bei der Zielwahl zeigen"
+          />
           <Toggle
             checked={fxEnabled}
             onChange={setFxEnabled}

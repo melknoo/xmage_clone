@@ -134,7 +134,7 @@ export function StackPanel({ inter, onHover }: StackPanelProps) {
                     row={r}
                     top={r.pos === 1}
                     focused={r.card.id === focusId}
-                    casting={r.card.id === castingId}
+                    casting={r.card.id === castingId || !!r.card.casting}
                     who={who(r.card.controllerId)}
                     inter={inter}
                     onHover={onHover}

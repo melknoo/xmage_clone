@@ -123,6 +123,16 @@ public final class Messages {
         }
     }
 
+    /**
+     * Antwort auf {@code payPreview}: Manaquellen, die "Automatisch bezahlen" fuer die Karte {@code id} tappen wuerde
+     * (leer = nichts zu bezahlen bzw. nicht bezahlbar). Nur an den anfragenden Sitz; {@code stateSeq} = State der Rechnung.
+     */
+    public record PayPreview(String t, UUID id, long stateSeq, List<UUID> sources) {
+        public PayPreview(UUID id, long stateSeq, List<UUID> sources) {
+            this("payPreview", id, stateSeq, sources);
+        }
+    }
+
     public record Toast(String t, String level, List<Map<String, Object>> rich) {
         public Toast(String level, List<Map<String, Object>> rich) {
             this("toast", level, rich);

@@ -37,6 +37,7 @@ public final class GameMessages {
             }
             case "autoPass" -> host.setAutoPass(seat, m.path("on").asBoolean(true));
             case "autoPay" -> host.autoPayNow(seat);
+            case "payPreview" -> host.payPreview(seat, m.hasNonNull("id") ? UUID.fromString(m.get("id").asText()) : null);
             case "combat" -> {
                 List<UUID> ids = new ArrayList<>();
                 m.path("ids").forEach(n -> ids.add(UUID.fromString(n.asText())));

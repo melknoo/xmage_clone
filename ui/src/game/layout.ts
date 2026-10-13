@@ -42,7 +42,7 @@ export interface BoardLayout {
   graveW: number
   /** Phasenleiste: horizontales Padding je Schritt */
   phPad: number
-  /** Labels der Kopfleisten-Schalter (Text in normaler Schreibung, Versalien per CSS) */
+  /** Labels der Schalter Auto-Mana/-Passen in der Aktionsleiste (PlayToggles; Versalien per CSS) */
   manaLbl: string
   passLbl: string
   /** Breiten der Brett-Dialoge */

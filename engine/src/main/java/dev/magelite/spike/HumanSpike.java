@@ -36,6 +36,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
  * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke
+ * --payPreview (bei jeder Prioritaet die Auto-Bezahlen-Vorschau fuer bis zu 3 wirkbare Handkarten anfordern und pruefen)
+ * --noAutoPass (Test-Menschen mit Auto-Passen aus: Stopps in Hauptphasen, Kampf, Gegner-Endphase)
  * --spectate --decks=a;b (diese Decks per Dateinamensteil zuerst, erstes = Test-Mensch; "_" statt Leerzeichen)
  * <p>
  * {@code --spectate}: Spiel wie ein Tisch-Spiel zuschaubar machen und einen In-Process-Zuschauer anmelden, der jede
@@ -79,6 +81,8 @@ public final class HumanSpike {
         TempoSettings.Preset preset = TempoSettings.Preset.valueOf(opt.getOrDefault("tempo", "BLITZ").toUpperCase(Locale.ROOT));
         String scenario = opt.get("scenario");
         boolean spectate = opt.containsKey("spectate");
+        PAY_PREVIEW = opt.containsKey("payPreview");
+        NO_AUTO_PASS = opt.containsKey("noAutoPass");
         if (scenario != null && !Scenarios.exists(scenario)) {
             throw new IllegalArgumentException("Unbekanntes Szenario: " + scenario);
         }
@@ -136,6 +140,69 @@ public final class HumanSpike {
     private record In(GameHost.HumanSeat seat, Object msg) {
     }
 
+    /** {@code --payPreview}: Auto-Bezahlen-Vorschau bei jeder Prioritaet des Testers anfordern und pruefen */
+    private static boolean PAY_PREVIEW;
+    /** {@code --noAutoPass}: Test-Menschen spielen mit Auto-Passen aus */
+    private static boolean NO_AUTO_PASS;
+
+    /** Vorschau-Zaehler je Spiel: angefragt, beantwortet, mit Quellen, Fehler */
+    private static final class PreviewCheck {
+        int asked;
+        int answered;
+        int withSources;
+        int errors;
+        final List<String> notes = new ArrayList<>();
+
+        void error(String msg) {
+            errors++;
+            if (notes.size() < 8) {
+                notes.add(msg);
+            }
+        }
+    }
+
+    /**
+     * Vorschau fuer bis zu 3 wirkbare Nicht-Land-Handkarten nacheinander anfordern (der Spiel-Thread parkt im
+     * Prioritaets-Prompt und rechnet sie in der Park-Schleife). Quellen muessen eigene Karten auf dem Feld/der Hand sein.
+     */
+    private static void checkPayPreview(GameHost host, GameHost.HumanSeat seat, StateDto s, LinkedBlockingQueue<In> previews, PreviewCheck pc)
+            throws InterruptedException {
+        if (s.playable == null || s.hand == null) {
+            return;
+        }
+        Set<UUID> own = new HashSet<>();
+        s.hand.forEach(c -> own.add(c.id));
+        s.players.stream().filter(pl -> pl.me).forEach(pl -> pl.battlefield.forEach(c -> own.add(c.id)));
+        int n = 0;
+        for (CardDto c : s.hand) {
+            if (n >= 3 || !s.playable.containsKey(c.id) || (c.types != null && c.types.contains("LAND"))) {
+                continue;
+            }
+            n++;
+            pc.asked++;
+            host.payPreview(seat, c.id);
+            In in = previews.poll(5, TimeUnit.SECONDS);
+            if (in == null) {
+                pc.error("keine Antwort fuer " + c.name);
+                continue;
+            }
+            Messages.PayPreview pp = (Messages.PayPreview) in.msg();
+            pc.answered++;
+            if (in.seat() != seat || !c.id.equals(pp.id())) {
+                pc.error("Antwort fuer falsche Karte/falschen Sitz: " + c.name);
+                continue;
+            }
+            if (!pp.sources().isEmpty()) {
+                pc.withSources++;
+            }
+            for (UUID src : pp.sources()) {
+                if (!own.contains(src)) {
+                    pc.error("fremde/unbekannte Quelle fuer " + c.name);
+                }
+            }
+        }
+    }
+
     /** Antwort -> naechster State/Prompt desselben Sitzes (ms), ueber alle Spiele */
     private static final List<Long> LATENCIES = Collections.synchronizedList(new ArrayList<>());
     private static final List<Long> HEAPS = new ArrayList<>();
@@ -191,6 +258,8 @@ public final class HumanSpike {
         java.util.concurrent.atomic.AtomicInteger foreignPrompts = new java.util.concurrent.atomic.AtomicInteger();
         AtomicLong seatOutAt = new AtomicLong();
         Map<GameHost.HumanSeat, Driver> drivers = new java.util.LinkedHashMap<>();
+        LinkedBlockingQueue<In> previews = new LinkedBlockingQueue<>();
+        PreviewCheck pc = new PreviewCheck();
         SpectatorCheck spec = spectate ? new SpectatorCheck(host) : null;
         if (spec != null) {
             host.setSpectatable(true);
@@ -218,6 +287,10 @@ public final class HumanSpike {
                     recovered.set(a.recovered());
                     return;
                 }
+                if (msg instanceof Messages.PayPreview) {
+                    previews.add(new In(seat, msg));
+                    return;
+                }
                 lastMsgAt.set(System.currentTimeMillis());
                 if (msg instanceof StateDto) {
                     states.incrementAndGet();
@@ -241,6 +314,11 @@ public final class HumanSpike {
         }
         GameHost.HumanSeat firstSeat = host.firstSeat();
         Driver driver = drivers.get(firstSeat);
+        if (NO_AUTO_PASS) {
+            for (GameHost.HumanSeat seat : host.seats()) {
+                host.setAutoPass(seat, false);
+            }
+        }
         if (spec != null) {
             GameHost.SpectateResult sr = host.attachSpectator(9999L, "Zuschauer", spec, "Spike-Tisch");
             if (sr.status() != GameHost.SpectateStatus.OK) {
@@ -326,6 +404,9 @@ public final class HumanSpike {
                     out("  -> verlasse waehrend Prompt %s in Zug %d", p.kind, d.state.turn);
                     host.leave(in.seat());
                     continue;
+                }
+                if (PAY_PREVIEW && d == driver && "SELECT".equals(p.kind) && "priority".equals(p.mode) && d.state != null) {
+                    checkPayPreview(host, in.seat(), d.state, previews, pc);
                 }
                 d.handle(p);
             } else if (msg instanceof Messages.GameOver g) {
@@ -427,6 +508,18 @@ public final class HumanSpike {
                     stats.cards().values().stream().filter(c -> c.opening).count());
         }
         chains.report();
+        boolean previewOk = true;
+        if (PAY_PREVIEW) {
+            long[] diag = host.payPreviewDiag();
+            // 0 Anfragen (z. B. Szenario ohne wirkbare Handkarte) ist kein Fehler, nur ungetestet
+            previewOk = pc.errors == 0 && diag[1] == 0 && previews.isEmpty();
+            out("  Auto-Bezahlen-Vorschau: %s | angefragt=%d beantwortet=%d mit Quellen=%d Fehler=%d | Engine: berechnet=%d Zustand veraendert=%d max=%d ms%s",
+                    !previewOk ? "FEHLER" : pc.asked == 0 ? "NICHT GETESTET" : "OK", pc.asked, pc.answered, pc.withSources, pc.errors, diag[0], diag[1], diag[2],
+                    previews.isEmpty() ? "" : " | " + previews.size() + " unerwartete Antworten");
+            for (String e : pc.notes) {
+                out("    !! %s", e);
+            }
+        }
         boolean specOk = foreignPrompts.get() == 0;
         host.awaitEnd(10_000);
         if (spec != null) {
@@ -451,7 +544,7 @@ public final class HumanSpike {
         boolean gemOk = !driver.gemstone || (driver.gemResult != null && driver.gemResult.startsWith("OK"));
         boolean necroOk = !driver.necro || (driver.necroResult != null && driver.necroResult.startsWith("OK"));
         boolean convokeOk = !driver.convoke || (driver.cvErrors.isEmpty() && driver.cvPhase >= 99);
-        return !stalled && specOk && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
+        return !stalled && previewOk && specOk && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
     }
 
     /**

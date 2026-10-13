@@ -9,19 +9,18 @@ import type { BoardLayoutState } from './layout'
 import { PhaseBar } from './PhaseBar'
 
 export interface TopBarProps {
-  /** hdr, compact (PhaseBar-Gruppen), showInlineTempo, manaLbl/passLbl */
+  /** hdr, compact (PhaseBar-Gruppen), showInlineTempo */
   layout: BoardLayoutState
 }
 
-/** Schalter in der Kopfleiste (Barlow 600 13, an fg-1, aus fg-4) */
-const HDR_TOGGLE = 'flex items-center gap-[5px] uppercase transition-colors duration-1 hover:text-fg-1'
 /** Knopf "Menü" (h30, Kontur line-4) */
 const HDR_MENU =
   'flex h-[30px] items-center gap-1.5 rounded-sm px-[9px] uppercase text-fg-1 shadow-[inset_0_0_0_1px_var(--color-line-4)] transition-colors duration-1 hover:bg-bg-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-1'
 
 /**
  * Kopfleiste: Wortmarke, Runde, Zug-Chip, Sitz-Avatare in Zugreihenfolge, PhaseBar (mittig), Tempo (inline ab 1600 px),
- * Auto-Mana/-Passen, abgelehnte Ersatzeffekte, Ton, Menue. Zuschauer: Chip "Zuschauer" statt der Schalter.
+ * abgelehnte Ersatzeffekte, Zuschauerzahl, Ton, Menue (Auto-Mana/-Passen sitzen in der Aktionsleiste, PlayToggles).
+ * Zuschauer: Chip "Zuschauer" statt der Schalter.
  */
 export function TopBar({ layout }: TopBarProps) {
   const state = useGame((s) => s.state)!
@@ -33,10 +32,6 @@ export function TopBar({ layout }: TopBarProps) {
   const go = useNav((s) => s.go)
   const muted = useGame((s) => s.muted)
   const setMuted = useGame((s) => s.setMuted)
-  const autoMana = useGame((s) => s.autoMana)
-  const setAutoMana = useGame((s) => s.setAutoMana)
-  const autoPass = useGame((s) => s.autoPass)
-  const setAutoPass = useGame((s) => s.setAutoPass)
   const isHost = useGame((s) => s.hello?.host !== false)
   const spectator = useGame((s) => s.spectator)
   const spectators = useGame((s) => s.spectators)
@@ -83,28 +78,6 @@ export function TopBar({ layout }: TopBarProps) {
                 <span className="h-[22px] w-px bg-line-3" aria-hidden />
               </>
             )}
-            <button
-              type="button"
-              className={HDR_TOGGLE}
-              style={{ color: autoMana ? 'var(--color-fg-1)' : 'var(--color-fg-4)' }}
-              title="Mana automatisch bezahlen"
-              aria-pressed={autoMana}
-              onClick={() => setAutoMana(!autoMana)}
-            >
-              <Icon name="autoMana" size={14} style={{ color: autoMana ? 'var(--color-ember)' : 'var(--color-fg-4)' }} />
-              {layout.manaLbl}
-            </button>
-            <button
-              type="button"
-              className={HDR_TOGGLE}
-              style={{ color: autoPass ? 'var(--color-fg-1)' : 'var(--color-fg-4)' }}
-              title="Automatisch passen, wenn nichts spielbar ist (aus = Gegner sieht nicht, ob du Optionen hast)"
-              aria-pressed={autoPass}
-              onClick={() => setAutoPass(!autoPass)}
-            >
-              <Icon name="autoPass" size={14} style={{ color: autoPass ? 'var(--color-ember)' : 'var(--color-fg-4)' }} />
-              {layout.passLbl}
-            </button>
             {replDeclines && replDeclines.length > 0 && (
               <Chip tone="filter" title={`Automatisch abgelehnt: ${replDeclines.join(', ')} – X setzt zurück`} onRemove={resetReplDeclines} removeLabel="Abgelehnte Ersatzeffekte zurücksetzen">
                 {replDeclines[0]} · abgelehnt{replDeclines.length > 1 ? ` +${replDeclines.length - 1}` : ''}

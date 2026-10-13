@@ -61,11 +61,16 @@ export interface FxTiming {
   enter: number
   /** Angriffsstoss hin und zurueck (CSS fx-lunge) */
   lunge: number
+  /** neues Stapelobjekt: Quelle pulsiert, Linie zum Stapel leuchtet nach (ArrowLayer) */
+  trigger: number
 }
 
 /** Brett-FX: bei Blitz etwa 60 % der normalen Dauer (wie cardFlight) */
 export function fxTiming(tempo?: Tempo | null): FxTiming {
-  const t = tempo === 'BLITZ' ? { hit: 140, impact: 160, death: 220, enter: 240, lunge: 180 } : { hit: 240, impact: 220, death: 320, enter: 360, lunge: 280 }
+  const t =
+    tempo === 'BLITZ'
+      ? { hit: 140, impact: 160, death: 220, enter: 240, lunge: 180, trigger: 700 }
+      : { hit: 240, impact: 220, death: 320, enter: 360, lunge: 280, trigger: 1100 }
   const k = fxSlow()
-  return k === 1 ? t : { hit: t.hit * k, impact: t.impact * k, death: t.death * k, enter: t.enter * k, lunge: t.lunge * k }
+  return k === 1 ? t : { hit: t.hit * k, impact: t.impact * k, death: t.death * k, enter: t.enter * k, lunge: t.lunge * k, trigger: t.trigger * k }
 }

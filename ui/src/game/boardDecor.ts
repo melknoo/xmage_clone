@@ -1,4 +1,4 @@
-// Etiketten und Pod-Chips statt Kampf-/Zielpfeilen (CombatOverlay/TargetOverlay entfallen).
+// Etiketten und Pod-Chips an Karten/Spielern; die Pfeile dazu zeichnet ArrowLayer (kontextuell, abschaltbar).
 // Reine Ableitung aus state.combat, state.stack und der Interaktion; Text normal geschrieben, Versalien per CSS.
 import type { CardLabel } from '../components/CardView'
 import type { GameState, UUID } from '../api/types'

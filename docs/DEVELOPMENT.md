@@ -109,6 +109,7 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 | Mehrere Menschen (REST+WS) | `gradlew runServer`, dann `node scripts\e2e-online.mjs` | „alles gruen“ (2 Cookies, 2 Autopiloten, Aufgeben einzeln, reward + `games`-Zeile je Nutzer) |
 | Lobby/Tische | `gradlew runServer`, dann `node scripts\e2e-tables.mjs` | „alles gruen“ (Tisch eröffnen/beitreten, Decks, Bot-Platz, Start mit 3 Spielern, Revanche, schließen, 409-Fälle) |
 | Server-UI visuell | `runServer` + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-server.json` in `desktop/` | `engine/run/shot-server-*.png` (Login, Einladungen, Spiel) |
+| Pfeile + Bezahl-Vorschau | eigene Engine (z. B. 7400, `--dev --data=<eigenes Verzeichnis>`) + Vite 5173, dann `SHOT_PORT=7400 npx electron tools/shot.cjs tools/steps-arrows.json` | `design/redesign-shots/arrows/*.png` (Schalter in der Leiste, Hover Handkarte, Live-Pfeil, „Automatisch bezahlen“, Stapel-Ziel, Auslöser, Kampf; 1680 + 1280) |
 | Szenario-Screenshots | Dev-Engine + `npm run dev`, dann `npx electron tools\shot.cjs tools\steps-<necro\|attack-undo\|gemstone\|fx\|modal-hover\|convoke\|pass-ui>.json` | `engine/run/necro-*.png`, `attack-*.png`, `gemstone-*.png`, `fx-*.png`, `modal-hover-*.png`, `convoke-*.png` (Weiter-Ziel, X, Einberufen), `pass-*.png` (F9 + Stopp, Startfehler, Login-Auge) |
 | Admin + Brett-FX (Server-Modus) | Engine `--server --dev` auf 7401 (Owner Anna), Vite 5174, `social-seed.mjs`, dann `tools\steps-admin.json` bzw. `tools\steps-fx-anim.json` | `admin-*.png` (Lobby-Chat, Logo → Start, Nutzer/Detail, Einladungen, Server), `fx-*.png` (Zeitlupe `window.__mlFxSlow=6`) |
 | Design-Screenshots (alle Screens) | Dev-Engine + `npm run dev`: `tools\steps-design-<splash\|meta\|game\|swarm\|necro\|dredge\|gemstone\|minsize>.json`; danach `runServer` + `node tools\design-mate.mjs` (zweiter Mensch) parallel zu `tools\steps-design-server.json` | `design/claude-design/screenshots/*.png`, Übersicht in `INDEX.md`; für Vorher/Nachher-Vergleiche beim Redesign |
@@ -117,7 +118,9 @@ cd desktop; Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue; 
 Spike-Argumente: BotSpike `--games --turnCap --tempo=BLITZ|NORMAL|BEDACHT|MAX --seed --maxMinutes --parallel=P
 --deckDir --decks=a;b --slowTurnSec --validate`; HumanSpike `--games --turnCap --tempo --seed --humans=1..4 --verbose
 --scenario=swarm|dredge|gemstone|necro|convoke --spectate --decks=a;b --leave=… --dumpJson=datei.jsonl` (schreibt alle
-Server-Nachrichten mit). Beide Spikes melden langsame Züge und zählen `UNMAPPED`-Aufrufe (siehe Abschnitt 4).
+Server-Nachrichten mit) `--payPreview` (Auto-Bezahlen-Vorschau je Priorität für bis zu 3 Handkarten anfordern; prüft
+Antwort, Quellen und dass der Spielzustand unverändert bleibt) `--noAutoPass` (Test-Menschen mit Auto-Passen aus,
+z. B. für Stopps im Kampf; mit `--dumpJson` auswertbar – die Datei enthält nur das letzte Spiel). Beide Spikes melden langsame Züge und zählen `UNMAPPED`-Aufrufe (siehe Abschnitt 4).
 
 ### UI automatisiert ansehen
 
