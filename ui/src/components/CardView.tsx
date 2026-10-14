@@ -8,7 +8,7 @@ import { ManaCost, RulesText } from '../lib/mana'
  * Karte nach prototypes/BoardCard.dc.html (Variante c) und README "Kartenzustände".
  * 'special' (Convoke-Bezahlung) wird wie die Mana-Quelle dargestellt.
  */
-export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking' | 'special' | 'payPreview'
+export type Highlight = 'none' | 'playable' | 'mana' | 'target' | 'chosen' | 'attacking' | 'blocking' | 'special' | 'payPreview' | 'aimed'
 
 /** Groessenstufe (Alias aus der Zeit vor `width`): xs 38 · sm 50 · md 80 · lg 104 · xl 120 · zoom 250 px */
 export type CardSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'zoom'
@@ -18,13 +18,13 @@ export const CARD_SIZE_PX: Record<CardSize, number> = { xs: 38, sm: 50, md: 80, 
 
 /** Ton eines Karten-Etiketts (Kampf/Ziel, ersetzt die Pfeile) */
 export type CardLabelTone = 'attack' | 'block' | 'target' | 'chosen' | 'ember'
-/** Etikett unter der Karte, z. B. {text: '→ Kotori', tone: 'attack'}; Text normal geschrieben, Versalien per CSS */
+/** Etikett oben an der Karte (statt Abzeichen), z. B. {text: '→ Kotori', tone: 'attack'}; Text normal geschrieben, Versalien per CSS */
 export interface CardLabel {
   text: string
   tone: CardLabelTone
 }
 
-/** own: mittig unter der Karte (12 px) · opponent: links (11 px, 2-px-Freistellung in Brettfarbe) */
+/** beide oben mittig · own: 12 px · opponent: 11 px mit 2-px-Freistellung in Brettfarbe */
 export type CardLabelVariant = 'own' | 'opponent'
 
 const failed = new Set<string>()
@@ -36,9 +36,9 @@ export const cardHeight = (w: number) => Math.round((w * 88) / 63)
  * Rahmen-Zustaende und Rang (niedrigster Rang gewinnt)
  * ------------------------------------------------------------------------------------------- */
 
-type Frame = 'none' | 'chosen' | 'target' | 'targetStatic' | 'attack' | 'block' | 'pay' | 'play' | 'mana'
+type Frame = 'none' | 'aim' | 'chosen' | 'target' | 'targetStatic' | 'attack' | 'block' | 'pay' | 'play' | 'mana'
 
-const RANK: Record<Frame, number> = { chosen: 1, target: 2, targetStatic: 2, attack: 3, block: 3, pay: 4, play: 5, mana: 6, none: 9 }
+const RANK: Record<Frame, number> = { aim: 0, chosen: 1, target: 2, targetStatic: 2, attack: 3, block: 3, pay: 4, play: 5, mana: 6, none: 9 }
 
 const FRAME_OF: Record<Highlight, Frame> = {
   none: 'none',
@@ -50,6 +50,7 @@ const FRAME_OF: Record<Highlight, Frame> = {
   attacking: 'attack',
   blocking: 'block',
   payPreview: 'pay',
+  aimed: 'aim',
 }
 
 const RING = (color: string) => `0 0 0 2px ${color}, 0 0 0 4px var(--color-bg-1)`
@@ -64,6 +65,8 @@ const FRAME_SHADOW: Record<Frame, string> = {
   chosen: RING('var(--color-chosen)'),
   attack: RING('var(--color-attack)'),
   block: RING('var(--color-block)'),
+  // Zielwahl: der Live-Pfeil zeigt auf diese Karte - durchgezogener Ziel-Ring mit Schein
+  aim: '0 0 0 3px var(--color-target), 0 0 0 5px var(--color-bg-1), 0 0 18px 6px color-mix(in oklab, var(--color-target) 55%, transparent)',
   // Auto-Bezahlen-Vorschau: weicher Ember-Schein statt hartem Ring ("wuerde getappt")
   pay: '0 0 0 2px color-mix(in oklab, var(--color-ember) 80%, transparent), 0 0 14px 4px color-mix(in oklab, var(--color-ember) 45%, transparent)',
 }
@@ -73,6 +76,7 @@ const BADGE: Partial<Record<Frame, { cls: string; icon: IconName; title: string 
   chosen: { cls: 'bg-chosen', icon: 'chosen', title: 'Gewählt' },
   target: { cls: 'bg-target', icon: 'target', title: 'Mögliches Ziel' },
   targetStatic: { cls: 'bg-target', icon: 'target', title: 'Ziel' },
+  aim: { cls: 'bg-target', icon: 'target', title: 'Ziel (Klick wählt)' },
   attack: { cls: 'bg-attack', icon: 'attacker', title: 'Greift an' },
   block: { cls: 'bg-block', icon: 'blocker', title: 'Blockt' },
 }
@@ -93,6 +97,8 @@ const CHIP = 'chip-count pointer-events-none absolute z-[2] leading-none'
 
 const CHIP_INVERTED: CSSProperties = { background: 'var(--color-fg-1)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
 const CHIP_DAMAGE: CSSProperties = { left: -4, top: -4, background: 'var(--color-attack)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
+/** Zielwahl: angepeilte Karte hebt sich wie beim Hover (gleiche Eigenschaft wie -translate-y-1, addiert sich nicht) */
+const AIM_LIFT: CSSProperties = { translate: '0 -4px' }
 const CHIP_PAY: CSSProperties = { left: -4, top: -4, background: 'var(--color-ember)', color: 'var(--color-ember-ink)', boxShadow: 'none' }
 const CHIP_SICK: CSSProperties = { right: -4, top: -4, padding: 3, color: 'var(--color-fg-3)' }
 
@@ -164,9 +170,9 @@ export interface CardViewProps {
   size?: CardSize
   /** Kartenbreite in px (game/layout.ts); ueberschreibt size */
   width?: number
-  /** Kampf-/Ziel-Etikett unter der Karte; Ton 'target' ohne passenden Rahmen setzt einen festen Ziel-Rahmen (Stapelziel) */
+  /** Kampf-/Ziel-Etikett oben (ersetzt das Abzeichen, laesst ×N/P/T unten frei); Ton 'target' ohne passenden Rahmen setzt einen festen Ziel-Rahmen (Stapelziel) */
   label?: CardLabel | null
-  /** Position des Etiketts: own (Standard) mittig, opponent links und kleiner */
+  /** Groesse des Etiketts: own (Standard) 12 px, opponent kleiner mit Freistellung */
   labelVariant?: CardLabelVariant
   highlight?: Highlight
   onClick?: (e: MouseEvent) => void
@@ -266,7 +272,7 @@ export const CardView = memo(function CardView({
     >
       <div
         className={`absolute inset-0 transition-transform duration-2 ease-out ${clickable && lift ? 'group-hover/card:-translate-y-1' : ''}`}
-        style={dim ? { opacity: 0.45 } : undefined}
+        style={dim ? { opacity: 0.45 } : frame === 'aim' && lift ? AIM_LIFT : undefined}
       >
         {/* Karte (dreht sich beim Tappen); data-card-face = sichtbare Kartenflaeche fuer FX (objRect) */}
         <div
@@ -331,8 +337,8 @@ export const CardView = memo(function CardView({
           )}
         </div>
 
-        {/* Abzeichen */}
-        {badge && (
+        {/* Abzeichen (mit Etikett steckt das Icon im Etikett) */}
+        {badge && !label && (
           <div
             className={`pointer-events-none absolute left-1/2 top-[-9px] z-[3] flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-xs text-badge-ink shadow-badge ${badge.cls}`}
             title={badge.title}
@@ -382,17 +388,20 @@ export const CardView = memo(function CardView({
           </div>
         )}
 
-        {/* Etikett (Kampf/Ziel) */}
+        {/* Etikett (Kampf/Ziel) oben mittig statt Abzeichen: ×N und P/T unten bleiben frei */}
         {label && (
           <div
-            className={`pointer-events-none absolute z-[5] whitespace-nowrap rounded-xs font-display font-semibold uppercase leading-none tracking-[.06em] text-ember-ink ${LABEL_BG[label.tone]}`}
+            className={`pointer-events-none absolute left-1/2 top-[-10px] z-[5] flex -translate-x-1/2 items-center gap-[3px] whitespace-nowrap rounded-xs font-display font-semibold uppercase leading-none tracking-[.06em] text-ember-ink ${LABEL_BG[label.tone]}`}
             style={
               labelVariant === 'opponent'
-                ? { left: -4, bottom: -10, padding: '3px 5px', fontSize: 11, boxShadow: '0 0 0 2px var(--color-bg-board)' }
-                : { left: '50%', bottom: -10, transform: 'translateX(-50%)', padding: '3px 6px', fontSize: 12 }
+                ? { padding: '3px 5px', fontSize: 11, boxShadow: '0 0 0 2px var(--color-bg-board)' }
+                : { padding: '3px 6px', fontSize: 12 }
             }
+            title={badge?.title}
             data-card-label={label.tone}
+            data-card-badge={badge ? (frame === 'targetStatic' ? 'target' : frame) : undefined}
           >
+            {badge && <Icon name={badge.icon} size={labelVariant === 'opponent' ? 10 : 11} strokeWidth={2.4} />}
             {label.text}
           </div>
         )}

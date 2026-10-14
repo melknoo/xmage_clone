@@ -9,6 +9,8 @@ import forge.game.mana.ManaCostBeingPaid;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 
+import org.apache.log4j.Logger;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,6 +21,8 @@ import java.util.List;
  * Nur Spiel-Thread.
  */
 final class PayPreview {
+
+    private static final Logger LOG = Logger.getLogger(PayPreview.class);
 
     private PayPreview() {
     }
@@ -47,5 +51,22 @@ final class PayPreview {
             }
         }, new PlayerControllerAi(p.getGame(), p, p.getOriginalLobbyPlayer()));
         return out;
+    }
+
+    /**
+     * Groesstes X, das p fuer sa gerade bezahlen koennte (Mana-X; Forges KI-Rechnung
+     * {@link ComputerUtilMana#determineLeftoverMana}: X = 1..99 per Testzahlung, mit Kostenanpassung, XX und Manapool,
+     * nichts wird getappt). Quellen, die Forges KI nicht nutzt, zaehlen nicht. -1: nicht bestimmbar.
+     */
+    static int maxX(Player p, SpellAbility sa) {
+        int[] out = {-1};
+        try {
+            p.runWithController(() -> out[0] = ComputerUtilMana.determineLeftoverMana(sa, p, false),
+                    new PlayerControllerAi(p.getGame(), p, p.getOriginalLobbyPlayer()));
+        } catch (RuntimeException e) {
+            LOG.warn("X-Maximum fuer " + sa.getHostCard() + " nicht bestimmbar: " + e);
+            return -1;
+        }
+        return out[0];
     }
 }

@@ -338,7 +338,8 @@ function targetUnder(el: Element | null, targets: Set<UUID>): { id: UUID; rect: 
 
 /**
  * Zielwahl wie in Arena: Pfeil von der Quelle (Handkarte, Permanent, Stapelobjekt) zur Maus; ueber einem gueltigen
- * Ziel rastet er an dessen Kante ein und wird kraeftiger. Zeichnet per Ref (rAF), ohne React-Render je Mausbewegung.
+ * Ziel rastet er an dessen Kante ein und wird kraeftiger, das Ziel selbst wird hervorgehoben (store.aimId ->
+ * Highlight 'aimed'). Zeichnet per Ref (rAF), ohne React-Render je Mausbewegung; aimId aendert sich nur beim Wechsel.
  */
 function LiveArrow({ prompt }: { prompt: Prompt }) {
   const pathRef = useRef<SVGPathElement>(null)
@@ -353,8 +354,10 @@ function LiveArrow({ prompt }: { prompt: Prompt }) {
     const targets = new Set((targetsKey ? targetsKey.split(',') : []).filter((id) => id !== sourceId && !chosen.has(id)))
     let raf = 0
     let last: PointerEvent | null = null
+    const setAim = useGame.getState().setAim
     const hide = () => {
       path.style.opacity = '0'
+      setAim(null)
     }
     const draw = () => {
       raf = 0
@@ -366,6 +369,7 @@ function LiveArrow({ prompt }: { prompt: Prompt }) {
       const snap = targetUnder(last.target instanceof Element ? last.target : null, targets)
       // Maus noch auf der Quelle: kein Pfeil
       if (!snap && mouse.x >= src.left && mouse.x <= src.left + src.width && mouse.y >= src.top && mouse.y <= src.top + src.height) return hide()
+      setAim(snap?.id ?? null)
       const end = snap ? edgeToward(snap.rect, rectCenter(src), 5) : mouse
       const start = row ? stackLeft(row) : edgeToward(src, snap ? rectCenter(snap.rect) : mouse)
       path.setAttribute('d', curve(start, end))
@@ -389,6 +393,7 @@ function LiveArrow({ prompt }: { prompt: Prompt }) {
       cancelAnimationFrame(raf)
       window.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerout', onOut)
+      setAim(null)
     }
   }, [sourceId, targetsKey, chosenKey])
 

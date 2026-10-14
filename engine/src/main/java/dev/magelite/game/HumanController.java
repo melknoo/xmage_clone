@@ -3,6 +3,7 @@ package dev.magelite.game;
 import forge.LobbyPlayer;
 import forge.card.ColorSet;
 import forge.game.Game;
+import forge.game.cost.Cost;
 import forge.game.cost.CostPart;
 import forge.game.GameEntity;
 import forge.game.replacement.ReplacementEffect;
@@ -136,6 +137,22 @@ public final class HumanController extends PlayerControllerHuman {
             return true;
         }
         return super.confirmPayment(costPart, question, sa);
+    }
+
+    /**
+     * X ansagen: bei Mana-X nur bis zum bezahlbaren Maximum anbieten ({@link PayPreview#maxX}); Forge selbst deckelt
+     * fuer Menschen nur Nicht-Mana-X. Nie unter min, sonst bricht Forge das Wirken ab.
+     */
+    @Override
+    public Integer announceRequirements(SpellAbility ability, int min, int max, String announce) {
+        Cost cost = ability.getPayCosts();
+        if ("X".equals(announce) && max > min && cost != null && cost.hasManaCost() && cost.getTotalMana().countX() > 0) {
+            int cap = PayPreview.maxX(getPlayer(), ability);
+            if (cap >= 0) {
+                max = Math.max(min, Math.min(max, cap));
+            }
+        }
+        return super.announceRequirements(ability, min, max, announce);
     }
 
     /** Eine einzelne "wiederholbare" Faehigkeit trotzdem zur Wahl stellen (Knopf "N-mal aktivieren" in der UI). */

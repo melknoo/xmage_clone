@@ -151,9 +151,7 @@ export function AmountDialog({ p, layout }: DialogProps) {
             onChange={(e) => setV(clamp(Number(e.target.value) || 0, min, max))}
           />
         </div>
-        <div className="text-body-s text-fg-3">
-          Bereich {min} – {max}
-        </div>
+        <div className="text-body-s text-fg-3">{max >= 1_000_000 ? `Mindestens ${min}` : `Bereich ${min} – ${max}`}</div>
       </div>
     </BoardModal>
   )

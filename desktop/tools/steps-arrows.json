@@ -176,6 +176,11 @@
    "name": "Live"
   },
   {
+   "js": "window.__ml.game.getState().aimId?'angepeilt':'nichts angepeilt'",
+   "expect": "^angepeilt",
+   "name": "Ziel angepeilt"
+  },
+  {
    "wait": 400
   },
   {
@@ -192,6 +197,14 @@
    }
   },
   {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.game.getState().aimId?'angepeilt':'nichts angepeilt'",
+   "expect": "^angepeilt",
+   "name": "Ziel angepeilt"
+  },
+  {
    "wait": 400
   },
   {
@@ -203,6 +216,14 @@
   },
   {
    "hover": "[data-testid=game-header]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "window.__ml.game.getState().aimId?'angepeilt':'nichts angepeilt'",
+   "expect": "^nichts",
+   "name": "nichts angepeilt"
   },
   {
    "wait": 400

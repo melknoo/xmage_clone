@@ -13,6 +13,8 @@ export interface Interaction {
   highlightBase: (id: UUID) => Highlight
   /** Quellen der Auto-Bezahlen-Vorschau (nur bei Prioritaet/Bezahlen), sonst leer */
   payPreview: Set<UUID>
+  /** Zielwahl: waehlbares Ziel, auf dem der Live-Pfeil einrastet (sonst null) */
+  aim: UUID | null
   canClick: (id: UUID) => boolean
   /**
    * Klick auf ein Objekt. Im Angriffs-/Blockmodus markiert Shift+Klick die Kreatur (bzw. mit {@code group} den ganzen
@@ -59,6 +61,7 @@ export function useInteraction(): Interaction {
   const specialPay = useGame((s) => s.specialPay)
   const autoMana = useGame((s) => s.autoMana)
   const payPreview = useGame((s) => s.payPreview)
+  const aimId = useGame((s) => s.aimId)
 
   return useMemo(() => {
     const active = prompt && answered !== prompt.id ? prompt : null
@@ -164,7 +167,9 @@ export function useInteraction(): Interaction {
           return 'none'
       }
     }
-    const highlight = (id: UUID): Highlight => (payIds.has(id) ? 'payPreview' : highlightBase(id))
+    // Live-Pfeil rastet auf einem waehlbaren Ziel ein: dieses hervorheben (nicht in highlightBase - ×N bleiben stabil)
+    const aim = mode === 'target' && aimId && clickable.has(aimId) && !chosen.has(aimId) ? aimId : null
+    const highlight = (id: UUID): Highlight => (payIds.has(id) ? 'payPreview' : id === aim ? 'aimed' : highlightBase(id))
 
     return {
       prompt: active,
@@ -172,6 +177,7 @@ export function useInteraction(): Interaction {
       highlight,
       highlightBase,
       payPreview: payIds,
+      aim,
       canClick: (id: UUID) => clickable.has(id) || markTargets.has(id),
       click: (id: UUID, e?: MouseEvent, group?: UUID[]) => {
         if (combatMode && e?.shiftKey) {
@@ -194,5 +200,5 @@ export function useInteraction(): Interaction {
       modalCards,
       marked: marks,
     }
-  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay, autoMana, payPreview])
+  }, [prompt, answered, state, objects, answer, marked, toggleMarks, combatMany, specialPay, autoMana, payPreview, aimId])
 }

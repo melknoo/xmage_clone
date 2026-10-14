@@ -11,6 +11,7 @@
 //   { stack: N }          bei Prioritaet mit >= N Stapelobjekten nicht passen (F10-Knopf, Stapel-Screenshot)
 //   { cast: true }        wie autoplay.js auch Commander/Zauber wirken (aber nie angreifen) - fuer eigene Blocker
 //   { mana: true }        Mana-Prompt ohne Einberufen nicht beantworten (Hover-Vorschau "Automatisch bezahlen")
+//   { amount: true }      AMOUNT (z. B. X ansagen) nicht beantworten
 // Die steps duerfen window.__hold spaeter aendern (gleiches Objekt), z. B. window.__hold.stack = 0.
 (() => {
   if (window.__pilot) return 'already'
@@ -94,7 +95,9 @@
       case 'PICK_ABILITY': case 'CHOOSE_MODE':
         return p.choices && p.choices.length ? ans({ uuid: p.choices[0].id }) : ans({ bool: false })
       case 'CHOOSE_CHOICE': if (p.choice.groups) return; return ans({ str: p.choice.keyed ? p.choice.items[0].key : p.choice.items[0].value })
-      case 'AMOUNT': return ans({ int: hold.convoke ? Math.min(2, p.max || 2) : p.min || 0 })
+      case 'AMOUNT':
+        if (hold.amount) return
+        return ans({ int: hold.convoke ? Math.min(2, p.max || 2) : p.min || 0 })
       case 'MULTI_AMOUNT': return ans({ str: p.items.map((i) => i.value).join(' ') })
       case 'CHOOSE_PILE': return ans({ bool: true })
       case 'PLAY_MANA':

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { cardImageUrl } from '../api/client'
 import type { DeckSpec, SampleDeck, StoredDeck } from '../api/types'
 import { Button, Chip, Overlay, Tabs, TextField } from '../components/ui'
@@ -18,7 +18,7 @@ export interface DeckPickerProps {
   onClose: () => void
   /** Zusatz im Kopf-Label: "Dein Deck" | "Platz 3" -> "Deck wählen · Platz 3" */
   forLabel?: string
-  /** aktuell gewaehltes Deck (vorausgewaehlt, bestimmt den Start-Tab) */
+  /** aktuell gewaehltes Deck (Haken; Start-Tab nur, wenn es zu wenige eigene Decks gibt) */
   current?: DeckSpec | null
 }
 
@@ -42,22 +42,20 @@ const keyOf = (s: DeckSpec | null | undefined) => (!s ? '' : s.type === 'random'
 const artOf = (set?: string, num?: string) => (set && num ? cardImageUrl({ set, num }, { size: 'art_crop' }) : null)
 const SOURCE: Record<string, string> = { text: 'Textliste', archidekt: 'Archidekt', moxfield: 'Moxfield' }
 
+/** Start-Tab: eigene Decks, sobald es genug gibt (eigener Platz > 0, Bot > 3); sonst Tab des aktuellen Decks */
 function initialTab(decks: StoredDeck[], allowRandom: boolean, current?: DeckSpec | null): PickTab {
-  if (current?.type === 'user') return 'mine'
-  if (current?.type === 'sample' || current?.type === 'random') return 'pre'
-  if (allowRandom) return 'pre'
-  return decks.length ? 'mine' : 'pre'
+  if (decks.length > (allowRandom ? 3 : 0)) return 'mine'
+  return current?.type === 'user' ? 'mine' : 'pre'
 }
 
 /**
  * Deck-Auswahl als Meta-Overlay (innerhalb von <main>): Suche, "Zufällig", Tabs eigene/vorgefertigte Decks.
- * Klick waehlt nur aus; "Übernehmen" (Enter) oder Doppelklick uebernimmt, "Abbrechen" (Esc) / Scrim schliesst.
+ * Klick auf eine Kachel (oder "Zufällig") uebernimmt sofort; "Abbrechen" (Esc) / Scrim schliesst. Haken = aktuelles Deck.
  * Fuer die Exit-Animation in <AnimatePresence> rendern.
  */
 export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLabel, current }: DeckPickerProps) {
   const [tab, setTab] = useState<PickTab>(() => initialTab(decks, allowRandom, current))
   const [q, setQ] = useState('')
-  const [sel, setSel] = useState<DeckSpec | null>(current ?? null)
 
   const mineItems = useMemo<PickItem[]>(
     () =>
@@ -117,31 +115,12 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
   const base = tab === 'mine' ? mineItems : preItems
   const shown = (allowRandom && tab === 'pre' ? [randomItem, ...base] : base).filter((it) => !ql || it.hay.includes(ql))
 
-  const selKey = keyOf(sel)
-  const commit = (spec: DeckSpec | null = sel) => {
-    if (spec) onPick(spec)
-  }
-
-  // Enter uebernimmt (auch aus der Suche); der Abbrechen-Knopf behaelt sein eigenes Enter
-  const commitRef = useRef(commit)
-  useEffect(() => {
-    commitRef.current = commit
-  })
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Enter' || e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return
-      if ((e.target as HTMLElement | null)?.closest?.('[data-picker-cancel]')) return
-      e.preventDefault()
-      commitRef.current()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  const curKey = keyOf(current)
 
   const pickRandom = () => {
-    const pool = base.filter((it) => it.key !== selKey)
+    const pool = base.filter((it) => it.key !== curKey)
     const list = pool.length ? pool : base
-    if (list.length) setSel(list[Math.floor(Math.random() * list.length)].spec)
+    if (list.length) onPick(list[Math.floor(Math.random() * list.length)].spec)
   }
 
   return (
@@ -153,7 +132,7 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
       headerRight={
         <>
           <TextField autoFocus icon="search" className="w-[280px]" placeholder="Name, Commander oder Set" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Deck suchen" />
-          <Button icon="random" onClick={pickRandom} disabled={!base.length} title="Zufälliges Deck aus diesem Tab auswählen">
+          <Button icon="random" onClick={pickRandom} disabled={!base.length} title="Zufälliges Deck aus diesem Tab übernehmen">
             Zufällig
           </Button>
         </>
@@ -171,16 +150,9 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
       }
       footerHint={tab === 'mine' ? 'Eigene Decks mit Meisterschaft' : `${samples.length} mitgelieferte Commander-Decks`}
       footer={
-        <>
-          <span data-picker-cancel className="contents">
-            <Button variant="ghost" kbd="Esc" testId="modal-cancel" onClick={onClose}>
-              Abbrechen
-            </Button>
-          </span>
-          <Button variant="primary" kbd="Enter" testId="picker-apply" disabled={!sel} onClick={() => commit()}>
-            Übernehmen
-          </Button>
-        </>
+        <Button variant="ghost" kbd="Esc" testId="modal-cancel" onClick={onClose}>
+          Abbrechen
+        </Button>
       }
     >
       <div className="grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] content-start gap-3.5 px-5 py-[18px]">
@@ -195,9 +167,8 @@ export function DeckPicker({ decks, samples, allowRandom, onPick, onClose, forLa
             random={it.random}
             warn={it.invalid}
             validation={it.validation}
-            selected={it.key === selKey}
-            onClick={() => setSel(it.spec)}
-            onDoubleClick={() => commit(it.spec)}
+            selected={it.key === curKey}
+            onClick={() => onPick(it.spec)}
           />
         ))}
         {shown.length === 0 && (
@@ -228,7 +199,6 @@ export interface DeckTileProps {
   /** Zusatz: "Eigenes Deck · Stufe 3" | "Commander 2014 · C14" */
   setLine?: string
   selected?: boolean
-  onDoubleClick?: () => void
   /** Zufalls-Kachel: Shuffle statt Kunst */
   random?: boolean
   /** Tooltip des "Nicht legal"-Chips */
@@ -236,7 +206,7 @@ export interface DeckTileProps {
 }
 
 /** Kachel der Deck-Auswahl: Art 112, Name + Farben, Commander, Set-Zeile auf Vollflaeche; Auswahl = Ember-Kontur + Haken. */
-export function DeckTile({ name, sub, colors, set, num, group, warn, onClick, art, setLine, selected, onDoubleClick, random, validation }: DeckTileProps) {
+export function DeckTile({ name, sub, colors, set, num, group, warn, onClick, art, setLine, selected, random, validation }: DeckTileProps) {
   const src = art !== undefined ? art : artOf(set, num)
   const line = setLine ?? group
   return (
@@ -246,7 +216,6 @@ export function DeckTile({ name, sub, colors, set, num, group, warn, onClick, ar
       title={name}
       className={`relative flex min-w-0 flex-col overflow-hidden rounded-sm bg-bg-1 text-left transition-shadow duration-1 ${selected ? 'shadow-[0_0_0_2px_var(--color-ember)]' : 'shadow-[0_0_0_1px_var(--color-line-2)] hover:shadow-[0_0_0_1px_var(--color-line-4)]'}`}
       onClick={onClick}
-      onDoubleClick={onDoubleClick}
     >
       <DeckArt src={random ? null : src} className="h-[112px] w-full flex-none">
         {random && (

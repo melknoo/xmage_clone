@@ -127,7 +127,7 @@ function Row({ perms, width, gap, rowGap, opponent, interactive, inter, onHover,
                 width={width}
                 label={g.label}
                 labelVariant={opponent ? 'opponent' : 'own'}
-                highlight={planned > 0 ? 'payPreview' : inter.highlightBase(first.id)}
+                highlight={planned > 0 ? 'payPreview' : inter.aim && ids.includes(inter.aim) ? 'aimed' : inter.highlightBase(first.id)}
                 onHover={onHover}
                 onClick={interactive ? (e) => inter.click(first.id, e, ids) : undefined}
                 count={g.cards.length}

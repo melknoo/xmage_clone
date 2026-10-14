@@ -1063,6 +1063,12 @@ public final class HumanSpike {
                 }
                 case 1 -> {
                     if ("AMOUNT".equals(p.kind)) {
+                        // 5 Laender, Blaze {X}{R}: hoechstens X=4 bezahlbar
+                        if (p.max != 4) {
+                            cvFail("X-Maximum " + p.max + " statt 4");
+                        } else {
+                            cvNotes.add("X-Maximum 4");
+                        }
                         lastPrompt = p;
                         host.respond(seat, p.id, GameHost.Response.ofInt(2));
                         return true;

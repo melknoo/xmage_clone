@@ -188,9 +188,9 @@ function Row({ row, top, focused, casting, who, inter, onHover, onFocus }: RowPr
   const clickable = inter.canClick(c.id)
   const kind = [casting ? 'Wird gewirkt' : '', typeLabel(c) || (c.kind === 'ability' ? 'Fähigkeit' : 'Zauber'), count > 1 ? `×${count} gleiche` : ''].filter(Boolean).join(' · ')
   const rules = (c.rules ?? []).join('\n')
-  const ring = hl === 'target' ? 'var(--color-target)' : hl === 'chosen' ? 'var(--color-chosen)' : null
+  const ring = hl === 'target' || hl === 'aimed' ? 'var(--color-target)' : hl === 'chosen' ? 'var(--color-chosen)' : null
   const style: CSSProperties = {
-    background: top ? TOP_TINT : focused ? 'var(--color-bg-4)' : undefined,
+    background: hl === 'aimed' ? 'color-mix(in oklab, var(--color-target) 12%, transparent)' : top ? TOP_TINT : focused ? 'var(--color-bg-4)' : undefined,
     boxShadow: ring ? `inset 2px 0 0 ${ring}` : undefined,
   }
   return (

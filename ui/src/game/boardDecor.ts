@@ -8,7 +8,7 @@ import { shortName } from './format'
 export interface DecorCtx {
   state: GameState
   /** Modus, Markierungen (Shift), Prompt (chosen) und Spieler-Ziele */
-  inter: Pick<Interaction, 'mode' | 'marked' | 'prompt' | 'playerTargetable'>
+  inter: Pick<Interaction, 'mode' | 'marked' | 'prompt' | 'playerTargetable' | 'aim'>
   /** Stapelobjekt unter der Maus (store.stackFocus): nur dessen Ziele; sonst die Ziele aller Stapelobjekte */
   stackFocus?: UUID | null
   /** Kompakt-Layout: keine Etiketten auf Gegnerkarten */
@@ -16,7 +16,7 @@ export interface DecorCtx {
 }
 
 export interface CardDecor {
-  /** Etikett unten an der Karte (CardView label) */
+  /** Etikett oben an der Karte (CardView label, statt Abzeichen) */
   label?: CardLabel
 }
 
@@ -29,6 +29,8 @@ export interface PodDecor {
   chosen: boolean
   /** Ziel eines Stapelobjekts (Fokus bzw. alle) */
   stackTarget: boolean
+  /** Zielwahl: der Live-Pfeil rastet auf diesem Spieler ein */
+  aimed: boolean
 }
 
 interface Index {
@@ -129,5 +131,6 @@ export function podDecor(playerId: UUID, ctx: DecorCtx): PodDecor {
     targetable: ctx.inter.playerTargetable(playerId),
     chosen: !!ctx.inter.prompt?.chosen?.includes(playerId),
     stackTarget: s.stack.length > 0 && stackTargets(s, ctx.stackFocus).has(playerId),
+    aimed: ctx.inter.aim === playerId,
   }
 }

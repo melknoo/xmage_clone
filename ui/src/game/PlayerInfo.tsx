@@ -27,8 +27,9 @@ export function onCard(t: EventTarget | null): boolean {
   return t instanceof Element && !!t.closest('[data-obj], [data-objs]')
 }
 
-/** Rahmen (inset 2px) eines Spieler-Bereichs: Ziel gelb > gewaehlt gruen > angegriffen Karmin */
-export function playerRing(d: { targetable: boolean; chosen: boolean; attackersN: number }): string | undefined {
+/** Rahmen (inset 2px) eines Spieler-Bereichs: angepeilt (Live-Pfeil) > Ziel gelb > gewaehlt gruen > angegriffen Karmin */
+export function playerRing(d: { targetable: boolean; chosen: boolean; attackersN: number; aimed?: boolean }): string | undefined {
+  if (d.targetable && d.aimed) return 'inset 0 0 0 3px var(--color-target), inset 0 0 56px 6px color-mix(in oklab, var(--color-target) 30%, transparent)'
   if (d.targetable) return 'inset 0 0 0 2px var(--color-target)'
   if (d.chosen) return 'inset 0 0 0 2px var(--color-chosen)'
   if (d.attackersN > 0) return 'inset 0 0 0 2px var(--color-attack)'

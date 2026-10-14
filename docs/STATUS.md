@@ -600,11 +600,32 @@ Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und wora
   Angreifern und nach Blockern; eigener Angriff → nach Angreifern und nach Blockern, dann Schaden; fremder Kampf →
   beide Stopps. Danach alle Szenarien, `--humans=2 --spectate --noAutoPass`, 2 Zufallsspiele grün; `steps-attack-undo`,
   `-pass-ui`, `-autoplay`, `-arrows` grün.
+- **Angepeiltes Ziel** (Nachtrag nach 0.2.2): Rastet der Live-Pfeil ein, wird genau dieses Ziel hervorgehoben
+  (`store.aimId` → Highlight `aimed`: durchgezogener gelber Ring mit Schein + Anheben statt gestrichelter Kontur;
+  ×N-Stapel als Ganzes, Stapelzeile getönt, Spieler-Pod mit kräftigem Innen-Schein). Geprüft: `tsc -b`,
+  `steps-arrows.json` (prüft `aimId` an Pod, eigener Kreatur und freier Maus) 0 Fehler, Bilder angesehen.
 - **Release 0.2.2** (`15fdcd9`, zusammen mit dem Konto-Button `00fd91c`): Setup 204 MB lokal installiert und auf GitHub
   (`magelite-releases` v0.2.2, HTTP 200), fly live mit 0.2.2 (`/api/health` ok, Modus server).
 - Offen (niedrig): Vorschau nicht für aktivierte Fähigkeiten von Permanents; `payPreview` über den Host-Link nur
   indirekt geprüft (gleicher `GameMessages.dispatch`); Bei Auto-Passen sieht man den Zielpfeil des eigenen Zaubers
   auf dem Stapel nur kurz (Engine passt nach eigenem Zauber weiter).
+
+### Feinschliff nach 0.2.2 (2026-10-14)
+
+- **Deck-Auswahl ohne „Übernehmen“:** Klick auf eine Kachel (bzw. „Zufällig“) übernimmt sofort und schließt
+  (`DeckPicker`; Spiel-Setup und Tisch). Haken = aktuelles Deck, Footer nur „Abbrechen“. Start-Tab „Meine Decks“,
+  sobald es genug eigene gibt (eigener Platz > 0, Bot-Platz > 3), sonst Tab des aktuellen Decks (Klicktest mit
+  0/1/4 Decks).
+- **X-Zauber nur bis zum bezahlbaren Maximum:** `HumanController.announceRequirements` deckelt Mana-X über
+  `PayPreview.maxX` (Forges `ComputerUtilMana.determineLeftoverMana` unter KI-Controller, Testzahlung, nichts getappt).
+  Grenze: Manaquellen, die Forges KI nicht nutzt, zählen nicht (Maximum dann evtl. zu niedrig). `AmountDialog` zeigt
+  bei fehlendem Deckel „Mindestens N“ statt 2147483647. `humanSpike --scenario=convoke` prüft X-Maximum 4.
+- **Kampf-/Ziel-Etikett oben statt unten:** „→ Name“, „Geblockt“, „Blockt X“, „Ziel“ sitzen oben mittig an der
+  Karte und ersetzen das Abzeichen (Icon im Etikett); ×N und P/T unten bleiben frei.
+- Geprüft: `compileJava test`, `humanSpike` Standard (4 Menschen), alle Szenarien, `--humans=2 --spectate` (0 Fehler,
+  UNMAPPED leer); `tsc -b`; eigene Screenshot-Schritte (Picker, X-Dialog „Bereich 0 – 4“, Angriff mit ×15/1/1 sichtbar)
+  und `steps-arrows.json` 0 Fehler, Bilder angesehen. Gegner-Etikett (11 px) nur im Code geprüft (gleiche Position).
+  `scenario-pilot.js` kennt `hold.amount` (AMOUNT offen lassen).
 
 ## Ideen (nicht beauftragt)
 

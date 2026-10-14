@@ -101,6 +101,9 @@ interface GameStore {
   showPayPreview: (forId: UUID | 'prompt', ids: UUID[]) => void
   /** Vorschau beenden (nur wenn sie zu forId gehoert; ohne forId immer) */
   clearPayPreview: (forId?: UUID | 'prompt') => void
+  /** Zielwahl: Ziel, auf dem der Live-Pfeil gerade einrastet (ArrowLayer) - wird hervorgehoben */
+  aimId: UUID | null
+  setAim: (id: UUID | null) => void
   /** Pfeile (Ziele, Ausloeser, Zielwahl, Kampf) an/aus (localStorage 'magelite.arrows') */
   arrows: boolean
   setArrows: (on: boolean) => void
@@ -570,6 +573,10 @@ export const useGame = create<GameStore>((set, get) => {
       }
       const cur = get().payPreview
       if (cur && (!forId || cur.for === forId)) set({ payPreview: null })
+    },
+    aimId: null,
+    setAim: (id) => {
+      if (get().aimId !== id) set({ aimId: id })
     },
     arrows: loadBool('magelite.arrows', true),
     setArrows: (on) => {
