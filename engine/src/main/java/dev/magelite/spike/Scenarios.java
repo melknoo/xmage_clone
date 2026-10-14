@@ -3,10 +3,13 @@ package dev.magelite.spike;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.ScenarioHooks;
 import forge.StaticData;
+import forge.ai.ComputerUtilCost;
+import forge.card.CardStateName;
 import forge.game.Game;
 import forge.game.ability.AbilityKey;
 import forge.game.card.Card;
 import forge.game.player.Player;
+import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.item.PaperCard;
 
@@ -29,7 +32,7 @@ import java.util.function.Consumer;
  */
 public final class Scenarios {
 
-    private static final List<String> NAMES = List.of("swarm", "dredge", "necro", "gemstone", "convoke");
+    private static final List<String> NAMES = List.of("swarm", "dredge", "necro", "gemstone", "convoke", "strand");
 
     private Scenarios() {
     }
@@ -50,6 +53,7 @@ public final class Scenarios {
             case "gemstone" -> new Hooks(Start.BOT, "Gemstone Caverns", t -> {
             });
             case "convoke" -> new Hooks(Start.HUMAN, null, Scenarios::convoke);
+            case "strand" -> new Hooks(Start.BOT, null, Scenarios::strand);
             default -> throw new IllegalArgumentException("Unbekanntes Szenario: " + name);
         };
     }
@@ -100,6 +104,69 @@ public final class Scenarios {
         t.battlefield(t.human, "Grizzly Bears", 3);
         t.battlefield(t.human, "Savannah Lions", 2);
         t.hand(t.human, "Blaze", "Guardian of Vitu-Ghazi");
+    }
+
+    /**
+     * {@code strand}: KI-Zauber, dessen Bezahlung scheitert ({@code ForgeBot.playChosenSpellAbility}). Der erste Bot
+     * (beginnt, noch kein Land im Spiel = 0 Mana) spielt direkt ueber seinen Controller (1) die Abenteuer-Seite von
+     * Kellan, the Fae-Blooded aus der Hand und (2) seinen Commander aus der Kommandozone (falls nicht bezahlbar). Forge
+     * liess die Karte sonst ohne Stapelobjekt in der Stapel-Zone ("Wird gewirkt") und den Stapel eingefroren. Prueft:
+     * Karte zurueck in der Ursprungszone, Stapel-Zone und Stapel leer, nicht eingefroren; sonst Spielabbruch.
+     */
+    private static void strand(Table t) {
+        Player bot = t.bots.get(0);
+        Card kellan = t.game.getAction().moveToHand(Table.create(t.game, bot, "Kellan, the Fae-Blooded"), null);
+        // Abilities direkt aus dem Kartenzustand: getAllPossibleAbilities filtert Hexereien vor der Hauptphase heraus
+        SpellAbility boon = null;
+        for (SpellAbility sa : kellan.getState(CardStateName.Secondary).getSpellAbilities()) {
+            if (sa.isSpell() && sa.isAdventure()) {
+                boon = sa;
+            }
+        }
+        if (boon == null) {
+            throw new IllegalStateException("strand: keine Abenteuer-SA an " + kellan);
+        }
+        strandCast(t, bot, kellan, boon, ZoneType.Hand);
+        for (Card cmd : bot.getCommanders()) {
+            Card c = t.game.getCardState(cmd);
+            if (c == null || !c.isInZone(ZoneType.Command)) {
+                continue;
+            }
+            for (SpellAbility sa : c.getSpellAbilities()) {
+                if (sa.isSpell()) {
+                    sa.setActivatingPlayer(bot);
+                    if (ComputerUtilCost.canPayCost(sa, bot, false)) {
+                        break; // Commander ohne Kosten: kein Fehlschlag moeglich
+                    }
+                    strandCast(t, bot, c, sa, ZoneType.Command);
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    private static void strandCast(Table t, Player bot, Card card, SpellAbility sa, ZoneType from) {
+        sa.setActivatingPlayer(bot);
+        bot.getController().playChosenSpellAbility(sa);
+        Card now = t.game.getCardState(card);
+        List<String> errors = new ArrayList<>();
+        if (now == null || !now.isInZone(from)) {
+            errors.add("Karte in " + (now == null || now.getZone() == null ? "?" : now.getZone().getZoneType()) + " statt " + from);
+        }
+        if (!t.game.getCardsIn(ZoneType.Stack).isEmpty()) {
+            errors.add("Stapel-Zone nicht leer: " + t.game.getCardsIn(ZoneType.Stack));
+        }
+        if (!t.game.getStack().isEmpty()) {
+            errors.add("Stapel nicht leer");
+        }
+        if (t.game.getStack().isFrozen()) {
+            errors.add("Stapel eingefroren");
+        }
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException("strand " + card.getName() + " (" + sa + "): " + String.join("; ", errors));
+        }
+        System.out.println("strand OK: " + card.getName() + " zurueck in " + from);
     }
 
     // ------------------------------------------------------------------ Hooks

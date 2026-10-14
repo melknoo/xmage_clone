@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-13 – Version 0.2.1 (Forge-Engine) live und als Setup veröffentlicht; danach Konto-Button der Desktop-App (noch nicht released). Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-14 – Version 0.2.3 (Forge-Engine) live und als Setup veröffentlicht. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -626,6 +626,34 @@ Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und wora
   UNMAPPED leer); `tsc -b`; eigene Screenshot-Schritte (Picker, X-Dialog „Bereich 0 – 4“, Angriff mit ×15/1/1 sichtbar)
   und `steps-arrows.json` 0 Fehler, Bilder angesehen. Gegner-Etikett (11 px) nur im Code geprüft (gleiche Position).
   `scenario-pilot.js` kennt `hold.amount` (AMOUNT offen lassen).
+- **Release 0.2.3** (`8718274`, Inhalt `41af66f`): Setup auf GitHub (`magelite-releases` v0.2.3, Latest), fly live mit
+  0.2.3 (`/api/health` ok, Modus server).
+
+### Bot-Zauber hing als „Wird gewirkt“ (nach 0.2.3, 2026-10-14)
+
+- Playtest: Bot mit Kellan, the Fae-Blooded wirkt Birthright Boon (Abenteuer aus der Kommandozone), danach steht
+  „Wird gewirkt · Hexerei“ dauerhaft im Stapel (auch im Endschritt), Commander praktisch verloren.
+- Ursache (Forge-KI, gepinnter Commit): Kosten alternativer Seiten (Abenteuer, MDFC-Rückseite) prüft die KI an einer
+  LKI-Kopie ohne Zone → **Commander-Steuer fehlt** ({1}{W} statt {3}{W}). Die echte Bezahlung scheitert dann
+  („Didn't find what to pay for {1}“), und `ComputerUtil.handlePlayingSpellAbility` rollt nicht zurück (Bedingung
+  prüft die Ursprungszone): Karte bleibt ohne Stapelobjekt in der Stapel-Zone, Stapel bleibt eingefroren.
+- Fix nur in `ForgeBot`: (1) `chooseSpellAbilityToPlay` prüft gewählte Zauber aus der Kommandozone mit
+  `ComputerUtilCost.canPayCost` an der echten Karte (inkl. Steuer); unbezahlbar → `setSkip` + neu wählen (max. 3×,
+  sonst passen). (2) `playChosenSpellAbility` erkennt gestrandete Karten (Stapel-Zone, kein Stapelobjekt, Stapel vorher
+  nicht eingefroren), rollt wie Forges Mensch-Abbruch zurück (`GameActionUtil.rollbackAbility` + `unfreezeStack`), WARN
+  „KI konnte Zauber nicht wirken, zurückgerollt“ in `engine.log` und sperrt die Karte für den Rest des Zugs (ohne
+  Sperre versuchte die KI es alle ~80 ms erneut).
+- Neues Szenario `humanSpike --scenario=strand`: Bot ohne Mana spielt Birthright Boon (Hand) und seinen Commander
+  (Kommandozone) direkt über den Controller; prüft Ursprungszone, leere Stapel-Zone, Stapel nicht eingefroren (ohne Fix
+  rot reproduziert). Bot-Spiele mit 4× Nutzer-Kellan-Deck: vorher Endlosschleife, jetzt Boon ~15× regulär gewirkt,
+  sonst übersprungen, 0 Rollbacks.
+- Grenzen: Kosten-Modifikatoren, die nur für die alternative Seite gelten, sieht die Vorprüfung nicht (Bot wirkt dann
+  evtl. nicht, obwohl er könnte). Andere KI-Wirkwege (Wirken aus Effekten, `ComputerUtil.playStack`) nicht abgedeckt.
+  Nebenbei: KI schickt den Commander nach dem Abenteuer immer in die Kommandozone (Forge-Standard `confirmAction`),
+  statt ihn später aus dem Exil zu wirken.
+- Geprüft: `compileJava test` 51/51; `humanSpike` Standard (4 Menschen), Szenarien strand, necro, gemstone, swarm,
+  dredge, convoke, `--humans=2 --spectate` (0 Fehler, keine STALLs, UNMAPPED leer, Zuschauer 0 Fehler); `spike`
+  3 Spiele (NORMAL) und 2 Spiele mit 4× Kellan-Deck (BLITZ): 0 fehlgeschlagen, 0 Rollbacks.
 
 ## Ideen (nicht beauftragt)
 

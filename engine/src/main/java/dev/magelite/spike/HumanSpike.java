@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke|strand
  * --payPreview (bei jeder Prioritaet die Auto-Bezahlen-Vorschau fuer bis zu 3 wirkbare Handkarten anfordern und pruefen)
  * --noAutoPass (Test-Menschen mit Auto-Passen aus: Stopps in Hauptphasen, Kampf, Gegner-Endphase)
  * --spectate --decks=a;b (diese Decks per Dateinamensteil zuerst, erstes = Test-Mensch; "_" statt Leerzeichen)
@@ -66,6 +66,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * {@code --scenario=dredge}: Ersatzeffekt-Wahl beim Ziehen ({@code GameHost.replacement}). 1. Dialog "Keinen
  * anwenden", 2. ersten Effekt per 1-Klick anwenden, 3. "Keinen anwenden" + merken. Prueft, dass danach keine
  * "Dredge ...?"-Frage und nach dem Merken kein Dialog mehr kommt.
+ * <p>
+ * {@code --scenario=strand}: gescheiterte KI-Bezahlung (siehe Scenarios); die Pruefung laeuft beim Spielstart, ein
+ * Fehler bricht das Spiel ab.
  */
 public final class HumanSpike {
 
