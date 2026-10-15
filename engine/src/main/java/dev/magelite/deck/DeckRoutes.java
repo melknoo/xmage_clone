@@ -148,6 +148,9 @@ public final class DeckRoutes implements HttpServer.Module {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("name", r.name());
         out.put("commanders", r.commanders());
+        if (!r.companions().isEmpty()) {
+            out.put("companions", r.companions());
+        }
         out.put("cardCount", r.cardCount());
         out.put("unknown", r.unknown());
         List<Map<String, Object>> issues = new ArrayList<>();

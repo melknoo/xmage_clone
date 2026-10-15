@@ -1,0 +1,111 @@
+{
+ "url": "{{UI}}/?port={{PORT}}",
+ "width": 1680,
+ "height": 1000,
+ "exact": true,
+ "show": true,
+ "timeout": 600000,
+ "steps": [
+  {
+   "waitFor": "#root nav, [data-testid=game-header], [data-testid=boot-screen][data-phase=down]",
+   "timeout": 60000
+  },
+  {
+   "wait": 2000
+  },
+  {
+   "js": "window.__ml.nav.getState().go('decks');'decks'"
+  },
+  {
+   "waitFor": "[data-testid=deck-import-tile], [data-testid=deck-import]",
+   "timeout": 20000
+  },
+  {
+   "click": {
+    "sel": "[data-testid=deck-import-tile], [data-testid=deck-import]",
+    "visible": true
+   }
+  },
+  {
+   "waitFor": "[data-testid=import-dialog]",
+   "timeout": 8000
+  },
+  {
+   "click": "[data-testid=import-tab-text]"
+  },
+  {
+   "wait": 300
+  },
+  {
+   "js": "(()=>{const el=document.querySelector(\"[data-testid=import-dialog] textarea\");if(!el)return 'kein Feld';Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(el,\"Commander\\n1 Teysa Karlov (RNA) 212\\n\\nCompanion\\n1 Lurrus of the Dream-Den (IKO) 226\\n\\nDeck\\n49 Plains\\n50 Swamp\");el.dispatchEvent(new Event('input',{bubbles:true}));return 'Text gesetzt'})()",
+   "expect": "gesetzt"
+  },
+  {
+   "wait": 3500
+  },
+  {
+   "js": "(()=>{const t=document.querySelector('[data-testid=import-preview]')?.textContent||'';return /Gefährte/.test(t)&&/Lurrus/.test(t)?'Gruppe Gefaehrte da':'kein Gefaehrte in der Vorschau'})()",
+   "expect": "^Gruppe"
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/companion-1-import.png",
+   "name": "companion-1-import"
+  },
+  {
+   "click": "[data-testid=import-submit]"
+  },
+  {
+   "waitGone": "[data-testid=import-dialog]",
+   "timeout": 15000
+  },
+  {
+   "js": "fetch('http://127.0.0.1:{{PORT}}/api/decks').then(r=>r.json()).then(d=>{const l=Array.isArray(d)?d:(d.decks||[]);const x=l.find(k=>/Teysa/.test(k.name)||(k.commanders||[]).some(c=>/Teysa/.test(c)));if(!x)return 'kein Deck';return window.__ml.api.start({deck:{type:'user',id:x.id},bots:[{type:'random'},{type:'random'},{type:'random'}],tempo:'BLITZ'})})",
+   "expect": "^[0-9a-f]{8}-",
+   "name": "Spiel mit Gefaehrte starten"
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const g=window.__ml.game.getState();const p=g.prompt;const s=g.state;if(p&&s&&g.answeredPromptId!==p.id&&p.kind==='PICK_TARGET'&&/starting player/i.test(p.messageText||'')){g.answer({uuid:g.hello.myPlayerId})}else if(p&&s&&g.answeredPromptId!==p.id&&(p.kind==='ASK'&&p.mulligan)){clearInterval(t);r('Mulligan-Frage')}},200);setTimeout(()=>{clearInterval(t);r(\"Timeout Mulligan\")},240000)})"
+  },
+  {
+   "click": "[data-testid=mulligan-keep]"
+  },
+  {
+   "waitGone": "[data-testid=game-modal]",
+   "timeout": 20000
+  },
+  {
+   "js": "new Promise(r=>{const t=setInterval(()=>{const s=window.__ml.game.getState().state;const me=s&&s.players.find(x=>x.me);const c=me&&me.command.find(o=>o.kind==='companion');if(c){clearInterval(t);r('Gefaehrte in der Kommandozone: '+c.name)}},200);setTimeout(()=>{clearInterval(t);r('Timeout Gefaehrte')},30000)})",
+   "expect": "^Gefaehrte"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/companion-2-board.png",
+   "name": "companion-2-board"
+  },
+  {
+   "hover": {
+    "sel": "[data-zone=command] [data-obj]",
+    "nth": 1
+   },
+   "optional": true
+  },
+  {
+   "wait": 800
+  },
+  {
+   "jsFile": "wait-images.js"
+  },
+  {
+   "shot": "{{OUT}}/companion-3-zoom.png",
+   "name": "companion-3-zoom"
+  }
+ ]
+}

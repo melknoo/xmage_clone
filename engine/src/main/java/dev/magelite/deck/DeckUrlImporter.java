@@ -14,8 +14,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Import von Archidekt/Moxfield-Links. Liefert eine Textliste (Abschnitte "Commander"/"Deck"),
- * die dann der {@link TextDeckParser} verarbeitet.
+ * Import von Archidekt/Moxfield-Links. Liefert eine Textliste (Abschnitte "Commander", ggf. "Companion", "Deck"),
+ * die dann der {@link TextDeckParser} verarbeitet. Gefaehrte: Moxfield-Board {@code companions}, Archidekt-Kategorie
+ * "Companion", sonst Karten mit dem Schluesselwort Companion aus dem Sideboard.
  */
 public final class DeckUrlImporter {
 
@@ -95,6 +96,7 @@ public final class DeckUrlImporter {
             }
         }
         StringBuilder cmd = new StringBuilder();
+        StringBuilder comp = new StringBuilder();
         StringBuilder deck = new StringBuilder();
         for (JsonNode e : root.path("cards")) {
             int qty = e.path("quantity").asInt(1);
@@ -103,38 +105,62 @@ public final class DeckUrlImporter {
             String set = card.path("edition").path("editioncode").asText("");
             String num = card.path("collectorNumber").asText("");
             boolean isCmd = false;
+            boolean isComp = false;
+            boolean sideboard = false;
             boolean skip = false;
             for (JsonNode cat : e.path("categories")) {
                 String c = cat.asText();
                 if (c.equalsIgnoreCase("Commander") || premier.contains(c)) {
                     isCmd = true;
                 }
+                if (c.equalsIgnoreCase("Companion")) {
+                    isComp = true;
+                }
+                if (c.equalsIgnoreCase("Sideboard")) {
+                    sideboard = true;
+                }
                 if (excluded.contains(c)) {
                     skip = true;
                 }
+            }
+            if (!isCmd && (isComp || sideboard && CardLookup.isCompanion(name))) {
+                line(comp, 1, name, set, num);
+                continue;
             }
             if (skip && !isCmd) {
                 continue;
             }
             line(isCmd ? cmd : deck, qty, name, set, num);
         }
-        return new Imported(root.path("name").asText("Archidekt-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "archidekt",
+        return new Imported(root.path("name").asText("Archidekt-Deck"), text(cmd, comp, deck), "archidekt",
                 bracket(root.path("edhBracket")));
     }
 
     private static Imported moxfield(JsonNode root) {
         StringBuilder cmd = new StringBuilder();
+        StringBuilder comp = new StringBuilder();
         StringBuilder deck = new StringBuilder();
         JsonNode boards = root.path("boards");
-        if (!boards.isMissingNode()) {
-            board(boards.path("commanders").path("cards"), cmd);
-            board(boards.path("mainboard").path("cards"), deck);
-        } else {
-            board(root.path("commanders"), cmd);
-            board(root.path("mainboard"), deck);
+        boolean v3 = !boards.isMissingNode();
+        board(v3 ? boards.path("commanders").path("cards") : root.path("commanders"), cmd);
+        board(v3 ? boards.path("companions").path("cards") : root.path("companions"), comp);
+        board(v3 ? boards.path("mainboard").path("cards") : root.path("mainboard"), deck);
+        if (comp.isEmpty()) {
+            // aeltere Listen: Gefaehrte im Sideboard
+            Iterator<Map.Entry<String, JsonNode>> it = (v3 ? boards.path("sideboard").path("cards") : root.path("sideboard")).fields();
+            while (it.hasNext()) {
+                JsonNode card = it.next().getValue().path("card");
+                if (CardLookup.isCompanion(card.path("name").asText())) {
+                    line(comp, 1, card.path("name").asText(), card.path("set").asText(""), card.path("cn").asText(""));
+                }
+            }
         }
-        return new Imported(root.path("name").asText("Moxfield-Deck"), "Commander\n" + cmd + "\nDeck\n" + deck, "moxfield",
+        return new Imported(root.path("name").asText("Moxfield-Deck"), text(cmd, comp, deck), "moxfield",
                 bracket(root.path("bracket")));
+    }
+
+    private static String text(CharSequence cmd, CharSequence comp, CharSequence deck) {
+        return "Commander\n" + cmd + (comp.isEmpty() ? "" : "\nCompanion\n" + comp) + "\nDeck\n" + deck;
     }
 
     /** Bracket-Feld der API (Archidekt {@code edhBracket}, Moxfield {@code bracket}); nur 1-5 zaehlt */

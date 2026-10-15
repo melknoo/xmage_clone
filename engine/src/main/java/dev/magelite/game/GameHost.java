@@ -288,6 +288,8 @@ public final class GameHost {
     private final Map<UUID, String> deckNames = new LinkedHashMap<>();
     private final List<Messages.Seat> seats = new ArrayList<>();
     private final Map<UUID, List<String>> commanders = new LinkedHashMap<>();
+    /** Forge-Spieler-id -&gt; Gefaehrten im Deck (Sideboard); nur fuer den Hinweis beim Spielstart */
+    private final Map<Integer, List<String>> companions = new HashMap<>();
 
     /** Kommandos fuer den Spiel-Thread (Antworten, Aufgeben, Abbruch) */
     private final LinkedBlockingQueue<Runnable> inbox = new LinkedBlockingQueue<>();
@@ -384,6 +386,9 @@ public final class GameHost {
             regs.add(rp);
             deckNames.put(wire, spec.deck().name());
             commanders.put(wire, spec.deck().commanders());
+            if (!spec.deck().companions().isEmpty()) {
+                companions.put(index, spec.deck().companions());
+            }
             seats.add(new Messages.Seat(wire, name, spec.human(), spec.deck().name(), spec.deck().commanders()));
             index++;
         }
@@ -1810,6 +1815,25 @@ public final class GameHost {
     }
 
     // ------------------------------------------------------------------ Ereignisse (Animationen)
+
+    /**
+     * Spiel-Thread ({@link ForgeEvents}, {@code GameEventGameStarted}, nach {@code Player.assignCompanion}): je Deck mit
+     * Gefaehrte ins Protokoll, ob er in der Kommandozone liegt. Forge bietet ihn nur bei erfuellter Deckbedingung an.
+     */
+    void onGameStarted() {
+        for (Player p : game.getPlayers()) {
+            List<String> wanted = companions.get(p.getId());
+            if (wanted == null) {
+                continue;
+            }
+            String chosen = p.getCardsIn(forge.game.zone.ZoneType.Command).stream()
+                    .filter(c -> c.hasKeyword(forge.game.keyword.Keyword.COMPANION) && wanted.contains(c.getName()))
+                    .map(forge.game.card.Card::getName).findFirst().orElse(null);
+            addLog("INFO", chosen != null
+                    ? p.getName() + ": Gefährte " + chosen + " liegt in der Kommandozone (3 Mana: auf die Hand)."
+                    : p.getName() + ": Gefährte " + String.join(" / ", wanted) + " ist nicht im Spiel – Deckbedingung nicht erfüllt oder abgelehnt.");
+        }
+    }
 
     /** Spiel-Thread ({@link ForgeEvents}): Ereignis einreihen. */
     void onFx(Messages.FxEvent e) {

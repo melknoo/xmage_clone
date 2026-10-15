@@ -19,12 +19,14 @@ export interface CommandZoneProps {
 
 /**
  * Eigene Kommandozone (Infospalte, auch kompakt): Karten 44 px (Klick wirkt den Commander, Hover zoomt), daneben
- * Krone + "Command Zone" und "Steuer +N" je Commander. Commander auf dem Feld/anderswo: abgedunkelt, ohne data-obj.
+ * Krone + "Command Zone", "Steuer +N" je Commander und "Gefährte" (Klick: {3} auf die Hand). Commander auf dem
+ * Feld/anderswo: abgedunkelt, ohne data-obj.
  */
 export function CommandZone({ objects, inter, onHover, interactive = true }: CommandZoneProps) {
   const hover = usePayPreviewHover(inter, onHover)
   if (objects.length === 0) return null
   const commanders = objects.filter(isCommander)
+  const companions = objects.filter((o) => o.kind === 'companion')
   return (
     <div className="mt-auto flex shrink-0 items-center gap-2.5" data-zone="command">
       <div className="flex shrink-0 items-end gap-1.5">
@@ -56,6 +58,11 @@ export function CommandZone({ objects, inter, onHover, interactive = true }: Com
             title={`${o.name}: ${o.casts ?? 0}× gewirkt${o.kind === 'commander-away' ? ' · nicht in der Kommandozone' : ''}`}
           >
             Steuer {(o.tax ?? 0) > 0 ? `+${o.tax}` : '–'}
+          </span>
+        ))}
+        {companions.map((o) => (
+          <span key={o.id ?? `${o.kind}:${o.name}`} className="truncate text-[13px] text-fg-2" title={`Gefährte ${o.name}: für 3 Mana auf die Hand nehmen (wie eine Hexerei)`}>
+            Gefährte
           </span>
         ))}
       </div>

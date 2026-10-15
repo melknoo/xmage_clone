@@ -3,6 +3,7 @@ package dev.magelite.spike;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.magelite.boot.ForgeBoot;
 import dev.magelite.boot.LogConfig;
+import dev.magelite.deck.DeckLoader;
 import dev.magelite.deck.LoadedDeck;
 import dev.magelite.game.GameHost;
 import dev.magelite.game.GameSetup;
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * P0b: Ein automatischer "Test-Mensch" spielt ueber die echte GameHost-API (Prompts/Antworten)
  * gegen 3 Bots. Prueft, dass alle Prompt-Arten beantwortbar sind und nichts haengt.
  * <p>
- * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke|strand
+ * Args: --games=N --turnCap=T --tempo=BLITZ --seed=S --humans=1..4 --verbose --dumpJson=datei --scenario=swarm|dredge|gemstone|necro|convoke|strand|companion
  * --payPreview (bei jeder Prioritaet die Auto-Bezahlen-Vorschau fuer bis zu 3 wirkbare Handkarten anfordern und pruefen)
  * --noAutoPass (Test-Menschen mit Auto-Passen aus: Stopps in Hauptphasen, Kampf, Gegner-Endphase)
  * --spectate --decks=a;b (diese Decks per Dateinamensteil zuerst, erstes = Test-Mensch; "_" statt Leerzeichen)
@@ -69,6 +70,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>
  * {@code --scenario=strand}: gescheiterte KI-Bezahlung (siehe Scenarios); die Pruefung laeuft beim Spielstart, ein
  * Fehler bricht das Spiel ab.
+ * <p>
+ * {@code --scenario=companion}: Gefaehrte (Decks aus {@code Scenarios.decks}): beim Start liegt Lurrus nur bei erfuellter
+ * Deckbedingung in der Kommandozone (sonst Spielabbruch); der Test-Spieler holt ihn per "{3}: auf die Hand".
  */
 public final class HumanSpike {
 
@@ -126,6 +130,14 @@ public final class HumanSpike {
                 if (decks.size() == 4) {
                     break;
                 }
+            }
+            List<String> scenarioDecks = Scenarios.decks(scenario);
+            for (int i = 0; i < scenarioDecks.size(); i++) {
+                LoadedDeck d = DeckLoader.fromText(scenarioDecks.get(i), "Szenario " + scenario + " " + (i + 1), "scenario");
+                if (!d.valid()) {
+                    throw new IllegalStateException("Szenario-Deck ungueltig: " + d.validationErrors());
+                }
+                decks.set(i, d);
             }
             boolean ok = runGame(g, decks, preset, turnCap, humans, new Random(rnd.nextLong()), verbose, opt.get("dumpJson"), scenario, spectate,
                     opt.get("leave"));
@@ -491,6 +503,11 @@ public final class HumanSpike {
         if (driver.specialPays > 0) {
             out("  Einberufen per Klick (Zufallsspiel): %d", driver.specialPays);
         }
+        if (driver.companion) {
+            driver.companionCheck();
+            out("  Gefaehrte: %s", driver.compResult != null ? driver.compResult
+                    : "FEHLER: " + (!driver.compSeen ? "nie als 'companion' in meiner Kommandozone" : driver.compClicked == null ? "nie aktivierbar" : "nicht auf der Hand"));
+        }
         boolean replOk = true;
         if (driver.dredge) {
             boolean shown = driver.state != null && driver.state.replDeclines != null && !driver.state.replDeclines.isEmpty();
@@ -547,7 +564,8 @@ public final class HumanSpike {
         boolean gemOk = !driver.gemstone || (driver.gemResult != null && driver.gemResult.startsWith("OK"));
         boolean necroOk = !driver.necro || (driver.necroResult != null && driver.necroResult.startsWith("OK"));
         boolean convokeOk = !driver.convoke || (driver.cvErrors.isEmpty() && driver.cvPhase >= 99);
-        return !stalled && previewOk && specOk && gemOk && necroOk && convokeOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
+        boolean companionOk = !driver.companion || driver.compResult != null;
+        return !stalled && previewOk && specOk && gemOk && necroOk && convokeOk && companionOk && fxLeaks == 0 && over != null && over.error() == null && turnOrder.errors == 0 && macroOk && replOk && allOver && promptsEverywhere;
     }
 
     /**
@@ -663,6 +681,7 @@ public final class HumanSpike {
         final boolean gemstone;
         final boolean necro;
         final boolean convoke;
+        final boolean companion;
         volatile StateDto state;
         PromptDto lastPrompt;
         final Map<String, Integer> kinds = new HashMap<>();
@@ -705,6 +724,10 @@ public final class HumanSpike {
         final List<String> cvNotes = new ArrayList<>();
         /** Einberufen per Klick in Zufallsspielen */
         int specialPays;
+        /** Szenario companion: Gefaehrte in meiner Kommandozone gesehen / angeklickt (Name) / Ergebnis */
+        boolean compSeen;
+        String compClicked;
+        String compResult;
 
         Driver(GameHost host, GameHost.HumanSeat seat, Random rnd, boolean verbose, String scenario) {
             this.host = host;
@@ -717,9 +740,28 @@ public final class HumanSpike {
             this.gemstone = "gemstone".equalsIgnoreCase(scenario);
             this.necro = "necro".equalsIgnoreCase(scenario);
             this.convoke = "convoke".equalsIgnoreCase(scenario);
+            this.companion = "companion".equalsIgnoreCase(scenario);
+        }
+
+        /** Szenario companion: liegt der angeklickte Gefaehrte inzwischen auf meiner Hand? */
+        void companionCheck() {
+            StateDto s = state;
+            PlayerDto me = s == null ? null : me(s);
+            if (me == null || compResult != null) {
+                return;
+            }
+            if (me.command != null && me.command.stream().anyMatch(c -> "companion".equals(c.kind))) {
+                compSeen = true;
+            }
+            if (compClicked != null && s.hand != null && s.hand.stream().anyMatch(c -> compClicked.equals(c.name))) {
+                compResult = "OK (" + compClicked + " in Zug " + s.turn + " auf die Hand)";
+            }
         }
 
         void handle(PromptDto p) {
+            if (companion) {
+                companionCheck();
+            }
             if (dredge && replacement(p)) {
                 return;
             }
@@ -1337,6 +1379,15 @@ public final class HumanSpike {
                     if (actions.contains(c.id) && c.types != null && c.types.contains("LAND")) {
                         lands++;
                         return GameHost.Response.ofUuid(c.id);
+                    }
+                }
+                PlayerDto me = companion && compClicked == null ? me(s) : null;
+                if (me != null && me.command != null) {
+                    for (var c : me.command) {
+                        if ("companion".equals(c.kind) && actions.contains(c.id)) {
+                            compClicked = c.name; // "{3}: auf die Hand", Bezahlen per payMana
+                            return GameHost.Response.ofUuid(c.id);
+                        }
                     }
                 }
                 passes++;

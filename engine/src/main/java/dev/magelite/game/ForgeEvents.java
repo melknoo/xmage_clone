@@ -16,6 +16,7 @@ import forge.game.event.GameEventCardChangeZone;
 import forge.game.event.GameEventCardDamaged;
 import forge.game.event.GameEventCardForetold;
 import forge.game.event.GameEventGameFinished;
+import forge.game.event.GameEventGameStarted;
 import forge.game.event.GameEventLandPlayed;
 import forge.game.event.GameEventPlayerCounters;
 import forge.game.event.GameEventPlayerDamaged;
@@ -136,6 +137,8 @@ final class ForgeEvents {
                 landPlayed(l);
             } else if (e instanceof GameEventTurnBegan t) {
                 turnBegan(t);
+            } else if (e instanceof GameEventGameStarted) {
+                host.onGameStarted();
             } else if (e instanceof GameEventTurnPhase) {
                 pendingDamage.clear(); // nicht verrechneter Schaden (z.B. verhinderter Lebensverlust) verfaellt mit der Phase
             }

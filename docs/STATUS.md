@@ -655,6 +655,34 @@ Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und wora
   dredge, convoke, `--humans=2 --spectate` (0 Fehler, keine STALLs, UNMAPPED leer, Zuschauer 0 Fehler); `spike`
   3 Spiele (NORMAL) und 2 Spiele mit 4× Kellan-Deck (BLITZ): 0 fehlgeschlagen, 0 Rollbacks.
 
+### Gefährte (Companion) beim Import und im Spiel (nach 0.2.4, 2026-10-15)
+
+- Vorher wurde der Gefährte beim Import verworfen (Moxfield-Board `companions` nie gelesen, Textabschnitt `Companion`
+  ignoriert, Sideboard weggeworfen), im Spiel war er also nirgends.
+- Jetzt: Decktext v2 hat einen optionalen Abschnitt `Companion` (nur geschrieben, wenn vorhanden; alte Engines
+  ignorieren ihn). Quellen: Abschnitt `Companion`/`Gefährte`, Archidekt-Kategorie `[Companion]`, Moxfield-Board
+  `companions`, sonst Karten mit Schlüsselwort Companion aus dem Sideboard (auch MTGO-Export „Commander + Gefährte“ im
+  Sideboard und bei manuell gewähltem Commander). Zählt nicht zu den 100 Karten; Farbidentität/Bannliste geprüft.
+- Spiel: `DeckLoader` legt ihn ins Forge-`Sideboard`; Forge prüft die Deckbedingung beim Start (`assignCompanion`) und
+  legt ihn in die Kommandozone, Fähigkeit „{3}: auf die Hand“ (Hexerei-Tempo). UI: `kind="companion"`, Beschriftung
+  „Gefährte“ in der eigenen Kommandozone, Import-Vorschau mit Gruppe „Gefährte“. Spielprotokoll meldet je Deck, ob er
+  in der Kommandozone liegt oder warum nicht („Deckbedingung nicht erfüllt“).
+- Forge-Falle: die Gefährten-Wahl ist optional, Ablehnen (`null`) führt in Forge zur NPE (`moveTo`) und bricht das
+  Spiel ab. `HumanController` macht sie zur Pflichtwahl (ein Gefährte → ohne Frage); `PromptBridge` findet
+  Sideboard-Karten (`Game.findById` sucht dort nicht), sonst war die Auswahl leer.
+- Bestehende Decks enthalten keinen Gefährten (wurde nie gespeichert) → einmal neu importieren.
+- Neues Szenario `humanSpike --scenario=companion` (eigene Decks aus `Scenarios.decks`): Atraxa mit Lurrus + Umori
+  (echte Wahl), Teysa mit Lurrus (ohne Frage), Teysa mit Lurrus + Wurmcoil (Bedingung verletzt → kein Gefährte);
+  Test-Spieler holt Lurrus für {3} auf die Hand. `CompanionImportTest` (11 Fälle: Text, Archidekt, Moxfield, MTGO,
+  erzwungener Commander, Off-Color).
+- Geprüft: `compileJava test` 62/62; `humanSpike` Standard, `--humans=4`, `--humans=2 --spectate`, alle Szenarien
+  inkl. `companion` (3 Spiele) 0 Fehler, keine STALLs, UNMAPPED leer; Spielprotokoll per `--dumpJson` (beide Meldungen,
+  „Gefährten wählen“); `tsc -b`; Screenshots `steps-companion.json` 0 Fehler, Bilder angesehen.
+- Grenzen: Gefährten-Bedingung wird erst beim Spielstart geprüft (Import-Vorschau zeigt nur Farbidentität/Bann);
+  live nur mit selbst gebauten JSON-Fixtures geprüft, nicht gegen echte Moxfield/Archidekt-Antworten. Mehrere
+  Gefährten im Deck bleiben erhalten, Forge lässt einen wählen. Bei zwei Karten in der Kommandozone wird die
+  Beschriftung „Command Zone“ abgeschnitten (wie schon bei Partner-Commandern).
+
 ## Ideen (nicht beauftragt)
 
 - Deck-Editor mit Kartensuche, Vergleich zweier Deckversionen in der Statistik.

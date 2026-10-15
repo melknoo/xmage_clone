@@ -259,6 +259,9 @@ public final class ForgeViewMapper {
                 cd.tax = 2 * cd.casts;
             } else if (c.isEmblem()) {
                 cd.kind = "emblem";
+            } else if (c.hasKeyword(Keyword.COMPANION)) {
+                cd.kind = "companion"; // Forge: "{3}: auf die Hand" kommt als Fähigkeit der Karte selbst
+                cd.card = card;
             } else {
                 cd.kind = "other";
             }

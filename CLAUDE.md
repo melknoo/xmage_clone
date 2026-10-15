@@ -60,7 +60,7 @@ powershell -ExecutionPolicy Bypass -File scripts\publish-setup.ps1 -Setup deskto
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md; prueft vorher vendor/forge)
 cd engine; .\gradlew.bat test       # Parser-/Deck-/Boot-Tests gegen die echte Forge-Kartendatenbank
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=24 --humans=4"   # Routing-Test mit 4 Test-Menschen
-cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=16 --scenario=necro"   # Szenarien: necro|gemstone|swarm|dredge|convoke
+cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=1 --turnCap=16 --scenario=necro"   # Szenarien: necro|gemstone|swarm|dredge|convoke|strand|companion
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=2 --turnCap=30 --humans=2 --spectate"   # Zuschauer ohne Lecks
 cd engine; .\gradlew.bat humanSpike -PspikeArgs="--games=4 --leave=abortTarget"   # Abbruch waehrend offener Eingaben (prompt|bot|abort|abortTarget|abortRequiredTarget)
 cd engine; .\gradlew.bat spike -PspikeArgs="--games=3 --turnCap=30 --tempo=NORMAL"   # nur Bots (s/Zug, Heap)

@@ -471,6 +471,7 @@ function PreviewBody({
 
       <div className="flex flex-col">
         {p.commanders.length > 0 && <Group label="Commander" n={sum(p.commanders)} text={cardList(p.commanders)} />}
+        {p.companions && p.companions.length > 0 && <Group label="Gefährte" n={sum(p.companions)} text={cardList(p.companions)} />}
         {groups.map((g) => (
           <Group key={g.label} label={g.label} n={sum(g.cards)} text={cardList(g.cards)} />
         ))}

@@ -39,4 +39,12 @@ public record LoadedDeck(
         }
         return deck.get(DeckSection.Commander).toFlatList().stream().map(PaperCard::getName).sorted().toList();
     }
+
+    /** Gefaehrten (Sideboard; im Commander-Deck liegt dort nichts anderes). */
+    public List<String> companions() {
+        if (!deck.has(DeckSection.Sideboard)) {
+            return List.of();
+        }
+        return deck.get(DeckSection.Sideboard).toFlatList().stream().map(PaperCard::getName).sorted().toList();
+    }
 }

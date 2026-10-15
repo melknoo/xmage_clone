@@ -89,6 +89,22 @@ final class PromptBridge {
         return host.game();
     }
 
+    /** Wie {@code Game.findById}, aber auch im Sideboard (Gefaehrten-Wahl beim Start; findById durchsucht es nicht). */
+    private Card findWithSideboard(int id) {
+        Card c = game().findById(id);
+        if (c != null) {
+            return c;
+        }
+        for (Player p : game().getPlayers()) {
+            for (Card s : p.getCardsIn(ZoneType.Sideboard)) {
+                if (s.getId() == id) {
+                    return s;
+                }
+            }
+        }
+        return null;
+    }
+
     private ForgeViewMapper mapper() {
         return host.mapper();
     }
@@ -1307,7 +1323,7 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
      */
     @SuppressWarnings("unchecked")
     <T> List<T> choices(GameHost.HumanSeat seat, String message, int min, int max, List<T> choices, FSerializableFunction<T, String> display) {
-        boolean entities = choices.stream().allMatch(c -> (c instanceof CardView cv && game().findById(cv.getId()) != null)
+        boolean entities = choices.stream().allMatch(c -> (c instanceof CardView cv && findWithSideboard(cv.getId()) != null)
                 || (c instanceof PlayerView pv && game().getPlayer(pv) != null));
         if (entities) {
             List<GameEntityView> views = (List<GameEntityView>) (List<?>) choices;
@@ -1398,7 +1414,7 @@ Pay Mana Cost: {1}" -> "Force Spike – Mana zahlen: {1}" */
         List<Card> cards = new ArrayList<>();
         for (GameEntityView v : options) {
             if (v instanceof CardView cv) {
-                Card c = game().findById(cv.getId());
+                Card c = findWithSideboard(cv.getId());
                 if (c != null) {
                     byId.put(mapper().cardId(c), v);
                     cards.add(c);

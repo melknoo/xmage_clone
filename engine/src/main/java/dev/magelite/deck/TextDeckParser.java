@@ -21,6 +21,9 @@ import java.util.regex.Pattern;
  * Commander-Erkennung (in dieser Reihenfolge): explizite Angabe, Abschnitt "Commander", Archidekt-Kategorie [Commander],
  * Sideboard mit 1-2 Karten, sonst Kandidatenliste fuer die UI.
  * <p>
+ * Gefaehrte (Companion): Abschnitt "Companion" bzw. Archidekt-Kategorie [Companion], sonst Karten mit dem Schluesselwort
+ * Companion aus dem Sideboard (nie ein Commander). Sie zaehlen nicht zu den 100 Karten.
+ * <p>
  * Gespeichert wird immer {@link Result#toText()} (v2, Scryfall-Set + Nummer), nie Forge-{@code .dck}.
  */
 public final class TextDeckParser {
@@ -38,7 +41,7 @@ public final class TextDeckParser {
     private static final Pattern FORGE = Pattern.compile("^(?:(\\d+)\\s*[xX]?\\s+)?([^|]+?)\\s*\\|([^|]*)(?:\\|([^|]*))?(?:\\|.*)?$");
     private static final Pattern BRACKET_HEADER = Pattern.compile("^\\[([^\\]]+)]$");
 
-    public enum Section { MAIN, COMMANDER, SIDEBOARD, SIDE_GUESS, IGNORE }
+    public enum Section { MAIN, COMMANDER, COMPANION, SIDEBOARD, SIDE_GUESS, IGNORE }
 
     /**
      * @param lineNo 1-basierte Zeile im Rohtext (Leer- und Kopfzeilen mitgezaehlt)
@@ -82,6 +85,10 @@ public final class TextDeckParser {
             return new Resolved(1, name, set, number, true, card);
         }
 
+        Resolved asCompanion() {
+            return new Resolved(1, name, set, number, false, card);
+        }
+
         /** Forge-Druck (aufgeloest, falls beim Parsen nicht schon vorhanden). */
         public PaperCard printing() {
             return card != null ? card : CardLookup.resolve(name, set, number);
@@ -103,6 +110,7 @@ public final class TextDeckParser {
             String name,
             List<Resolved> main,
             List<Resolved> commanders,
+            List<Resolved> companions,
             List<String> unknown,
             boolean needsCommander,
             List<String> candidates,
@@ -117,12 +125,12 @@ public final class TextDeckParser {
 
         /** Mit anderen Issues (Vorschlaege der {@link CardNameSuggester}), sonst unveraendert. */
         public Result withIssues(List<Issue> issues) {
-            return new Result(name, main, commanders, unknown, needsCommander, candidates, cardCount, issues, types);
+            return new Result(name, main, commanders, companions, unknown, needsCommander, candidates, cardCount, issues, types);
         }
 
         /**
-         * MageLite-Decktext v2 zum Speichern: {@code Commander} zuerst, dann {@code Deck} nach Name, je Zeile
-         * {@code N Name (SET) NUM}. Unbekannte Karten fehlen.
+         * MageLite-Decktext v2 zum Speichern: {@code Commander} zuerst, {@code Companion} nur wenn vorhanden, dann
+         * {@code Deck} nach Name, je Zeile {@code N Name (SET) NUM}. Unbekannte Karten fehlen.
          */
         public String toText() {
             return toText(false);
@@ -137,6 +145,12 @@ public final class TextDeckParser {
             sb.append("Commander\n");
             for (Resolved r : commanders) {
                 sb.append(r.line()).append('\n');
+            }
+            if (!companions.isEmpty()) {
+                sb.append("Companion\n");
+                for (Resolved r : companions) {
+                    sb.append(r.line()).append('\n');
+                }
             }
             sb.append("Deck\n");
             List<Resolved> sorted = new ArrayList<>(main);
@@ -254,6 +268,8 @@ public final class TextDeckParser {
                 String cat = category.toLowerCase(Locale.ROOT);
                 if (cat.startsWith("commander")) {
                     s = Section.COMMANDER;
+                } else if (cat.startsWith("companion")) {
+                    s = Section.COMPANION;
                 } else if (cat.contains("maybeboard") || cat.contains("sideboard") || cat.contains("considering")) {
                     s = Section.IGNORE;
                 }
@@ -290,10 +306,13 @@ public final class TextDeckParser {
             case "deck", "main", "mainboard", "main deck", "maindeck", "library", "creatures", "lands", "spells" -> {
                 return Section.MAIN;
             }
+            case "companion", "companions", "gefährte", "gefaehrte" -> {
+                return Section.COMPANION;
+            }
             case "sideboard", "side", "sb" -> {
                 return Section.SIDEBOARD;
             }
-            case "maybeboard", "maybe", "considering", "tokens", "token", "companion", "attractions", "stickers",
+            case "maybeboard", "maybe", "considering", "tokens", "token", "attractions", "stickers",
                  "planes", "schemes", "avatar", "conspiracy", "dungeon", "dungeons", "contraptions" -> {
                 return Section.IGNORE;
             }
@@ -311,6 +330,7 @@ public final class TextDeckParser {
         List<Entry> entries = scanned.entries();
         Map<String, Resolved> main = new LinkedHashMap<>();
         Map<String, Resolved> cmd = new LinkedHashMap<>();
+        Map<String, Resolved> comp = new LinkedHashMap<>();
         Map<String, Resolved> side = new LinkedHashMap<>();
         Map<String, Resolved> guess = new LinkedHashMap<>();
         List<String> unknown = new ArrayList<>();
@@ -330,6 +350,7 @@ public final class TextDeckParser {
             types.putIfAbsent(pc.getName(), CardLookup.kindOf(pc));
             Map<String, Resolved> target = switch (e.section()) {
                 case COMMANDER -> cmd;
+                case COMPANION -> comp;
                 case SIDEBOARD -> side;
                 case SIDE_GUESS -> guess;
                 default -> main;
@@ -349,7 +370,11 @@ public final class TextDeckParser {
         // Commander bestimmen
         if (forcedCommanders != null && !forcedCommanders.isEmpty()) {
             for (Resolved r : side.values()) {
-                main.merge(r.name(), r.asMain(), TextDeckParser::add);
+                if (CardLookup.isCompanion(r.printing()) && !named(forcedCommanders, r.name())) {
+                    comp.putIfAbsent(r.name(), r);
+                } else {
+                    main.merge(r.name(), r.asMain(), TextDeckParser::add);
+                }
             }
             side.clear();
             for (Resolved r : cmd.values()) {
@@ -372,12 +397,28 @@ public final class TextDeckParser {
                 }
             }
         } else if (cmd.isEmpty() && !side.isEmpty() && side.size() <= 2 && side.values().stream().allMatch(r -> r.count() == 1)) {
+            // MTGO-Export: Commander und Gefaehrte zusammen im Sideboard (genau eine der beiden Karten ist Gefaehrte)
+            List<Resolved> companionCards = side.values().stream().filter(r -> CardLookup.isCompanion(r.printing())).toList();
+            Resolved pairedCompanion = side.size() == 2 && companionCards.size() == 1 ? companionCards.get(0) : null;
             for (Resolved r : side.values()) {
-                cmd.put(r.name(), r.asCommander());
+                if (r == pairedCompanion) {
+                    comp.putIfAbsent(r.name(), r);
+                } else {
+                    cmd.put(r.name(), r.asCommander());
+                }
             }
             side.clear();
         }
-        // restliches Sideboard gehoert im Commander nicht ins Deck (Companion etc. ignorieren)
+        // restliches Sideboard gehoert im Commander nicht ins Deck; nur Gefaehrten daraus uebernehmen
+        if (!cmd.isEmpty()) {
+            for (Resolved r : side.values()) {
+                if (CardLookup.isCompanion(r.printing())) {
+                    comp.putIfAbsent(r.name(), r);
+                }
+            }
+        }
+        comp.keySet().removeAll(cmd.keySet());
+        comp.replaceAll((n, r) -> r.asCompanion());
         List<String> candidates = new ArrayList<>();
         boolean needsCommander = cmd.isEmpty();
         if (needsCommander) {
@@ -391,8 +432,8 @@ public final class TextDeckParser {
         String name = deckName != null && !deckName.isBlank() ? deckName.strip()
                 : scanned.declaredName() != null ? scanned.declaredName()
                 : cmd.isEmpty() ? "Neues Deck" : cmd.keySet().iterator().next().split(",")[0];
-        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), unknown, needsCommander, candidates, count,
-                issues, types);
+        return new Result(name, new ArrayList<>(main.values()), new ArrayList<>(cmd.values()), new ArrayList<>(comp.values()), unknown,
+                needsCommander, candidates, count, issues, types);
     }
 
     private static Resolved resolved(PaperCard pc, int count, boolean commander) {
@@ -408,6 +449,17 @@ public final class TextDeckParser {
         if (text != null && text.split("\\r?\\n", -1).length > MAX_LINES) {
             throw new IllegalArgumentException("Die Liste ist zu lang (höchstens " + MAX_LINES + " Zeilen).");
         }
+    }
+
+    /** Steht {@code cardName} (auch nur Vorderseite) in {@code names}? */
+    private static boolean named(List<String> names, String cardName) {
+        for (String n : names) {
+            String wanted = CardLookup.normalizeName(n);
+            if (cardName.equalsIgnoreCase(wanted) || CardLookup.frontFace(cardName).equalsIgnoreCase(CardLookup.frontFace(wanted))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Resolved findByName(Map<String, Resolved> map, String name) {

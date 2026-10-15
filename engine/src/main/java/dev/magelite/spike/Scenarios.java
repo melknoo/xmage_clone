@@ -32,7 +32,9 @@ import java.util.function.Consumer;
  */
 public final class Scenarios {
 
-    private static final List<String> NAMES = List.of("swarm", "dredge", "necro", "gemstone", "convoke", "strand");
+    private static final List<String> NAMES = List.of("swarm", "dredge", "necro", "gemstone", "convoke", "strand", "companion");
+
+    private static final String LURRUS = "Lurrus of the Dream-Den";
 
     private Scenarios() {
     }
@@ -54,8 +56,24 @@ public final class Scenarios {
             });
             case "convoke" -> new Hooks(Start.HUMAN, null, Scenarios::convoke);
             case "strand" -> new Hooks(Start.BOT, null, Scenarios::strand);
+            case "companion" -> new Hooks(Start.HUMAN, null, Scenarios::companion);
             default -> throw new IllegalArgumentException("Unbekanntes Szenario: " + name);
         };
+    }
+
+    /**
+     * Decktexte, die das Szenario statt zufaelliger Sample-Decks braucht (Reihenfolge der Sitze: erst Menschen, dann
+     * Bots); sonst leer.
+     */
+    public static List<String> decks(String name) {
+        if (!"companion".equalsIgnoreCase(name)) {
+            return List.of();
+        }
+        String two = "Commander\n1 Atraxa, Praetors' Voice\nCompanion\n1 " + LURRUS + "\n1 Umori, the Collector\n"
+                + "Deck\n25 Plains\n25 Island\n25 Swamp\n24 Forest\n";
+        String ok = "Commander\n1 Teysa Karlov\nCompanion\n1 " + LURRUS + "\nDeck\n49 Plains\n50 Swamp\n";
+        String broken = "Commander\n1 Teysa Karlov\nCompanion\n1 " + LURRUS + "\nDeck\n1 Wurmcoil Engine\n48 Plains\n50 Swamp\n";
+        return List.of(two, ok, broken);
     }
 
     // ------------------------------------------------------------------ Szenarien
@@ -144,6 +162,34 @@ public final class Scenarios {
             }
             break;
         }
+    }
+
+    /**
+     * {@code companion}: Decks aus {@link #decks}, nur Standardlaender: ich Atraxa mit Lurrus + Umori (beide erlaubt -&gt;
+     * echte Wahl aus dem Sideboard), Bot 1 Teysa Karlov mit Lurrus (einziger -&gt; ohne Frage), Bot 2 dasselbe mit Wurmcoil
+     * Engine (Bedingung verletzt). Prueft beim Start fuer jeden Spieler: genau ein Gefaehrte aus dem Deck liegt in der
+     * Kommandozone, wenn das Deck welche hat und Wurmcoil fehlt, sonst keiner. Den Rest ({3}: auf die Hand) prueft der
+     * HumanSpike-Treiber.
+     */
+    private static void companion(Table t) {
+        List<String> errors = new ArrayList<>();
+        for (Player p : t.game.getPlayers()) {
+            var deck = p.getRegisteredPlayer().getDeck();
+            List<String> offered = deck.has(forge.deck.DeckSection.Sideboard)
+                    ? deck.get(forge.deck.DeckSection.Sideboard).toFlatList().stream().map(PaperCard::getName).toList() : List.of();
+            int expected = !offered.isEmpty() && deck.getMain().countByName("Wurmcoil Engine") == 0 ? 1 : 0;
+            long has = p.getCardsIn(ZoneType.Command).stream().filter(c -> offered.contains(c.getName())).count();
+            if (has != expected) {
+                errors.add(p.getName() + ": " + has + " Gefaehrte in der Kommandozone statt " + expected + " (Deck: " + offered + ")");
+            }
+            if (p.getCardsIn(ZoneType.Sideboard).size() != offered.size() - has) {
+                errors.add(p.getName() + ": Sideboard " + p.getCardsIn(ZoneType.Sideboard));
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new IllegalStateException("companion: " + String.join("; ", errors));
+        }
+        System.out.println("companion OK: genau ein Gefaehrte bei erfuellter Deckbedingung in der Kommandozone");
     }
 
     private static void strandCast(Table t, Player bot, Card card, SpellAbility sa, ZoneType from) {

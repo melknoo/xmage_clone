@@ -15,6 +15,7 @@ class ForgeTextTest {
         assertEquals("Gemstone Caverns ins Spiel bringen?", ForgeText.german("Put Gemstone Caverns onto the battlefield?"));
         assertEquals("1 Leben zahlen?", ForgeText.german("Pay 1 life?"));
         assertEquals("X für Blaze wählen", ForgeText.german("Choose X for Blaze"));
+        assertEquals("Gefährten wählen", ForgeText.german("Choose a companion"));
         assertEquals("Wie viele +1/+1-Marken auf Yusri, Fortune's Flame legen?", ForgeText.german("Put how many +1/+1 counters on Yusri, Fortune's Flame?"));
         assertEquals("Reihenfolge gleichzeitiger Fähigkeiten – zuerst auflösen (1/3)",
                 ForgeText.german("Select order for simultaneous abilities – Resolve first (1/3)"));

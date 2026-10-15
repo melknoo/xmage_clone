@@ -89,6 +89,7 @@ public final class ForgeText {
             r("^Choose card\\(s\\) to put into your graveyard$", "Karte(n) in den Friedhof legen"),
             r("^Choose a card to put into your hand$", "Karte für die Hand wählen"),
             r("^Choose cards? to discard.*$", "Karte(n) zum Abwerfen wählen"),
+            r("^Choose a companion$", "Gefährten wählen"),
             // Aufdecken / Ansehen (Titel der Kartenleisten)
             r("^Looking at cards in your (library|hand|graveyard)$", "Blick in {AM1}"),
             r("^Looking at cards in (.+?)'s (library|hand|graveyard)$", "Blick in {AO2} von $1"),

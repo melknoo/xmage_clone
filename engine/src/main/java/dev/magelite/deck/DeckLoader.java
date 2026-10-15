@@ -69,7 +69,10 @@ public final class DeckLoader {
                 valid ? "" : validation.toString(), unknownText, r.toText());
     }
 
-    /** Forge-Deck: Hauptdeck in {@code Main}, Commander in {@code DeckSection.Commander}. */
+    /**
+     * Forge-Deck: Hauptdeck in {@code Main}, Commander in {@code DeckSection.Commander}, Gefaehrten im {@code Sideboard}
+     * (Forge prueft beim Start die Deckbedingung und bietet ihn an: {@code Match.prepareAllZones} -&gt; {@code Player.assignCompanion}).
+     */
     public static Deck toForgeDeck(TextDeckParser.Result r) {
         Deck deck = new Deck(r.name());
         CardPool main = deck.getMain();
@@ -88,6 +91,15 @@ public final class DeckLoader {
                 }
             }
         }
+        if (!r.companions().isEmpty()) {
+            CardPool side = deck.getOrCreate(DeckSection.Sideboard);
+            for (TextDeckParser.Resolved c : r.companions()) {
+                PaperCard pc = c.printing();
+                if (pc != null) {
+                    side.add(pc, 1);
+                }
+            }
+        }
         return deck;
     }
 
@@ -98,7 +110,7 @@ public final class DeckLoader {
     private static String bannedProblem(Deck deck) {
         Set<String> illegal = new TreeSet<>();
         try {
-            for (DeckSection section : new DeckSection[]{DeckSection.Commander, DeckSection.Main}) {
+            for (DeckSection section : new DeckSection[]{DeckSection.Commander, DeckSection.Main, DeckSection.Sideboard}) {
                 if (!deck.has(section)) {
                     continue;
                 }

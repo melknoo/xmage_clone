@@ -316,6 +316,18 @@ public final class HumanController extends PlayerControllerHuman {
         return super.confirmReplacementEffect(re, effectSA, affected, question);
     }
 
+    /**
+     * Gefaehrte beim Spielstart ({@code Player.assignCompanion}): Forge fragt optional, verarbeitet ein Ablehnen aber
+     * nicht (NPE in {@code moveTo}). Deshalb Pflichtwahl; mit nur einem erlaubten Gefaehrten waehlt Forge ihn ohne Frage.
+     */
+    @Override
+    public <T extends GameEntity> T chooseSingleEntityForEffect(forge.util.collect.FCollectionView<T> optionList,
+                                                                forge.game.player.DelayedReveal delayedReveal, SpellAbility sa, String title,
+                                                                boolean isOptional, Player targetedPlayer, java.util.Map<String, Object> params) {
+        boolean companion = sa != null && sa.getApi() == forge.game.ability.ApiType.CompanionChoose;
+        return super.chooseSingleEntityForEffect(optionList, delayedReveal, sa, title, isOptional && !companion, targetedPlayer, params);
+    }
+
     /** Stapel waehlen (Fact or Fiction & Co.) als CHOOSE_PILE statt Forges Liste mit Pseudo-Karten. */
     @Override
     public boolean chooseCardsPile(SpellAbility sa, CardCollectionView pile1, CardCollectionView pile2, String faceUp) {

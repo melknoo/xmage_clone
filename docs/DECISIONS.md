@@ -43,7 +43,8 @@ als „(historisch, XMage)“ gekennzeichnet und bleiben als Begründung der dam
     Karten-Fixes nur als `vendor/forge-overrides/cardsfolder/…` (kommen beim Import ins `cardsfolder.zip`), keine
     Shadow-Klassen. Docker baut Forge nicht, es kopiert den lokal gebauten Stand.
   - **Decktext v2 statt XMage-`.dck`:** Gespeichert, übertragen (Host-Link) und mitgeliefert wird ein einfacher Text
-    (`Commander`/`Deck`, `1 Name (SET) NUM`) mit **Scryfall**-Set + Nummer (Forge-Set-Codes weichen ab). Er ist
+    (`Commander`/`Deck`, `1 Name (SET) NUM`; optional `Companion` zwischen beiden, seit 0.2.5) mit **Scryfall**-Set +
+    Nummer (Forge-Set-Codes weichen ab). Ältere Engines lesen `Companion` als zu ignorierenden Abschnitt. Er ist
     engine-neutral, entspricht den Exporten von Moxfield/Archidekt und füttert die Bild-URLs direkt. Alte Formate
     (XMage-`.dck`, Forge-`.dck`) lesen wir nur noch beim Import. **Migration V9** (`deck_format`, `dck_legacy`) stellt
     vorhandene Decks beim Start um (`DeckMigration`): vorher einmal `VACUUM INTO magelite.db.xmage-backup` (einziger

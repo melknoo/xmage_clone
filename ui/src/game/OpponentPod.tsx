@@ -105,7 +105,7 @@ export const OpponentPod = memo(function OpponentPod({ p, inter, onHover, layout
           <PlayerChips p={p} inline />
           <CommanderDamageInline dmg={p.commanderDamage} />
           {others.map((o) => (
-            <span key={o.id ?? `${o.kind}:${o.name}`} className="flex shrink-0" title={o.name}>
+            <span key={o.id ?? `${o.kind}:${o.name}`} className="flex shrink-0" title={o.kind === 'companion' ? `Gefährte: ${o.name}` : o.name}>
               <CardView card={commandCard(o)} width={22} anchor={false} onHover={onHover} />
             </span>
           ))}

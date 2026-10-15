@@ -81,7 +81,8 @@ export interface Permanent extends Card {
 
 export interface CommandObject {
   id: UUID
-  kind: 'commander' | 'commander-away' | 'emblem' | 'plane' | 'dungeon' | 'other'
+  /** companion: Gefaehrte, Faehigkeit "{3}: auf die Hand" (Hexerei-Tempo) liegt auf der Karte */
+  kind: 'commander' | 'commander-away' | 'companion' | 'emblem' | 'plane' | 'dungeon' | 'other'
   name: string
   set?: string
   num?: string

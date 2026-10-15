@@ -272,6 +272,16 @@ public final class CardLookup {
         return pc != null && pc.getRules().canBeCommander();
     }
 
+    /** Hat das Schluesselwort Gefaehrte ({@code K:Companion:...}); Forge waehlt ihn beim Start aus dem Sideboard. */
+    public static boolean isCompanion(PaperCard pc) {
+        return pc != null && pc.getRules().hasStartOfKeyword("Companion");
+    }
+
+    /** {@link #isCompanion} nur ueber den Namen (URL-Import, ohne Set/Nummer). */
+    public static boolean isCompanion(String name) {
+        return name != null && !name.isBlank() && isCompanion(resolve(name, null, null));
+    }
+
     /** Farbidentitaet der Commander als "WUBRG"-Teilmenge ("" = farblos oder unbekannt). Namen werden nur nach Name gesucht. */
     public static String colors(List<String> commanderNames) {
         boolean w = false, u = false, b = false, r = false, g = false;

@@ -64,6 +64,8 @@ export interface DeckIssue {
 export interface DeckPreview {
   name: string
   commanders: { name: string; set: string; number: string; count: number; commander?: boolean }[]
+  /** Gefaehrte (zaehlt nicht zu cardCount); fehlt, wenn keiner da ist */
+  companions?: { name: string; set: string; number: string; count: number }[]
   cardCount: number
   /** "1 Name" je unbekannter Zeile (bleibt fuer alte Aufrufer; neu: issues) */
   unknown: string[]
