@@ -1,6 +1,7 @@
 package dev.magelite.deck;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.api.AccountGate;
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
@@ -20,10 +21,13 @@ public final class DeckRoutes implements HttpServer.Module {
 
     private static final Logger LOG = Logger.getLogger(DeckRoutes.class);
     private final DeckStore store;
+    private final AccountGate gate;
     private final DeckUrlImporter urls = new DeckUrlImporter();
 
-    public DeckRoutes(DeckStore store) {
+    /** @param gate Desktop-App mit Online-Konto: Speichern/Ordner/Text kommen vom Server (Vorschau bleibt lokal) */
+    public DeckRoutes(DeckStore store, AccountGate gate) {
         this.store = store;
+        this.gate = gate;
     }
 
     @Override
@@ -33,7 +37,7 @@ public final class DeckRoutes implements HttpServer.Module {
             ctx.json(preview(b.path("text").asText(""), text(b, "name"), commanders(b)));
         });
         app.post("/api/decks/url", this::fromUrl);
-        app.post("/api/decks", ctx -> {
+        app.post("/api/decks", gate.wrap(ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             String text = b.path("text").asText("");
             TextDeckParser.checkSize(text);
@@ -54,9 +58,9 @@ public final class DeckRoutes implements HttpServer.Module {
                         b.hasNonNull("bracket") ? b.get("bracket").asInt() : null);
             }
             ctx.json(store.get(userId, saved).orElseThrow());
-        });
+        }));
         // Ordner/Bracket aendern ohne Neuspeichern; bracket 0 = Vorschlag gilt
-        app.post("/api/decks/{id}/meta", ctx -> {
+        app.post("/api/decks/{id}/meta", gate.wrap(ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             long userId = Auth.user(ctx).id();
             long id = Long.parseLong(ctx.pathParam("id"));
@@ -64,9 +68,9 @@ public final class DeckRoutes implements HttpServer.Module {
             Integer bracket = b.hasNonNull("bracket") ? b.get("bracket").asInt() : null;
             store.patchMeta(userId, id, folder, bracket);
             ctx.json(store.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden")));
-        });
+        }));
         // Reihenfolge eines Ordners (Drag & Drop): {folder, ids[]}
-        app.post("/api/decks/order", ctx -> {
+        app.post("/api/decks/order", gate.wrap(ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             List<Long> ids = new ArrayList<>();
             b.path("ids").forEach(n -> ids.add(n.asLong()));
@@ -74,18 +78,18 @@ public final class DeckRoutes implements HttpServer.Module {
                 throw new IllegalArgumentException("Zu viele Decks");
             }
             ctx.json(Map.of("decks", store.reorder(Auth.user(ctx).id(), b.path("folder").asText(""), ids)));
-        });
+        }));
         // Ordner umbenennen; to = '' loest ihn auf
-        app.post("/api/decks/folders/rename", ctx -> {
+        app.post("/api/decks/folders/rename", gate.wrap(ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             int n = store.renameFolder(Auth.user(ctx).id(), b.path("from").asText(""), b.path("to").asText(""));
             ctx.json(Map.of("decks", n));
-        });
-        app.get("/api/decks/{id}/text", ctx -> {
+        }));
+        app.get("/api/decks/{id}/text", gate.wrap(ctx -> {
             long id = Long.parseLong(ctx.pathParam("id"));
             String dck = store.getDck(Auth.user(ctx).id(), id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
             ctx.json(Map.of("text", DeckText.toEditable(dck)));
-        });
+        }));
     }
 
     /**

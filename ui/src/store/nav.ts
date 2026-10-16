@@ -27,13 +27,25 @@ interface NavStore {
   setLastSetup: (s: LastSetup) => void
 }
 
+/** Deck-ids gehoeren einer Bibliothek: lokal und jedes Online-Konto haben eigene ids -> Setup je Konto merken */
+let setupKey = 'local'
+
+const storageKey = (k: string) => (k === 'local' ? 'magelite.lastSetup' : `magelite.lastSetup.${k}`)
+
 function loadSetup(): LastSetup | null {
   try {
-    const raw = localStorage.getItem('magelite.lastSetup')
+    const raw = localStorage.getItem(storageKey(setupKey))
     return raw ? (JSON.parse(raw) as LastSetup) : null
   } catch {
     return null
   }
+}
+
+/** Konto gewechselt (Desktop-App: angemeldet/offline/anderes Konto): gemerktes Setup dieses Kontos laden */
+export function setSetupAccount(key: string) {
+  if (key === setupKey) return
+  setupKey = key
+  useNav.setState({ lastSetup: loadSetup() })
 }
 
 export const useNav = create<NavStore>((set, get) => ({
@@ -48,7 +60,7 @@ export const useNav = create<NavStore>((set, get) => ({
   },
   setLastSetup: (s) => {
     try {
-      localStorage.setItem('magelite.lastSetup', JSON.stringify(s))
+      localStorage.setItem(storageKey(setupKey), JSON.stringify(s))
     } catch {
       /* egal */
     }

@@ -239,7 +239,8 @@ public final class HumanSpike {
      * @param leave {@code prompt}: der erste Mensch verlaesst das Spiel ab Zug 4 statt einen Prompt zu beantworten;
      *              {@code bot}: ab Zug 4 waehrend eines Bot-Zugs; {@code abort}: Spiel ab Zug 4 im Bot-Zug abbrechen;
      *              {@code abortTarget}: Spiel abbrechen, waehrend der Tester ein Ziel waehlen soll (offene Eingabe);
-     *              {@code abortRequiredTarget}: dasselbe nur bei Pflicht-Zielen (ohne Abbrechen-Knopf, z. B. Ausloeser)
+     *              {@code abortRequiredTarget}: dasselbe nur bei Pflicht-Zielen (ohne Abbrechen-Knopf, z. B. Ausloeser);
+     *              {@code mulligan}: der erste Mensch verlaesst das Spiel schon bei der Starthand (vor Spielbeginn)
      */
     private static boolean runGame(int nr, List<LoadedDeck> decks, TempoSettings.Preset preset, int turnCap, int humans, Random rnd,
                                    boolean verbose, String dumpJson, String scenario, boolean spectate, String leave) throws Exception {
@@ -414,6 +415,13 @@ public final class HumanSpike {
                     host.abort();
                     continue;
                 }
+                // vor Spielbeginn (Starthand): Forge drehte endlos, wenn der Startspieler hier aufgab
+                if ("mulligan".equals(leave) && leftAt == 0 && d == driver && (d.state == null || d.state.turn <= 1)) {
+                    leftAt = System.currentTimeMillis();
+                    out("  -> verlasse vor Spielbeginn waehrend Prompt %s", p.kind);
+                    host.leave(in.seat());
+                    continue;
+                }
                 if ("prompt".equals(leave) && leftAt == 0 && d == driver && d.state != null && d.state.turn >= 4) {
                     leftAt = System.currentTimeMillis();
                     out("  -> verlasse waehrend Prompt %s in Zug %d", p.kind, d.state.turn);
@@ -479,7 +487,8 @@ public final class HumanSpike {
         if (!allOver) {
             out("  FEHLER: nicht jeder Sitz hat ein gameOver bekommen (%d/%d)", overs.size(), drivers.size());
         }
-        boolean promptsEverywhere = drivers.values().stream().allMatch(x -> !x.kinds.isEmpty());
+        // --leave=mulligan: der Tester geht schon bei der ersten Frage (die zaehlt nicht als beantwortet)
+        boolean promptsEverywhere = "mulligan".equals(leave) || drivers.values().stream().allMatch(x -> !x.kinds.isEmpty());
         if (!promptsEverywhere) {
             out("  FEHLER: ein Sitz hat keinen einzigen Prompt bekommen");
         }

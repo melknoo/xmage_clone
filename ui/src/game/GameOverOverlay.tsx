@@ -247,6 +247,14 @@ export function GameOverOverlay() {
           })}
         </div>
 
+        {!r && !spectator && over.rewardStatus && (
+          <div className="flex items-center gap-2.5 text-[13.5px] leading-[1.45] text-fg-3" role="status" data-testid="gameover-reward-status" data-status={over.rewardStatus}>
+            <Icon name={over.rewardStatus === 'queued' ? 'disconnected' : 'levelUp'} size={16} className="flex-none" />
+            {over.rewardStatus === 'queued'
+              ? 'Server nicht erreichbar – die XP werden deinem Konto gutgeschrieben, sobald er wieder da ist.'
+              : 'XP werden deinem Konto gutgeschrieben …'}
+          </div>
+        )}
         {r && <XpBox r={r} instant={countDone} />}
         {r && countDone && r.deckName && (r.masteryLevel ?? 0) > 0 && <MasteryBox r={r} art={myArt} />}
 

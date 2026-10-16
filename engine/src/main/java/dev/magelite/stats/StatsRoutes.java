@@ -1,6 +1,7 @@
 package dev.magelite.stats;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.api.AccountGate;
 import dev.magelite.api.Auth;
 import dev.magelite.api.HttpServer;
 import dev.magelite.api.Json;
@@ -23,16 +24,19 @@ public final class StatsRoutes implements HttpServer.Module {
 
     private final Db db;
     private final ProfileService profile;
+    private final AccountGate gate;
 
-    public StatsRoutes(Db db, ProfileService profile) {
+    /** @param gate Desktop-App mit Online-Konto: Held und Statistik kommen vom Server */
+    public StatsRoutes(Db db, ProfileService profile, AccountGate gate) {
         this.db = db;
         this.profile = profile;
+        this.gate = gate;
     }
 
     @Override
     public void register(Javalin app) {
-        app.get("/api/profile", ctx -> ctx.json(profile.view(Auth.user(ctx).id())));
-        app.put("/api/profile", ctx -> {
+        app.get("/api/profile", gate.wrap(ctx -> ctx.json(profile.view(Auth.user(ctx).id()))));
+        app.put("/api/profile", gate.wrap(ctx -> {
             JsonNode b = Json.MAPPER.readTree(ctx.body());
             String name = b.path("name").asText("").strip();
             if (name.isEmpty() || name.length() > 24) {
@@ -41,9 +45,9 @@ public final class StatsRoutes implements HttpServer.Module {
             long userId = Auth.user(ctx).id();
             profile.rename(userId, name);
             ctx.json(profile.view(userId));
-        });
+        }));
 
-        app.get("/api/stats/overview", ctx -> {
+        app.get("/api/stats/overview", gate.wrap(ctx -> {
             long userId = Auth.user(ctx).id();
             ctx.json(db.with(c -> {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -76,9 +80,9 @@ public final class StatsRoutes implements HttpServer.Module {
             m.put("recentPlaces", rows(c, "SELECT placement, result, ended_at AS endedAt FROM games WHERE end_reason != 'error' AND user_id = ? ORDER BY ended_at DESC LIMIT 30", userId));
             return m;
             }));
-        });
+        }));
 
-        app.get("/api/stats/decks", ctx -> ctx.json(withMastery(db.with(c -> rows(c, """
+        app.get("/api/stats/decks", gate.wrap(ctx -> ctx.json(withMastery(db.with(c -> rows(c, """
                 SELECT COALESCE(g.deck_id, -1) AS deckId, g.deck_name AS deckName, g.commander AS commander,
                        COUNT(*) AS games, SUM(CASE WHEN g.result='win' THEN 1 ELSE 0 END) AS wins,
                        AVG(g.placement) AS avgPlace, AVG(g.turns) AS avgTurns, AVG(g.mulligans) AS avgMulligans,
@@ -86,9 +90,9 @@ public final class StatsRoutes implements HttpServer.Module {
                        d.commander_set AS commanderSet, d.commander_num AS commanderNum
                 FROM games g LEFT JOIN decks d ON d.id = g.deck_id
                 WHERE g.end_reason != 'error' AND g.user_id = ?
-                GROUP BY COALESCE(g.deck_id, g.deck_name) ORDER BY lastPlayed DESC""", Auth.user(ctx).id())))));
+                GROUP BY COALESCE(g.deck_id, g.deck_name) ORDER BY lastPlayed DESC""", Auth.user(ctx).id()))))));
 
-        app.get("/api/stats/decks/{id}/cards", ctx -> {
+        app.get("/api/stats/decks/{id}/cards", gate.wrap(ctx -> {
             long id = Long.parseLong(ctx.pathParam("id"));
             long userId = Auth.user(ctx).id();
             ctx.json(db.with(c -> {
@@ -118,9 +122,9 @@ public final class StatsRoutes implements HttpServer.Module {
                         JOIN games g ON g.id = s.game_id AND g.user_id = s.user_id WHERE s.deck_id = ? AND s.card_name = g.commander AND g.user_id = ?""", id, userId));
                 return m;
             }));
-        });
+        }));
 
-        app.get("/api/history", ctx -> {
+        app.get("/api/history", gate.wrap(ctx -> {
             int limit = Math.min(200, Integer.parseInt(ctx.queryParamAsClass("limit", String.class).getOrDefault("50")));
             long userId = Auth.user(ctx).id();
             ctx.json(db.with(c -> {
@@ -134,7 +138,7 @@ public final class StatsRoutes implements HttpServer.Module {
                 }
                 return games;
             }));
-        });
+        }));
     }
 
     /** Deck-Zeilen mit Meisterschaftsstufe/-schwelle (nur eigene Decks mit masteryXp). */

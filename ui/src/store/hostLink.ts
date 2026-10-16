@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../api/client'
 import { idlePaused } from '../lib/activity'
+import { useAuth } from './auth'
 import { pushToast } from './ui'
 
 /** GET /api/host/link (nur lokale Engine): Host-Link-Stand plus Konto/Tisch auf dem Server */
@@ -93,6 +94,8 @@ export const useHostLink = create<HostLinkStore>((set, get) => {
       } finally {
         set({ busy: false })
         await get().refresh()
+        // Konto-Modus: abgemeldet -> Gate (Engine kennt keine Session mehr)
+        await useAuth.getState().refreshAccount()
       }
     },
   }

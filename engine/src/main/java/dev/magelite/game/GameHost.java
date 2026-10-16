@@ -14,6 +14,7 @@ import forge.game.Game;
 import forge.game.GameEndReason;
 import forge.game.GameLogEntry;
 import forge.game.GameRules;
+import forge.game.GameStage;
 import forge.game.GameType;
 import forge.game.Match;
 import forge.game.card.CardView;
@@ -86,10 +87,24 @@ public final class GameHost {
         void send(Object message);
     }
 
-    /** Belohnung pro menschlichem Sitz am Spielende (z.B. XP); null = keine. */
+    /**
+     * Belohnung pro menschlichem Sitz am Spielende (z.B. XP); null = keine. Steht sie erst spaeter fest (Konto-Spiel der
+     * Desktop-App, der Server bucht), liefert der Hook ein {@link PendingReward}.
+     */
     public interface RewardHook {
         Object apply(GameHost host, HumanSeat seat, Messages.GameOver over);
     }
+
+    /**
+     * Belohnung, die asynchron kommt: {@code gameOver} geht sofort mit {@code rewardStatus=pending} raus und nach der
+     * Buchung noch einmal - mit der Belohnung, ohne ({@code null}: schon verbucht/abgelehnt) oder mit
+     * {@link #REWARD_QUEUED} (wird nachgeholt).
+     */
+    public record PendingReward(java.util.concurrent.CompletionStage<Object> reward) {
+    }
+
+    /** Ergebnis eines {@link PendingReward}: Server nicht erreichbar, Buchung wird nachgeholt. */
+    public static final Object REWARD_QUEUED = new Object();
 
     /** Antwort des Clients auf einen Prompt. Genau ein Feld gesetzt. */
     public record Response(UUID uuid, Boolean bool, Integer integer, String string, UUID manaPlayerId, ManaColor manaType) {
@@ -293,6 +308,8 @@ public final class GameHost {
 
     /** Kommandos fuer den Spiel-Thread (Antworten, Aufgeben, Abbruch) */
     private final LinkedBlockingQueue<Runnable> inbox = new LinkedBlockingQueue<>();
+    /** Aufgeben vor Spielbeginn: wartet auf GameStage.Play (nur Spiel-Thread; siehe {@link #leave}) */
+    private final List<Runnable> concedeLater = new ArrayList<>();
     /** offene Fragen (Spiel-Thread), oberste = aktuelle */
     private final Deque<PromptBridge.Frame> frames = new ArrayDeque<>();
     /** offener Prompt; Antworten raeumen ihn per compareAndSet (genau eine Antwort pro Prompt) */
@@ -602,6 +619,16 @@ public final class GameHost {
         }
     }
 
+    /**
+     * Nachgereichte Belohnung ({@link PendingReward}, anderer Thread): {@code gameOver} des Sitzes ersetzen und erneut
+     * senden; ein spaeterer Reconnect ({@link #attach}) bekommt den neuen Stand.
+     */
+    private synchronized void updateReward(HumanSeat seat, Messages.GameOver base, Object reward) {
+        Messages.GameOver next = reward == REWARD_QUEUED ? base.withReward(null, "queued") : base.withReward(reward, null);
+        seat.gameOver = next;
+        send(seat, next);
+    }
+
     /** Verbindet einen Client mit einem Sitz und schickt den aktuellen Stand (Resync nach Reconnect). */
     public synchronized void attach(HumanSeat seat, Sink newSink) {
         seat.sink = newSink;
@@ -848,19 +875,27 @@ public final class GameHost {
             RewardHook hook = rewardHook;
             for (HumanSeat seat : humans.values()) {
                 Messages.GameOver mine = base;
+                PendingReward pending = null;
                 if (hook != null) {
                     try {
                         Object reward = hook.apply(this, seat, base);
-                        if (reward != null) {
-                            mine = new Messages.GameOver(base.winnerId(), base.result(), base.placements(), base.turns(),
-                                    base.durationMs(), reward, base.error());
+                        if (reward instanceof PendingReward p) {
+                            pending = p;
+                            mine = base.withReward(null, "pending");
+                        } else if (reward != null) {
+                            mine = base.withReward(reward, null);
                         }
                     } catch (Throwable e) {
                         LOG.error("Belohnung fehlgeschlagen (" + seat.name() + ")", e);
                     }
                 }
-                seat.gameOver = mine;
-                send(seat, mine);
+                synchronized (this) {
+                    seat.gameOver = mine;
+                    send(seat, mine);
+                }
+                if (pending != null) {
+                    pending.reward().whenComplete((r, err) -> updateReward(seat, base, err != null ? REWARD_QUEUED : r));
+                }
             }
             synchronized (specLock) {
                 sendSpectators(base);
@@ -914,8 +949,18 @@ public final class GameHost {
         closePromptOf(seat);
         send(seat, new Messages.SeatStatus(true));
         boolean humansLeft = humans.values().stream().anyMatch(s -> !s.conceded);
-        inbox.add(() -> {
-            if (seat.player != null && seat.player.isInGame() && !game.isGameOver()) {
+        inbox.add(new Runnable() {
+            @Override
+            public void run() {
+                if (seat.player == null || !seat.player.isInGame() || game.isGameOver()) {
+                    return;
+                }
+                // Forge: gibt der Startspieler vor Spielbeginn (Mulligan) auf, dreht runOpeningHandActions endlos
+                // ("bis wieder first dran ist"). Bis dahin beantwortet der Autopilot seine Fragen, aufgegeben wird ab Play.
+                if (game.getAge() != GameStage.Play) {
+                    concedeLater.add(this);
+                    return;
+                }
                 addLog("INFO", seat.name() + " gibt auf");
                 seat.controller.concede();
             }
@@ -1427,6 +1472,11 @@ public final class GameHost {
             }
             parked = outer != null;
         }
+        // Abbruch (alle Menschen weg): sofort beenden, nicht erst am naechsten Safe-Point - vor Spielbeginn kaeme
+        // Forge sonst gar nicht mehr dorthin (runOpeningHandActions, s. leave)
+        if (aborting && !game.isGameOver()) {
+            game.setGameOver(GameEndReason.Draw);
+        }
         if (game.isGameOver()) {
             throw new GameEnded();
         }
@@ -1471,6 +1521,10 @@ public final class GameHost {
     void safePoint() {
         if (!isGameThread()) {
             return;
+        }
+        if (!concedeLater.isEmpty() && game.getAge() == GameStage.Play) {
+            inbox.addAll(concedeLater);
+            concedeLater.clear();
         }
         Runnable cmd;
         while ((cmd = inbox.poll()) != null) {

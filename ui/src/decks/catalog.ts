@@ -77,6 +77,8 @@ interface CatalogStore {
   samples: SampleDeck[]
   /** mindestens einmal geladen */
   loaded: boolean
+  /** eigene Decks konnten nicht geladen werden (Desktop-App: Server weg) - kein Ersatzdeck anbieten */
+  error: string | null
   /** neu laden (eigene Decks immer, mitgelieferte nur beim ersten Mal oder mit all) */
   refresh: (all?: boolean) => Promise<void>
   /** nach Import/Loeschen/Abmelden: Cache verwerfen und neu laden */
@@ -93,19 +95,25 @@ export const useCatalogStore = create<CatalogStore>((set, get) => ({
   decks: [],
   samples: [],
   loaded: false,
+  error: null,
   refresh: async (all) => {
     const needSamples = all || get().samples.length === 0
     const [decks, samples] = await Promise.all([
-      api.get<StoredDeck[]>('/api/decks').catch(() => [] as StoredDeck[]),
+      api.get<StoredDeck[]>('/api/decks').then(
+        (d) => ({ ok: true as const, d }),
+        (e: unknown) => ({ ok: false as const, msg: e instanceof Error ? e.message : String(e) }),
+      ),
       needSamples ? api.get<SampleDeck[]>('/api/samples').catch(() => [] as SampleDeck[]) : Promise.resolve(get().samples),
     ])
-    set({ decks, samples, loaded: true })
+    // Fehler: letzten Stand behalten (nie still "keine Decks" melden - sonst startete ein Ersatzdeck)
+    if (decks.ok) set({ decks: decks.d, samples, loaded: true, error: null })
+    else set({ samples, error: decks.msg })
   },
   invalidate: () => {
     set({ loaded: false })
     void get().refresh()
   },
-  reset: () => set({ decks: [], samples: [], loaded: false }),
+  reset: () => set({ decks: [], samples: [], loaded: false, error: null }),
   applyOrder: (folder, ids) =>
     set({
       decks: get().decks.map((x) => {
@@ -124,9 +132,10 @@ export function useDeckCatalog() {
   const decks = useCatalogStore((s) => s.decks)
   const samples = useCatalogStore((s) => s.samples)
   const loaded = useCatalogStore((s) => s.loaded)
+  const error = useCatalogStore((s) => s.error)
   useEffect(() => {
     void useCatalogStore.getState().refresh()
   }, [])
   const describe = (spec: DeckSpec | null | undefined): DeckInfo | null => describeDeck(spec, decks, samples)
-  return { decks, samples, loaded, describe }
+  return { decks, samples, loaded, error, describe }
 }

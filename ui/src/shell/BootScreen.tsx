@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { Button, Wordmark } from '../components/ui'
 import { Icon } from '../lib/icons'
 
-export type BootPhase = 'engine' | 'server' | 'account' | 'down'
+export type BootPhase = 'engine' | 'server' | 'account' | 'online' | 'down'
 
 export interface BootScreenProps {
-  /** engine: lokale Engine startet · server: Server wird erreicht · account: Konto/Decks/laufendes Spiel laden · down: nicht erreichbar */
+  /**
+   * engine: lokale Engine startet · server: Server wird erreicht · account: Konto/Decks/laufendes Spiel laden ·
+   * online: Desktop-App prueft das Online-Konto · down: nicht erreichbar
+   */
   phase: BootPhase
   mode: 'local' | 'server'
   /** App-Version (Electron), optional */
@@ -36,7 +39,7 @@ function useProgress(phase: BootPhase, mode: 'local' | 'server'): { pct: number;
   }, [phase])
   const elapsed = Math.max(0, now - start)
   if (phase === 'down') return { pct: 100, elapsed }
-  if (phase === 'account') {
+  if (phase === 'account' || phase === 'online') {
     const t = cur.phase === phase ? Math.max(0, now - cur.at) : 0
     return { pct: 60 + 35 * (1 - Math.exp(-t / 1_500)), elapsed }
   }
@@ -53,12 +56,18 @@ export function BootScreen({ phase, mode, version, onRetry }: BootScreenProps) {
   const down = phase === 'down'
 
   const label =
-    phase === 'account' ? 'Lade Konto und Decks …' : local ? 'Engine startet – Kartendatenbank wird geladen …' : 'Verbinde mit Server …'
+    phase === 'account'
+      ? 'Lade Konto und Decks …'
+      : phase === 'online'
+        ? 'Melde am Online-Konto an …'
+        : local
+          ? 'Engine startet – Kartendatenbank wird geladen …'
+          : 'Verbinde mit Server …'
   const hint =
     phase === 'engine'
       ? 'Beim allerersten Start wird die Datenbank aufgebaut (ca. 1–2 Minuten).'
-      : phase === 'server'
-        ? 'Der Server startet gerade – das kann beim ersten Mal eine Minute dauern.'
+      : phase === 'server' || phase === 'online'
+        ? 'Der Server startet gerade – das kann einen Moment dauern.'
         : null
 
   return (

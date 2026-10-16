@@ -1,6 +1,6 @@
 # Projektstand
 
-Stand: 2026-10-14 – Version 0.2.3 (Forge-Engine) live und als Setup veröffentlicht. Bitte nach jeder größeren Änderung aktualisieren.
+Stand: 2026-10-15 – Version 0.2.5 live; „Ein Konto überall“ (Desktop-App) gebaut, noch nicht veröffentlicht. Bitte nach jeder größeren Änderung aktualisieren.
 
 ## Phasen (aus dem ursprünglichen Plan)
 
@@ -682,6 +682,51 @@ Nutzerwunsch (Vorbild MTG Arena/endstep.cc): besser sehen, was auslöst und wora
   live nur mit selbst gebauten JSON-Fixtures geprüft, nicht gegen echte Moxfield/Archidekt-Antworten. Mehrere
   Gefährten im Deck bleiben erhalten, Forge lässt einen wählen. Bei zwei Karten in der Kommandozone wird die
   Beschriftung „Command Zone“ abgeschnitten (wie schon bei Partner-Commandern).
+
+## Ein Konto überall: Desktop-App mit Online-Konto (2026-10-15, nicht released)
+
+Nutzerbefund: App startet mit lokalen Decks, „angemeldet“ erst nach Sekunden, „Zur Lobby“ zeigt andere Decks (die
+des Online-Kontos). Ziel (Nutzer): beim Start angemeldet oder zuerst der Login; angemeldet überall dieselben Daten.
+Entscheidung und Kostenmodell: `DECISIONS.md` „Ein Konto überall“.
+- **Engine (`account/*`, Flag `--account`, setzt `engine.cjs`):** `AccountLink` (Session von Electron per
+  `POST /api/account/sync`, Zustände CHECKING/NONE/EXPIRED/UNREACHABLE/LIMITED/OK/OFFLINE, `/api/me.account`);
+  `AccountProxy` reicht Decks/Profil/Statistik/Verlauf an fly durch (`api/AccountGate`, Fehler als `{account}` statt
+  stiller lokaler Daten); Spielstart mit Konto-Decks (`AccountDecks`, auch Bot-Sitze), Menschenname = Konto;
+  Ergebnis per `POST /api/games/report` (`AccountReporter`, asynchron: `gameOver` mit `rewardStatus` pending →
+  Belohnung bzw. queued, Warteschlange in `kv` je Server+Konto); lokale Decks einmal übernehmen
+  (`/api/account/local-decks|import-local|dismiss`). Ohne `--account` alles wie vorher.
+- **Server:** `stats/GameReportRoutes` (Engine-Marker, ein Sitz, Konto/Deck vom Server, Größen- und Rate-Limit,
+  `duplicate`), `GameResult.endedAt` (Tagesbonus am Spieltag), Header `X-MageLite-Passive`, Host-Links beim
+  Leerlauf-Exit mit 4504 schließen, Verbinden zählt nicht mehr als Aktivität (vorher hielt jede angemeldete App fly
+  dauerhaft wach: Neu-Verbinden nach dem Exit weckte die Maschine sofort wieder). `RemoteGames.onFinished` verbucht
+  nur bekannte Sitze, Deck-id aus der eigenen Spec.
+- **Electron:** Session vor dem Laden der UI melden (auch nach Engine-Neustart), Login aus dem Gate per IPC
+  (`loginOnline`, Cookie setzt der Hauptprozess), `goOffline`, Rücksprung nach Login auf der Server-Seite nur bei
+  Registrieren/Passwort vergessen; `HostLinkClient` verbindet erst bei „Zur Lobby“ und ruht nach 4504/4000; Preload
+  erkennt „lokal“ per Origin.
+- **UI:** `AccountGate` (Login per Code/E-Mail, Registrieren/Passwort vergessen → Server-Seite, „Offline spielen“;
+  Server weg/Kontingent/abgelaufen), Boot-Phase „Melde am Online-Konto an …“, Konto-Button mit Namen sofort bzw.
+  „Offline“, Karte „N Decks auf diesem PC übernehmen“, Spielende-Hinweis pending/queued, Katalog-Fehler statt
+  Ersatzdeck, `lastSetup`/Profil-Cache je Konto; auf der Server-Seite in der App: „Allein üben“ → zurück in die App,
+  Login mit „Zurück zur App“.
+- **Nebenbei gefunden und behoben (Forge, alt):** Gab der Startspieler schon bei der Starthand auf, drehte Forges
+  `runOpeningHandActions` endlos (`do … while (takesAction != first)`), der Spiel-Thread fraß CPU, das Spiel endete
+  nie (UI wartete ewig auf das Spielende). Jetzt: Aufgeben vor Spielbeginn wird bis zur Spielphase verschoben
+  (Autopilot beantwortet die Starthand), Abbruch greift direkt in `park()`. Neuer Spike-Modus `--leave=mulligan`.
+- Geprüft: `gradlew test` 69/69 (neu `AccountTest`, `GameReportTest`); **`e2e-account.mjs` 70/70** (neu, 2 Engines:
+  Zustände, alle Nutzerdaten-Routen = X, Spiel mit Konto-Deck + Belohnung, Warteschlange bei Server-Ausfall genau
+  einmal gebucht, Report-Missbrauch 426/400/401/fremdes Deck/duplicate/429, Decks übernehmen, abgelaufen, offline,
+  LIMITED, Host-Link ruht nach Leerlauf-Exit); `e2e-relay` 60/60; `humanSpike` Standard, `--humans=4`,
+  `--humans=2 --spectate`, alle Leave-Modi inkl. neu `mulligan` (8 Spiele solo, 6 mit 2 Menschen), alle Szenarien:
+  0 fehlgeschlagen, keine STALLs, UNMAPPED leer; `tsc -b`; Screenshots `steps-account.json` (16 Bilder, 0 Fehler,
+  angesehen); **echte Electron-App** (Test-App, Scratch-Daten, `MAGELITE_SERVER_URL` = Test-Server) per CDP: erster
+  Start → Gate → Login → Konto-Decks; Neustart → sofort angemeldet (6,7 s inkl. Engine); „Zur Lobby“ → dieselben
+  Decks, Host-Link verbunden → „Zur App“; Abmelden → Gate; Offline → lokale Decks; Neustart → wieder Gate.
+- **Release:** Server und App zusammen (`release.ps1 -Fly`); bis fly die Report-Route hat, warten Spielberichte neuer
+  Apps in der Warteschlange. Test-App (`MageLite.cmd`) nutzt jetzt auch das echte Konto (eigener Cookie-Speicher,
+  einmal anmelden).
+- Grenzen: lokale XP/Meisterschaft/Verlauf werden nicht ins Konto übernommen (Nutzerentscheidung); kein Lese-Cache
+  für Kontodaten ohne Server; „Offline“ wird nicht gemerkt; Spielberichten vertraut der Server wie beim Host-Link.
 
 ## Ideen (nicht beauftragt)
 

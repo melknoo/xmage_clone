@@ -305,3 +305,30 @@ als „(historisch, XMage)“ gekennzeichnet und bleiben als Begründung der dam
     der Angreifer-Erklärung, nach den Blockern und nach Erstschlag-Schaden (Regel 508.8/509.4/510.4). Mit Auto-Passen
     nur, wenn eine Nicht-Mana-Aktion möglich ist; F-Tasten überspringen weiter. Einstellbare Stopps je Phase bleiben
     offen (STATUS „Einstellungs-Screen“).
+
+- **Ein Konto überall (Desktop-App, 2026-10-15, Nutzerwunsch):** Vorher hatte die App zwei Welten – lokale Decks
+  und lokaler Held in der App, das Online-Konto mit eigenen Decks hinter „Zur Lobby“; „angemeldet“ zeigte der
+  Konto-Button erst nach Sekunden. Jetzt: beim Start ist man angemeldet oder sieht zuerst das Login.
+  - **Konto statt lokaler Daten:** Angemeldet reicht die lokale Engine die Nutzerdaten-Routen an fly durch
+    (`AccountProxy`) – Decks, Held, Meisterschaft, Statistik sind dieselben wie in der Lobby. Solo-Spiele rechnet
+    weiter der PC; das Ergebnis bucht fly (`POST /api/games/report`, gleiche Daten wie beim Host-Link,
+    `GameRecorder.GameResult`). Nichts davon landet in der lokalen DB. Verworfen: die App nur noch als fly-Seite
+    (Solo als Tisch auf dem eigenen Rechner) – hielte fly während jedes Solo-Spiels wach; Abgleich zweier
+    Bibliotheken – Konflikte, Doppelzählung.
+  - **Login-Gate lokal, Login über Electron:** sofort da (kein Warten auf einen fly-Kaltstart für die Seite), der
+    Hauptprozess setzt das HttpOnly-Cookie, der Renderer sieht das Token nie. Registrieren/Passwort vergessen laufen
+    auf der Server-Seite (Captcha ist an die Domain gebunden), danach automatisch zurück.
+  - **„Offline spielen“** = die bisherigen lokalen Daten, klar beschriftet, zählt nicht fürs Konto; wird nicht
+    gemerkt (ohne Session kommt beim nächsten Start wieder das Gate). Lokale Decks lassen sich einmal ins Konto
+    übernehmen; lokale XP/Meisterschaft/Verlauf bleiben lokal (Nutzerentscheidung: keine Doppelzählung, kein
+    Import-Endpunkt für Spiele).
+  - **Nie still auf lokale Daten ausweichen:** Fällt fly aus, kommt ein Fehler (`503 {account}`) bzw. das Gate –
+    sonst stünden plötzlich wieder die „anderen Decks“ da. Spiele starten nur angemeldet oder bewusst offline; ein
+    Bericht, der fly nicht erreicht, wartet in `kv` und geht nur an **dasselbe** Konto.
+  - **Vertrauen in den Bericht** wie beim Host-Link (die App rechnet): fly legt Konto und Name fest, nimmt die
+    Deck-id nur bei eigenen Decks, prüft Form/Größe und begrenzt die Rate. XP sind reine Meta-Werte.
+  - **Kosten:** Ersetzt „Öffentlich = fast nur Lobby-Laufzeit“ – jetzt weckt jeder App-Start fly kurz. Dagegen:
+    Konto-Prüfung, Bericht und Host-Link-Status sind passiv (`X-MageLite-Passive`, wecken, halten aber nicht wach),
+    der Host-Link verbindet erst bei „Zur Lobby“ und ruht nach dem Leerlauf-Exit (Close 4504; vorher weckte ihn das
+    Neu-Verbinden sofort wieder – jede angemeldete App hielt fly dauerhaft wach). Das Verbinden allein zählt nicht
+    mehr als Aktivität.

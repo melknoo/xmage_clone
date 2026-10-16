@@ -6,7 +6,7 @@ import { Button, Checkbox, EmptyState, Overlay, Segmented, TextField } from '../
 import { Icon, type IconName } from '../lib/icons'
 import { SocialSidebar } from '../social/SocialSidebar'
 import { useMarkLobbyRead } from '../social/useMarkLobbyRead'
-import { openLocalApp } from '../lib/localApp'
+import { openLocalApp, soloRunsLocally } from '../lib/localApp'
 import { tempoLabel } from '../lib/tempo'
 import { useAuth } from '../store/auth'
 import { useGame } from '../store/game'
@@ -132,8 +132,8 @@ export function LobbyScreen() {
           <Button
             variant="secondary"
             icon="autoMana"
-            onClick={() => (me?.tier === 'public' ? void openLocalApp() : go('solo'))}
-            title={me?.tier === 'public' ? 'Spiele gegen Bots laufen für dich in der MageLite-App auf deinem PC' : undefined}
+            onClick={() => (soloRunsLocally(me?.tier) ? void openLocalApp() : go('solo'))}
+            title={soloRunsLocally(me?.tier) ? 'Spiele gegen Bots laufen in der MageLite-App auf deinem PC' : undefined}
             testId="lobby-solo"
           >
             Allein üben

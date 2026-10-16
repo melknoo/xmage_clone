@@ -43,17 +43,33 @@ public final class GameRecorder {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record SeatResult(long userId, String name, UUID playerId, Long deckId, String deckName, List<String> commanders,
                              boolean conceded, int humanTurns, Map<String, StatsSink.CardStat> cards) {
+        /** Gleicher Sitz, Konto/Deck vom Server festgelegt (Host-Link, Bericht der Desktop-App). */
+        public SeatResult forUser(long userId, String name, Long deckId) {
+            return new SeatResult(userId, name, playerId, deckId, deckName, commanders, conceded, humanTurns, cards);
+        }
     }
 
-    /** Spielende, von jedem Prozess auswertbar. {@code deckNames}/{@code commanders} je Spieler-id (auch Bots). */
+    /**
+     * Spielende, von jedem Prozess auswertbar. {@code deckNames}/{@code commanders} je Spieler-id (auch Bots).
+     * {@code endedAt}: Spielende beim Erzeuger (Berichte der Desktop-App kommen evtl. spaeter an); null = jetzt.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record GameResult(String gameId, String tempo, UUID winnerId, String result, List<Messages.Placement> placements,
                              int turns, long durationMs, String error, Map<UUID, String> deckNames,
-                             Map<UUID, List<String>> commanders, List<SeatResult> seats) {
+                             Map<UUID, List<String>> commanders, List<SeatResult> seats, Long endedAt) {
         public Messages.GameOver gameOver(Object reward) {
             return new Messages.GameOver(winnerId, result, placements, turns, durationMs, reward, error);
         }
+
+        /** Nur dieser Sitz (Bericht an das Konto, das ihn gespielt hat). */
+        public GameResult onlySeat(SeatResult seat) {
+            return new GameResult(gameId, tempo, winnerId, result, placements, turns, durationMs, error, deckNames, commanders,
+                    List.of(seat), endedAt);
+        }
     }
+
+    /** Spaet nachgereichte Berichte zaehlen hoechstens so weit zurueck (Tagesbonus, Verlauf). */
+    private static final long MAX_REPORT_AGE_MS = 30L * 24 * 3600_000;
 
     private final Db db;
     private final ProfileService profile;
@@ -71,10 +87,12 @@ public final class GameRecorder {
         }
         GameSetup setup = host.getSetup();
         return new GameResult(host.getId().toString(), setup.tempo().name(), over.winnerId(), over.result(), over.placements(),
-                over.turns(), over.durationMs(), over.error(), host.getDeckNames(), host.getCommanders(), seats);
+                over.turns(), over.durationMs(), over.error(), host.getDeckNames(), host.getCommanders(), seats,
+                System.currentTimeMillis());
     }
 
-    private static SeatResult seatResult(GameHost host, GameHost.HumanSeat seat) {
+    /** Ein menschlicher Sitz mit den Daten seines {@link StatsSink}. */
+    public static SeatResult seatResult(GameHost host, GameHost.HumanSeat seat) {
         StatsSink sink = StatsSink.of(host.getId(), seat.playerId());
         return new SeatResult(seat.userId(), seat.name(), seat.playerId(), seat.deckId(), seat.deck().name(), seat.deck().commanders(),
                 seat.conceded(), sink == null ? 0 : sink.humanTurns(), sink == null ? Map.of() : new LinkedHashMap<>(sink.cards()));
@@ -118,7 +136,7 @@ public final class GameRecorder {
                 boolean earlyConcede = seat.conceded() && humanTurns < 3;
                 Long deckId = seat.deckId();
                 String tempo = r.tempo();
-                long now = System.currentTimeMillis();
+                long now = endTime(r.endedAt());
 
                 // ---- XP
                 List<XpPart> parts = new ArrayList<>();
@@ -133,7 +151,7 @@ public final class GameRecorder {
                     if (survive > 0) {
                         parts.add(new XpPart("turns", humanTurns + " eigene Züge", survive));
                     }
-                    if (won && !wonToday(c, userId)) {
+                    if (won && !wonOnDayOf(c, userId, now)) {
                         parts.add(new XpPart("firstWin", "Erster Sieg des Tages", 100));
                     }
                     if (deckId != null && !playedDeckBefore(c, deckId)) {
@@ -271,8 +289,22 @@ public final class GameRecorder {
         }
     }
 
+    /** Ist das Spiel fuer dieses Konto schon verbucht? (Bericht doppelt geschickt) */
+    public boolean recorded(String gameId, long userId) {
+        return exists(gameId, userId);
+    }
+
     private boolean exists(String gameId, long userId) {
         return db.with(c -> exists(c, gameId, userId));
+    }
+
+    /** Spielende fuer die Buchung: gemeldeter Zeitpunkt, begrenzt auf [jetzt - 30 Tage, jetzt]. */
+    static long endTime(Long reported) {
+        long now = System.currentTimeMillis();
+        if (reported == null) {
+            return now;
+        }
+        return Math.max(now - MAX_REPORT_AGE_MS, Math.min(now, reported));
     }
 
     private static boolean exists(Connection c, String id, long userId) throws SQLException {
@@ -285,11 +317,15 @@ public final class GameRecorder {
         }
     }
 
-    private static boolean wonToday(Connection c, long userId) throws SQLException {
-        long start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
-        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM games WHERE result = 'win' AND ended_at >= ? AND user_id = ? LIMIT 1")) {
+    /** Schon ein Sieg am Kalendertag von {@code at} (Server-Zeitzone)? */
+    private static boolean wonOnDayOf(Connection c, long userId, long at) throws SQLException {
+        LocalDate day = java.time.Instant.ofEpochMilli(at).atZone(ZoneId.systemDefault()).toLocalDate();
+        long start = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        long end = day.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
+        try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM games WHERE result = 'win' AND ended_at >= ? AND ended_at < ? AND user_id = ? LIMIT 1")) {
             ps.setLong(1, start);
-            ps.setLong(2, userId);
+            ps.setLong(2, end);
+            ps.setLong(3, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }

@@ -87,7 +87,7 @@ export function NavRail() {
           type="button"
           className="mb-2 flex w-[68px] cursor-pointer flex-col items-center gap-1.5 rounded-sm py-2.5 text-fg-tab transition-colors duration-1 hover:bg-bg-4 hover:text-fg-2"
           onClick={() => desktop.openLocal()}
-          title="Zurück zur MageLite-App auf diesem Rechner (lokaler Held, lokale Decks)"
+          title="Zurück zur MageLite-App auf diesem Rechner (gleiches Konto, Solo-Spiele laufen auf dem PC)"
           data-testid="nav-desktop-local"
         >
           <Icon name="desktop" size={19} />

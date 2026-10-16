@@ -8,15 +8,30 @@ declare global {
       port: number
       token: string | null
       fetchText?: (url: string) => Promise<string>
-      /** Online-Server im selben Fenster laden (Login bzw. Lobby) */
-      openOnline?: () => void
-      /** Online abmelden: Server-Session beenden, Cookie loeschen, Host-Link trennen */
+      /** Online-Server im selben Fenster laden: ohne Argument die Lobby, {hash} eine Login-Unterseite (signup, forgot) */
+      openOnline?: (opts?: { hash?: 'signup' | 'forgot' }) => void
+      /** Login aus dem Gate der App (Electron setzt das Session-Cookie und meldet es der Engine) */
+      loginOnline?: (creds: { code: string } | { email: string; password: string }) => Promise<DesktopLoginResult>
+      /** Online abmelden: Server-Session beenden, Cookie loeschen, Engine informieren */
       logoutOnline?: () => Promise<void>
+      /** "Offline spielen": lokale Daten bis zum naechsten Login/Neustart */
+      goOffline?: () => Promise<void>
+      /** aus "Offline" wieder anmelden: Electron meldet die gemerkte Session erneut */
+      goOnline?: () => Promise<void>
       serverUrl?: string
     }
-    /** Electron-Fenster zeigt eine fremde Seite (den Online-Server): zurueck zur lokalen App */
-    mageliteDesktop?: { version: string; openLocal: () => void }
+    /** Electron-Fenster zeigt eine fremde Seite (den Online-Server): zurueck zur lokalen App ({offline}: ohne Konto) */
+    mageliteDesktop?: { version: string; openLocal: (opts?: { offline?: boolean }) => void }
   }
+}
+
+/** Antwort von window.magelite.loginOnline */
+export interface DesktopLoginResult {
+  ok: boolean
+  status?: number
+  error?: string
+  /** E-Mail noch nicht bestaetigt */
+  unverified?: boolean
 }
 
 export type EndpointMode = 'local' | 'origin'
@@ -67,6 +82,16 @@ export function setBudgetHandler(fn: (() => void) | null) {
   onBudget = fn
 }
 
+let onAccount: ((state: string) => void) | null = null
+
+/**
+ * Desktop-App mit Online-Konto: Antworten mit {account: Zustand} (Kontodaten gerade nicht verfuegbar: abgelaufen,
+ * Server weg, Budget, noch nicht angemeldet). Kein Verbindungsproblem der Engine - das Gate bzw. der Store reagiert.
+ */
+export function setAccountHandler(fn: ((state: string) => void) | null) {
+  onAccount = fn
+}
+
 let onConnection: ((ok: boolean) => void) | null = null
 
 /**
@@ -107,11 +132,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     reportConnection(!(res.status >= 500))
     throw new ApiError(res.ok ? 'Unerwartete Antwort vom Server' : `Server nicht erreichbar (${res.status}) – bitte gleich nochmal versuchen`, res.status)
   }
-  // 503 mit budget = gewollte Sperre, kein Verbindungsproblem
+  // 503 mit budget = gewollte Sperre; {account} = Kontodaten (Desktop-App) nicht verfuegbar: beides kein Verbindungsproblem
   const budget = res.status === 503 && data?.budget === true
-  reportConnection(!(res.status === 502 || (res.status === 503 && !budget) || res.status === 504))
+  const account = !res.ok && typeof data?.account === 'string' ? (data.account as string) : null
+  reportConnection(account !== null || !(res.status === 502 || (res.status === 503 && !budget) || res.status === 504))
   if (!res.ok) {
-    if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
+    if (account) onAccount?.(account)
+    else if (res.status === 401 && path !== '/api/auth/login' && path !== '/api/me') onUnauthorized?.()
     if (budget) onBudget?.()
     throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status, data)
   }

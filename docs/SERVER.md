@@ -50,6 +50,12 @@ Browser ──HTTPS/WSS──▶ fly-proxy (TLS, Auto-Start/Stop) ──▶ Masc
     zeigt „Kontingent aufgebraucht“, ihre Anfragen halten die Maschine nicht wach, Registrierung zu); Owner und
     eingeladene Freunde spielen normal weiter. Bei 80 % und 100 % bekommt der Owner eine Mail (wenn er unter Konto
     eine E-Mail hinterlegt hat und Mailversand eingerichtet ist). Stand: Admin → Server, Kachel „Laufzeit <Monat>“.
+  - **Desktop-App (Konto-Modus, ab 0.2.6):** jede angemeldete App weckt fly beim Start kurz (Konto prüfen). Diese
+    Hintergrundabrufe – Konto prüfen, Spielbericht (`POST /api/games/report`), Tisch-Status des Host-Links – senden
+    `X-MageLite-Passive: 1` und zählen nicht als Aktivität (nur anonym geweckt → Exit nach 3 min). Decks/Held/Statistik
+    in der App ansehen oder bearbeiten zählt normal. Der Host-Link verbindet erst bei „Zur Lobby“; beim Leerlauf-Exit
+    schließt der Server alle Links mit **4504** („idle“), die App verbindet dann nicht von selbst neu. Das Verbinden
+    allein zählt nicht als Aktivität (nur `resume` mit laufenden Spielen und Spielverkehr).
   - Das Setup liegt nicht auf fly, sondern als GitHub-Release (kein Egress, kein Volume-Platz).
   - Der nächste Aufruf startet die Maschine (die UI zeigt „Server wird gestartet …“). Forge lädt die Kartenskripte bei
     jedem Start: Engine bereit nach ca. 7 s (warm) bis 17 s (kalt), gemessen im Docker-Container mit 2 CPU/4 GB.
@@ -160,11 +166,12 @@ bleibt Lobby, Konto und Vermittler und reicht das Spiel nur durch. Keine Portfre
 1. **Setup laden:** Die Startseite (vor dem Login) verlinkt `MageLite-Setup-<version>.exe` der Server-Version als
    GitHub-Release im öffentlichen Repo `melknoo/magelite-releases` (`MAGELITE_DOWNLOAD_URL` in `fly.toml`,
    hochgeladen von `release.ps1 -Fly` bzw. `scripts\publish-setup.ps1`; braucht `gh`, einmal `gh auth login`).
-2. **In der App „Online spielen“** (Startseite der App): das Fenster lädt `https://magelite.fly.dev`, dort wie im
-   Browser anmelden (Einladungscode oder E-Mail + Passwort). Die App merkt sich das Session-Cookie und bindet ihre
-   lokale Engine ausgehend an den Server (`/ws/host`). In der Lobby zeigt „Tisch eröffnen“ dann **„Auf meinem
-   Rechner“** (sonst ausgegraut mit Hinweis). „Zur App“ in der Navigation führt zurück zur lokalen App; Abmelden
-   trennt den Link.
+2. **In der App anmelden** (ab 0.2.6 beim Start, Konto-Gate; Einladungscode oder E-Mail + Passwort). Die App
+   zeigt dann Decks, Held und Statistik des Kontos. **Konto → „Zur Lobby“** lädt `https://magelite.fly.dev` im Fenster
+   (gleiche Session) und bindet die lokale Engine ausgehend an den Server (`/ws/host`). In der Lobby zeigt „Tisch
+   eröffnen“ dann **„Auf meinem Rechner“** (sonst ausgegraut mit Hinweis). „Zur App“ in der Navigation führt zurück
+   zur lokalen App; Abmelden trennt den Link. „Allein üben“ springt in der App immer zurück in die App (der PC
+   rechnet, gebucht wird aufs Konto).
 3. **Tisch:** Name, Ort (Server / mein Rechner), optional **privat** mit Passwort. Alle Angemeldeten sehen den Tisch
    (Schloss-Symbol bei privaten); Beitritt mit Passwort oder per Einladung (Freunde einladen ersetzt das Passwort).
    Decks kommen aus der Server-Bibliothek jedes Spielers, Bots setzt der Gastgeber wie gewohnt.

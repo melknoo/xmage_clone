@@ -33,6 +33,8 @@ public final class AuthRoutes implements HttpServer.Module {
     private final AccountService accounts;
     /** Server-Modus: hat der Nutzer gerade seine Engine angebunden (Host-Link)? */
     private volatile java.util.function.LongPredicate hostLinked = uid -> false;
+    /** lokal mit {@code --account}: Stand des Online-Kontos; sonst null (Feld fehlt) */
+    private volatile java.util.function.Supplier<Object> accountStatus;
 
     public AuthRoutes(HttpServer.Config config, Auth auth, AccountService accounts) {
         this.config = config;
@@ -42,6 +44,11 @@ public final class AuthRoutes implements HttpServer.Module {
 
     public void setHostLinked(java.util.function.LongPredicate p) {
         this.hostLinked = p;
+    }
+
+    /** Desktop-App mit Konto-Modus: Stand des Online-Kontos fuer {@code /api/me} ({@code account}). */
+    public void setAccountStatus(java.util.function.Supplier<Object> s) {
+        this.accountStatus = s;
     }
 
     @Override
@@ -228,6 +235,10 @@ public final class AuthRoutes implements HttpServer.Module {
                     .orElse(null);
         }
         m.put("session", session);
+        java.util.function.Supplier<Object> acc = accountStatus;
+        if (!config.server() && acc != null) {
+            m.put("account", acc.get());
+        }
         return m;
     }
 }

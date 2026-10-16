@@ -102,6 +102,8 @@ public final class HostLinks implements HttpServer.Module {
     /** Engine-Kennung des Gastgebers beim Verbinden; fehlt sie oder weicht sie ab, schliesst der Server mit 4426. */
     public static final String ENGINE_HEADER = "X-MageLite-Engine";
     public static final String ENGINE_MARKER = "forge/1";
+    /** Leerlauf-Exit: Link endet gewollt, die App verbindet erst bei Bedarf wieder (sonst weckte sie fly sofort neu) */
+    public static final int CLOSE_IDLE = 4504;
 
     public void setListener(Listener l) {
         this.listener = l;
@@ -136,9 +138,8 @@ public final class HostLinks implements HttpServer.Module {
                     LOG.info("Host-Link von " + user.name() + " ersetzt");
                     closeQuiet(old.ctx, 4000, "replaced");
                 }
-                if (auth.countsAsActivity(user)) {
-                    touch.run();
-                }
+                // Verbinden allein haelt die Maschine nicht wach (die App verbindet nach jedem Neustart neu); erst
+                // fortgesetzte Spiele (resume) und Spielverkehr (out) zaehlen als Aktivitaet
                 LOG.info("Host-Link verbunden: " + user.name() + " (" + user.id() + ")");
             });
             ws.onMessage(ctx -> {
@@ -204,6 +205,9 @@ public final class HostLinks implements HttpServer.Module {
                     for (JsonNode n : env.path("games")) {
                         games.add(Json.MAPPER.treeToValue(n, RemoteGameSpec.class));
                     }
+                    if (!games.isEmpty() && auth.countsAsActivity(link.user)) {
+                        touch.run();
+                    }
                     listener.onResume(uid, games);
                 }
                 default -> LOG.debug("Host-Link: unbekannte Nachricht " + env.path("t").asText());
@@ -236,6 +240,17 @@ public final class HostLinks implements HttpServer.Module {
     }
 
     // ------------------------------------------------------------------ API fuer fly
+
+    /** Alle Links schliessen (Leerlauf-Exit), synchron - danach endet der Prozess. */
+    public void closeAll(int code, String reason) {
+        for (Link l : links.values()) {
+            try {
+                l.ctx.closeSession(code, reason);
+            } catch (Exception ignored) {
+                // schon zu
+            }
+        }
+    }
 
     /** Hat das Konto gerade eine Engine angebunden? */
     public boolean has(long userId) {

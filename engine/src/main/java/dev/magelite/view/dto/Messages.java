@@ -144,10 +144,19 @@ public final class Messages {
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    /**
+     * {@code rewardStatus} (nur Konto-Spiele der Desktop-App, sonst weggelassen): {@code pending} = der Server bucht
+     * gerade, das {@code gameOver} kommt mit {@code reward} noch einmal; {@code queued} = Server nicht erreichbar, die
+     * Buchung wird nachgeholt.
+     */
     public record GameOver(String t, UUID winnerId, String result, List<Placement> placements, int turns, long durationMs,
-                           Object reward, String error) {
+                           Object reward, String error, @JsonInclude(JsonInclude.Include.NON_NULL) String rewardStatus) {
         public GameOver(UUID winnerId, String result, List<Placement> placements, int turns, long durationMs, Object reward, String error) {
-            this("gameOver", winnerId, result, placements, turns, durationMs, reward, error);
+            this("gameOver", winnerId, result, placements, turns, durationMs, reward, error, null);
+        }
+
+        public GameOver withReward(Object newReward, String status) {
+            return new GameOver(t, winnerId, result, placements, turns, durationMs, newReward, error, status);
         }
     }
 

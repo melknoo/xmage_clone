@@ -55,6 +55,7 @@ node scripts\e2e-spectate.mjs       # Server-Modus: Zuschauen (braucht MAGELITE_
 node scripts\e2e-admin.mjs          # Server-Modus: Admin-Bereich (Nutzer, Server-Uebersicht, Abmelden/Beenden/Schliessen)
 node scripts\e2e-relay.mjs          # Host-Link: startet selbst 2 Engines (7411 Server, 7412 Host-App), Tisch auf dem eigenen Rechner
 node scripts\e2e-signup.mjs         # Registrierung + Kostenbremsen: startet selbst eine Engine (7421); SIGNUP_SKIP_IDLE=1 spart ~4 min
+node scripts\e2e-account.mjs        # Desktop-App mit Online-Konto: startet selbst 2 Engines (7431 Server, 7432 --account); ACCOUNT_SKIP_IDLE=1 spart ~2,5 min
 node scripts\e2e-flow.mjs [archidekt-url]                     # REST+WS-End-to-End gegen Dev-Engine
 powershell -ExecutionPolicy Bypass -File scripts\publish-setup.ps1 -Setup desktop\dist\MageLite-Setup-<v>.exe   # Setup als GitHub-Release (braucht gh)
 powershell -ExecutionPolicy Bypass -File scripts\deploy-fly.ps1   # Deploy auf fly.io (docs/SERVER.md; prueft vorher vendor/forge)
@@ -123,7 +124,13 @@ Details, Werkzeuge und Debugging: `docs/DEVELOPMENT.md`. Wo welcher Code liegt: 
     um – irreversibel bis auf die Sicherung `magelite.db.xmage-backup`. Die **nicht gepackte App** (`MageLite.cmd`)
     nutzt deshalb `%APPDATA%\MageLite-dev` (Kopie der echten DB per `--seed-db`), die installierte App
     `%APPDATA%\MageLite`; nie eine Dev-Engine auf `%APPDATA%\MageLite` starten.
-14. **GPL:** Installer enthält `LICENSE`, `licenses/`, `SOURCE.txt` (Repo- und Forge-Commit); jede veröffentlichte
+14. **Konto-Modus der Desktop-App** (Engine mit `--account`, setzt `engine.cjs`): angemeldet zeigt die App die Daten
+    des Online-Kontos. Nutzerdaten-Routen (Decks, Profil, Statistik, Verlauf) immer über `AccountGate.wrap`
+    registrieren (`account/AccountProxy` reicht sie an fly durch); nie still auf lokale Daten ausweichen (Fehler bzw.
+    Gate). Konto-Spiele schreiben nichts in die lokale DB (Reward-Hook `AccountReporter`, Bericht an
+    `POST /api/games/report`). Hintergrundabrufe an fly mit `X-MageLite-Passive: 1`. Ohne `--account` (Dev-Engine,
+    Spikes, e2e-relay) bleibt alles lokal wie früher.
+15. **GPL:** Installer enthält `LICENSE`, `licenses/`, `SOURCE.txt` (Repo- und Forge-Commit); jede veröffentlichte
     Version braucht einen gepushten Commit (vor `package.ps1`/`release.ps1` committen).
 
 ## Verifizieren, bevor du „fertig“ sagst

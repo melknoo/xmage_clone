@@ -12,6 +12,7 @@ import { DeckTile, ImportTile } from './decks/DeckTile'
 import { FolderHeader, loadCollapsed, saveCollapsed } from './decks/FolderHeader'
 import { DeleteDeckDialog } from './decks/DeleteDeckDialog'
 import { ImportDialog } from './decks/ImportDialog'
+import { LocalDecksCard } from './decks/LocalDecksCard'
 
 /** Ablageziel: Ordner, optional neben einem Deck (after = dahinter); ohne id = ans Ende des Ordners */
 type DropTarget = { folder: string; id?: number; after?: boolean }
@@ -201,6 +202,8 @@ export function DecksScreen() {
             </Button>
           )}
         </div>
+
+        <LocalDecksCard />
 
         {empty ? (
           <EmptyState

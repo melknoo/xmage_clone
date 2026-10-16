@@ -35,6 +35,8 @@ public final class Auth {
     public static final String ATTR = "user";
     /** Request-Attribut: Hash des Session-Tokens (fuer Logout / "andere Sessions beenden") */
     public static final String SESSION_ATTR = "sessHash";
+    /** {@code 1} = Hintergrundabruf (Desktop-App), zaehlt nicht als Aktivitaet fuer den Leerlauf-Exit */
+    public static final String PASSIVE_HEADER = "X-MageLite-Passive";
     private static final int LOGIN_LIMIT = 10;
     private static final long LOGIN_WINDOW_MS = 60_000;
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { create } from 'zustand'
 import { profileApi, type Profile } from '../../api/profile'
-import { useAuth } from '../../store/auth'
+import { accountKeyOf, useAuth } from '../../store/auth'
 
 export interface ProfileHook {
   /** null = noch nicht geladen oder Fehler */
@@ -14,11 +14,11 @@ export interface ProfileHook {
 
 /**
  * Geteilter Cache: HeroHeader und QuickStartCard lesen dasselbe Profil (eine Anfrage), und beim
- * Zurueckkehren auf den Held steht sofort der letzte Stand da. `owner` = Nutzer-ID, damit nach einem
- * Kontowechsel (Server-Modus) nie das Profil des vorigen Nutzers erscheint.
+ * Zurueckkehren auf den Held steht sofort der letzte Stand da. `owner` = Nutzer-ID plus Online-Konto der Desktop-App,
+ * damit nach einem Kontowechsel (Server-Modus, Desktop an/ab/offline) nie das Profil des vorigen Kontos erscheint.
  */
 interface ProfileCache {
-  owner: number | null
+  owner: string | null
   profile: Profile | null
   loading: boolean
 }
@@ -26,9 +26,9 @@ interface ProfileCache {
 const useProfileCache = create<ProfileCache>(() => ({ owner: null, profile: null, loading: false }))
 
 let inflight: Promise<void> | null = null
-let inflightOwner: number | null = null
+let inflightOwner: string | null = null
 
-function load(owner: number): Promise<void> {
+function load(owner: string): Promise<void> {
   if (inflight && inflightOwner === owner) return inflight
   inflightOwner = owner
   useProfileCache.setState((s) => (s.owner === owner ? { loading: true } : { owner, profile: null, loading: true }))
@@ -50,8 +50,8 @@ function load(owner: number): Promise<void> {
 
 /** Held laden (GET /api/profile) und umbenennen (PUT /api/profile). Laedt beim Mounten neu (Cache sofort). */
 export function useProfile(): ProfileHook {
-  // lokal immer derselbe Nutzer; Server-Modus: angemeldeter Nutzer
-  const owner = useAuth((s) => s.me?.id ?? 0)
+  // lokal derselbe Nutzer (Desktop-App: lokal oder Online-Konto); Server-Modus: angemeldeter Nutzer
+  const owner = useAuth((s) => `${s.me?.id ?? 0}|${accountKeyOf(s.account)}`)
   const cacheOwner = useProfileCache((s) => s.owner)
   const cached = useProfileCache((s) => s.profile)
   const loading = useProfileCache((s) => s.loading)

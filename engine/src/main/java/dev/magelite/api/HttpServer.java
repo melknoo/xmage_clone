@@ -1,6 +1,7 @@
 package dev.magelite.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.account.AccountGames;
 import dev.magelite.auth.Limits;
 import dev.magelite.auth.User;
 import dev.magelite.deck.DeckResolver;
@@ -114,6 +115,8 @@ public final class HttpServer {
     private volatile java.util.function.LongPredicate seatedAtTable = uid -> false;
     /** Server-Modus: Spiele auf den Rechnern von Gastgebern (Host-Link); lokal null */
     private volatile RemoteGames remoteGames;
+    private volatile AccountGate accountGate = AccountGate.LOCAL;
+    private volatile AccountGames accountGames;
     private ScheduledExecutorService spectatorWatch;
     private Javalin app;
 
@@ -146,6 +149,16 @@ public final class HttpServer {
     public void setSpectatePolicy(Function<UUID, Optional<String>> policy, java.util.function.LongPredicate seatedAtTable) {
         this.spectatePolicy = policy;
         this.seatedAtTable = seatedAtTable;
+    }
+
+    /** Desktop-App mit Online-Konto: Nutzerdaten durchreichen (vor {@link #start} setzen). */
+    public void setAccountGate(AccountGate gate) {
+        this.accountGate = gate;
+    }
+
+    /** Desktop-App mit Online-Konto: Spielstart mit Konto-Decks und Bericht an den Server. */
+    public void setAccountGames(AccountGames games) {
+        this.accountGames = games;
     }
 
     /** Server-Modus: Relay-Spiele (Host-Link) fuer {@code /ws/game}, {@code /api/games/current} und die Belegung. */
@@ -203,8 +216,9 @@ public final class HttpServer {
         app.before("/api/*", ctx -> {
             auth.filter(ctx);
             // erst nach dem Filter: nur angemeldete (und vom Budget zugelassene) Nutzer halten die Maschine wach
+            // Hintergrundabrufe der Desktop-App (Konto pruefen, Spielbericht, Tisch-Status) wecken, halten aber nicht wach
             User u = ctx.attribute(Auth.ATTR);
-            if (u != null && auth.countsAsActivity(u)) {
+            if (u != null && auth.countsAsActivity(u) && !"1".equals(ctx.header(Auth.PASSIVE_HEADER))) {
                 lastActivity = System.currentTimeMillis();
             }
         });
@@ -221,8 +235,10 @@ public final class HttpServer {
         app.get("/api/health", ctx -> ctx.json(Map.of("ok", true, "version", config.version(),
                 "mode", config.server() ? "server" : "local", "games", runningGames())));
         app.get("/api/samples", ctx -> ctx.json(samples.list()));
-        app.get("/api/decks", ctx -> ctx.json(deckStore.list(Auth.user(ctx).id())));
-        app.get("/api/decks/{id}", ctx -> {
+        // Nutzerdaten: in der Desktop-App mit Online-Konto vom Server (AccountGate)
+        AccountGate gate = accountGate;
+        app.get("/api/decks", gate.wrap(ctx -> ctx.json(deckStore.list(Auth.user(ctx).id()))));
+        app.get("/api/decks/{id}", gate.wrap(ctx -> {
             long userId = Auth.user(ctx).id();
             long id = Long.parseLong(ctx.pathParam("id"));
             DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck nicht gefunden"));
@@ -230,8 +246,8 @@ public final class HttpServer {
             out.put("deck", d);
             out.put("dck", deckStore.getDck(userId, id).orElse(""));
             ctx.json(out);
-        });
-        app.delete("/api/decks/{id}", ctx -> ctx.json(Map.of("deleted", deckStore.delete(Auth.user(ctx).id(), Long.parseLong(ctx.pathParam("id"))))));
+        }));
+        app.delete("/api/decks/{id}", gate.wrap(ctx -> ctx.json(Map.of("deleted", deckStore.delete(Auth.user(ctx).id(), Long.parseLong(ctx.pathParam("id")))))));
 
         app.post("/api/games", this::createGame);
         app.get("/api/games/current", ctx -> {
@@ -463,13 +479,17 @@ public final class HttpServer {
     private void createGame(Context ctx) throws Exception {
         User user = Auth.user(ctx);
         Limits.requireServerGames(user, "Spiele gegen Bots laufen für dich in der App auf deinem Rechner");
+        // Desktop-App mit Online-Konto: eigene Decks aus dem Konto, Ergebnis an den Server (null = lokales Spiel)
+        AccountGames ag = accountGames;
+        AccountGames.Start account = ag == null ? null : ag.begin();
+        DeckResolver.DeckSource own = account == null ? null : account.decks();
         JsonNode body = Json.MAPPER.readTree(ctx.body());
         JsonNode deckSpec = body.path("deck");
         Long humanDeckId = "user".equals(deckSpec.path("type").asText()) ? deckSpec.path("id").asLong() : null;
-        LoadedDeck humanDeck = resolveDeck(user.id(), deckSpec, null);
+        LoadedDeck humanDeck = resolveDeck(user.id(), deckSpec, null, own);
 
         TempoSettings.Preset tempo = TempoSettings.Preset.valueOf(body.path("tempo").asText("NORMAL").toUpperCase(Locale.ROOT));
-        String name = body.path("playerName").asText(config.server() ? user.name() : "Du");
+        String name = body.path("playerName").asText(config.server() ? user.name() : account != null ? account.playerName() : "Du");
         // Test-Situationen (z.B. lange Trigger-Ketten) nur in der Dev-Engine, nie im Release oder auf dem Server
         String scenario = body.hasNonNull("scenario") ? body.get("scenario").asText() : null;
         if (scenario != null && (!config.dev() || !Scenarios.exists(scenario))) {
@@ -494,25 +514,37 @@ public final class HttpServer {
                 long uid = h.path("userId").asLong();
                 JsonNode ds = h.has("deck") ? h.get("deck") : Json.MAPPER.createObjectNode().put("type", "random");
                 Long did = "user".equals(ds.path("type").asText()) ? ds.path("id").asLong() : null;
-                seatSpecs.add(GameSetup.SeatSpec.human(uid, h.path("name").asText("Spieler " + uid), resolveDeck(uid, ds, null), did));
+                seatSpecs.add(GameSetup.SeatSpec.human(uid, h.path("name").asText("Spieler " + uid), resolveDeck(uid, ds, null, own), did));
             }
         }
         List<String> usedSamples = new ArrayList<>();
         JsonNode botSpecs = body.path("bots");
         for (int i = 0; seatSpecs.size() < 4; i++) {
             JsonNode spec = botSpecs.isArray() && botSpecs.size() > i ? botSpecs.get(i) : Json.MAPPER.createObjectNode().put("type", "random");
-            seatSpecs.add(GameSetup.SeatSpec.bot(resolveDeck(user.id(), spec, usedSamples)));
+            seatSpecs.add(GameSetup.SeatSpec.bot(resolveDeck(user.id(), spec, usedSamples, own)));
         }
 
+        GameHost.RewardHook accountHook = account == null ? null : account.hook();
         GameHost host = games.start(new GameSetup(seatSpecs, tempo), onGameFinished,
-                scenario == null ? null : h -> h.setScenario(Scenarios.hooks(scenario)));
+                scenario == null && accountHook == null ? null : h -> {
+                    if (accountHook != null) {
+                        h.setRewardHook(accountHook); // nichts in die lokale DB, der Server bucht
+                    }
+                    if (scenario != null) {
+                        h.setScenario(Scenarios.hooks(scenario));
+                    }
+                });
         onGameStarted.started(host, humanDeckId);
         ctx.json(Map.of("gameId", host.getId()));
     }
 
-    /** Deck eines Sitzes (eigenes, Sample, Zufall) - eine Logik mit den Tischen ({@link DeckResolver}). */
-    private LoadedDeck resolveDeck(long userId, JsonNode spec, List<String> usedSamples) throws Exception {
-        return deckResolver.resolve(userId, spec, usedSamples);
+    /**
+     * Deck eines Sitzes (eigenes, Sample, Zufall) - eine Logik mit den Tischen ({@link DeckResolver}).
+     *
+     * @param own Herkunft eigener Decks (Online-Konto); null = lokale Bibliothek
+     */
+    private LoadedDeck resolveDeck(long userId, JsonNode spec, List<String> usedSamples, DeckResolver.DeckSource own) throws Exception {
+        return own == null ? deckResolver.resolve(userId, spec, usedSamples) : deckResolver.resolve(userId, spec, usedSamples, own);
     }
 
     // ------------------------------------------------------------------ WebSocket

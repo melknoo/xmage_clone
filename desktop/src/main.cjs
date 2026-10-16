@@ -61,11 +61,17 @@ function uiUrl(info) {
   return DEV_UI ? `http://localhost:5173/?${q}` : `http://127.0.0.1:${info.port}/?${q}`
 }
 
-// ---------------------------------------------------------------- Host-Link
-// Der Online-Server laeuft im selben Fenster. Nach der Anmeldung dort liegt das Session-Cookie (ml_sess, HttpOnly -
-// aus dem Hauptprozess lesbar) in der Electron-Session; wir melden es der lokalen Engine, die sich ausgehend an den
-// Server haengt (Tische auf diesem Rechner). Cookie weg (Abmelden) -> Link trennen.
-let linkedSession = null
+// ---------------------------------------------------------------- Online-Konto
+// Die App zeigt angemeldet die Daten des Online-Kontos (Decks, Held, Statistik), Spiele laufen trotzdem lokal. Die
+// Session ist das Cookie ml_sess des Servers in der Electron-Session (HttpOnly - nur hier lesbar); wir melden es der
+// Engine (/api/account/sync), die damit Kontodaten holt und den Host-Link (Tische auf diesem Rechner) bei Bedarf
+// verbindet. Ohne Cookie zeigt die UI das Login-Gate, "Offline spielen" nutzt die lokalen Daten.
+/** zuletzt an die Engine gemeldete Session (undefined = noch nie) */
+let syncedSession
+/** "Offline spielen" gewaehlt (nur diese Sitzung) */
+let offline = false
+/** Registrieren/Passwort vergessen auf der Server-Seite: sobald dort ein Login klappt, zurueck zur App */
+let pendingLogin = false
 let syncTimer = null
 
 async function localApi(method, apiPath, body) {
@@ -79,58 +85,126 @@ async function localApi(method, apiPath, body) {
   return res.json()
 }
 
-async function syncHostLink() {
+async function currentSession() {
+  const cookies = await session.defaultSession.cookies.get({ url: settings.serverUrl, name: 'ml_sess' })
+  return cookies.find((c) => c.value)?.value ?? null
+}
+
+/** Session (oder ihr Fehlen) der Engine melden; force = auch ohne Aenderung (Start, Engine-Neustart, Offline). */
+async function syncAccount(force = false) {
   if (!engineInfo) return
-  let token = null
+  let token
   try {
-    const cookies = await session.defaultSession.cookies.get({ url: settings.serverUrl, name: 'ml_sess' })
-    token = cookies.find((c) => c.value)?.value ?? null
+    token = await currentSession()
   } catch (e) {
     log(`Cookie lesen: ${e.message}`)
     return
   }
-  if (token === linkedSession) return
+  if (!force && token === syncedSession) return
   try {
-    if (token) {
-      await localApi('POST', '/api/host/link', { server: settings.serverUrl, session: token })
-      log(`Host-Link an ${settings.serverUrl} angefordert`)
-    } else {
-      await localApi('DELETE', '/api/host/link')
-      log('Host-Link getrennt (abgemeldet)')
-    }
-    linkedSession = token
+    const st = await localApi('POST', '/api/account/sync', { server: settings.serverUrl, session: token, offline })
+    syncedSession = token
+    log(`Konto: ${token ? 'Session gemeldet' : 'nicht angemeldet'}${offline ? ' (offline)' : ''} -> ${st.state}`)
   } catch (e) {
-    log(`Host-Link: ${e.message}`)
+    log(`Konto-Sync: ${e.message}`)
   }
 }
 
 function scheduleSync(delay = 300) {
   clearTimeout(syncTimer)
-  syncTimer = setTimeout(() => void syncHostLink(), delay)
+  syncTimer = setTimeout(() => void syncAccount(), delay)
+}
+
+/** Entwickler: MAGELITE_DEV_SESSION=<Token> simuliert eine Anmeldung (vor dem ersten Sync setzen). */
+async function setDevSession() {
+  const dev = process.env.MAGELITE_DEV_SESSION
+  if (!dev) return
+  try {
+    await session.defaultSession.cookies.set({ url: settings.serverUrl, name: 'ml_sess', value: dev, httpOnly: true, sameSite: 'lax' })
+    log('Dev-Session gesetzt')
+  } catch (e) {
+    log(`Dev-Session: ${e.message}`)
+  }
 }
 
 function watchCookies() {
-  session.defaultSession.cookies.on('changed', (_e, cookie) => {
-    if (cookie.name === 'ml_sess') scheduleSync()
+  session.defaultSession.cookies.on('changed', (_e, cookie, _cause, removed) => {
+    if (cookie.name !== 'ml_sess') return
+    if (!removed && cookie.value) {
+      offline = false
+      if (pendingLogin) {
+        // Login auf der Server-Seite (nach Registrieren/Passwort vergessen) geklappt: zurueck in die App
+        pendingLogin = false
+        void syncAccount(true).then(() => openLocal())
+        return
+      }
+    }
+    scheduleSync()
   })
-  setInterval(() => void syncHostLink(), 30_000)
-  // Entwickler: MAGELITE_DEV_SESSION=<Token> simuliert eine Anmeldung auf dem Server (Host-Link-Test ohne Klicks)
-  const dev = process.env.MAGELITE_DEV_SESSION
-  if (dev) {
-    session.defaultSession.cookies
-      .set({ url: settings.serverUrl, name: 'ml_sess', value: dev, httpOnly: true, sameSite: 'lax' })
-      .then(() => log('Dev-Session gesetzt'))
-      .catch((e) => log(`Dev-Session: ${e.message}`))
+  setInterval(() => void syncAccount(), 30_000)
+}
+
+/** ml_sess aus den Set-Cookie-Zeilen der Login-Antwort */
+function sessionFromSetCookie(res) {
+  const lines = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [res.headers.get('set-cookie') || '']
+  for (const line of lines) {
+    const m = /(?:^|[;,]\s*)ml_sess=([^;,\s]+)/.exec(line)
+    if (m) return m[1]
   }
+  return null
+}
+
+/**
+ * Login aus dem Gate der App ({code} oder {email, password}): POST /api/auth/login am Server, Session-Cookie in die
+ * Electron-Session, Engine informieren. Der Renderer sieht das Token nie.
+ */
+async function loginOnline(creds) {
+  const body = creds && creds.code ? { code: String(creds.code) } : { email: String(creds?.email ?? ''), password: String(creds?.password ?? '') }
+  let res
+  try {
+    res = await fetch(`${settings.serverUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(40_000),
+    })
+  } catch (e) {
+    log(`Login: ${e.message}`)
+    return { ok: false, status: 0, error: 'Server nicht erreichbar – später nochmal versuchen' }
+  }
+  let data = {}
+  try {
+    data = await res.json()
+  } catch {
+    /* kein JSON (fly-Proxy) */
+  }
+  if (!res.ok) {
+    return { ok: false, status: res.status, error: data.error || `Anmeldung fehlgeschlagen (HTTP ${res.status})`, unverified: !!data.unverified }
+  }
+  const token = sessionFromSetCookie(res)
+  if (!token) return { ok: false, status: 500, error: 'Der Server hat keine Sitzung geliefert' }
+  await session.defaultSession.cookies.set({
+    url: settings.serverUrl,
+    name: 'ml_sess',
+    value: token,
+    httpOnly: true,
+    secure: settings.serverUrl.startsWith('https:'),
+    sameSite: 'lax',
+    expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 3600,
+  })
+  offline = false
+  pendingLogin = false
+  await syncAccount(true)
+  log(`Angemeldet als ${data.user?.name ?? '?'}`)
+  return { ok: true }
 }
 
 /**
  * Online abmelden aus der lokalen App (Konto-Menue): Session am Server beenden (best effort; Node-fetch, weil das
- * Cookie dort per Header mitgeht), Cookie loeschen, Link trennen. Laufende Relay-Spiele enden mit dem Link.
+ * Cookie dort per Header mitgeht), Cookie loeschen, Engine informieren (-> Gate). Laufende Relay-Spiele enden.
  */
 async function logoutOnline() {
-  const cookies = await session.defaultSession.cookies.get({ url: settings.serverUrl, name: 'ml_sess' })
-  const token = cookies.find((c) => c.value)?.value
+  const token = await currentSession()
   if (token) {
     try {
       const res = await fetch(`${settings.serverUrl}/api/auth/logout`, {
@@ -144,20 +218,50 @@ async function logoutOnline() {
     }
   }
   await session.defaultSession.cookies.remove(settings.serverUrl, 'ml_sess')
-  await syncHostLink()
+  await syncAccount(true)
 }
 
-function openOnline() {
+/** Aus "Offline" wieder anmelden: gemerkte Session pruefen (ohne Session zeigt die UI das Gate). */
+async function goOnline() {
+  offline = false
+  await syncAccount(true)
+}
+
+/** "Offline spielen": lokale Daten bis zum naechsten Login bzw. Neustart. */
+async function goOffline() {
+  offline = true
+  pendingLogin = false
+  await syncAccount(true)
+}
+
+/**
+ * Server-Seite im Fenster laden. {hash}: Unterseite des Logins ("signup", "forgot") - danach geht es nach dem Login
+ * automatisch zurueck zur App. Ohne hash ("Zur Lobby"): Host-Link wecken, damit Tische auf diesem Rechner gehen.
+ */
+async function openOnline(opts) {
   if (!win) return
-  log(`Online: ${settings.serverUrl}`)
-  win.loadURL(settings.serverUrl).catch((e) => {
+  const hash = opts && typeof opts.hash === 'string' && /^[a-z]+$/.test(opts.hash) ? opts.hash : null
+  pendingLogin = !!hash
+  if (!hash) {
+    try {
+      await localApi('POST', '/api/account/wake')
+    } catch (e) {
+      log(`Host-Link wecken: ${e.message}`)
+    }
+  }
+  const url = hash ? `${settings.serverUrl}/#${hash}` : settings.serverUrl
+  log(`Online: ${url}`)
+  win.loadURL(url).catch((e) => {
     log(`Online-Server nicht erreichbar: ${e.message}`)
+    pendingLogin = false
     dialog.showErrorBox('MageLite', `Der Server ${settings.serverUrl} ist gerade nicht erreichbar.\n\n${e.message}`)
     if (engineInfo) win.loadURL(uiUrl(engineInfo)).catch(() => undefined)
   })
 }
 
-function openLocal() {
+async function openLocal(opts) {
+  pendingLogin = false
+  if (opts && opts.offline) await goOffline()
   if (win && engineInfo) win.loadURL(uiUrl(engineInfo)).catch((e) => log(`Lokale UI: ${e.message}`))
 }
 
@@ -175,7 +279,7 @@ async function boot() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       sandbox: true,
-      additionalArguments: [`--ml-version=${app.getVersion()}`],
+      additionalArguments: [`--ml-version=${app.getVersion()}`, `--ml-server=${serverOrigin()}`],
     },
   })
   // Nur die lokale UI und der eingestellte Online-Server duerfen im Fenster laufen; alles andere in den Browser
@@ -212,14 +316,15 @@ async function boot() {
   engine = new Engine(app, log, DEV_DATA ? path.join(INSTALLED_USER_DATA, 'engine', 'magelite.db') : null)
   engine.onExit = async (code) => {
     engineInfo = null
-    linkedSession = null
+    syncedSession = undefined
     if (restarts++ < 2) {
       log('Engine abgestuerzt - starte neu')
       try {
         const info = await engine.start()
         engineInfo = info
+        syncedSession = undefined
+        await syncAccount(true) // neue Engine kennt die Session noch nicht
         await win.loadURL(uiUrl(info))
-        scheduleSync()
       } catch (e) {
         fail(e)
       }
@@ -230,18 +335,23 @@ async function boot() {
   try {
     const info = await engine.start()
     engineInfo = info
-    await win.loadURL(uiUrl(info))
+    // erst die Session melden, dann die UI laden: sie zeigt sofort Konto oder Login statt "pruefen"
+    await setDevSession()
     watchCookies()
-    scheduleSync()
+    await syncAccount(true)
+    await win.loadURL(uiUrl(info))
     autoShot()
   } catch (e) {
     fail(e)
   }
 }
 
-ipcMain.on('magelite:openOnline', () => openOnline())
-ipcMain.on('magelite:openLocal', () => openLocal())
+ipcMain.on('magelite:openOnline', (_e, opts) => void openOnline(opts))
+ipcMain.on('magelite:openLocal', (_e, opts) => void openLocal(opts))
 ipcMain.handle('magelite:logoutOnline', () => logoutOnline())
+ipcMain.handle('magelite:loginOnline', (_e, creds) => loginOnline(creds))
+ipcMain.handle('magelite:goOffline', () => goOffline())
+ipcMain.handle('magelite:goOnline', () => goOnline())
 
 // Entwickler: MAGELITE_AUTOSHOT=<datei.png>;<ms> speichert nach <ms> einen Screenshot und beendet die App
 function autoShot() {

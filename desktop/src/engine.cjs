@@ -66,6 +66,8 @@ class Engine {
       `--forge=${forge}`,
       `--ui=${ui}`,
       `--parent-pid=${process.pid}`,
+      // Online-Konto: angemeldet zeigt die App Decks/Held/Statistik des Kontos (main.cjs meldet die Session)
+      '--account',
     ]
     if (this.seedDb && fs.existsSync(this.seedDb) && path.resolve(this.seedDb) !== path.resolve(dataDir, 'magelite.db')) {
       args.push(`--seed-db=${this.seedDb}`)

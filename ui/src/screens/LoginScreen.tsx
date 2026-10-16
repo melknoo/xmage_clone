@@ -33,7 +33,15 @@ const SIGNUP_CLOSED_TEXT: Record<Exclude<AuthOptions['signup'], 'open' | 'closed
   budget: 'Das Server-Kontingent für diesen Monat ist aufgebraucht. Ab dem 1. geht es weiter – bis dahin läuft MageLite als App auf deinem PC.',
 }
 
+/** Desktop-App oeffnet den Login direkt auf einer Unterseite (#signup, #forgot) */
+function hashView(): 'signup' | 'forgot' | null {
+  const h = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''
+  return h === 'signup' || h === 'forgot' ? h : null
+}
+
 function loadTab(): Tab {
+  const h = hashView()
+  if (h) return h === 'signup' ? 'signup' : 'email'
   try {
     const t = localStorage.getItem('magelite.loginTab')
     return t === 'email' || t === 'signup' ? t : 'code'
@@ -55,7 +63,7 @@ export function LoginScreen() {
   const resetToken = useAuth((s) => s.resetToken)
   const version = useConn((s) => s.version)
   const [tab, setTabState] = useState<Tab>(loadTab)
-  const [view, setView] = useState<View>('form')
+  const [view, setView] = useState<View>(() => (hashView() === 'forgot' ? 'forgot' : 'form'))
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -65,8 +73,6 @@ export function LoginScreen() {
   const [captchaKey, setCaptchaKey] = useState(0)
   const [formError, setFormError] = useState<string | null>(null)
   const [sentTo, setSentTo] = useState('')
-  const [artOk, setArtOk] = useState(true)
-  const [artLoaded, setArtLoaded] = useState(false)
   const [download, setDownload] = useState<DownloadInfo | null>(null)
   const inDesktop = typeof window !== 'undefined' && !!window.mageliteDesktop
 
@@ -296,6 +302,12 @@ export function LoginScreen() {
             </a>
           </span>
 
+          {inDesktop && (
+            <Button variant="ghost" icon="desktop" onClick={() => window.mageliteDesktop?.openLocal()} testId="login-back-to-app" style={{ alignSelf: 'flex-start' }}>
+              Zurück zur App
+            </Button>
+          )}
+
           {download?.available && download.url && !inDesktop && (
             <a
               href={download.url}
@@ -318,19 +330,28 @@ export function LoginScreen() {
         </div>
       </div>
 
-      <div className="relative overflow-hidden bg-bg-3" aria-hidden>
-        {artOk && (
-          <img
-            src={LOGIN_ART}
-            alt=""
-            draggable={false}
-            className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-3 ${artLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setArtLoaded(true)}
-            onError={() => setArtOk(false)}
-          />
-        )}
-        <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, var(--color-bg-1), rgba(18,17,16,.35) 40%, rgba(18,17,16,.2))' }} />
-      </div>
+      <LoginArt />
+    </div>
+  )
+}
+
+/** Rechte Haelfte der Login-Screens: Commander-Art mit Verlauf (auch im Konto-Gate der Desktop-App). */
+export function LoginArt() {
+  const [artOk, setArtOk] = useState(true)
+  const [artLoaded, setArtLoaded] = useState(false)
+  return (
+    <div className="relative overflow-hidden bg-bg-3" aria-hidden>
+      {artOk && (
+        <img
+          src={LOGIN_ART}
+          alt=""
+          draggable={false}
+          className={`absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-3 ${artLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setArtLoaded(true)}
+          onError={() => setArtOk(false)}
+        />
+      )}
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg, var(--color-bg-1), rgba(18,17,16,.35) 40%, rgba(18,17,16,.2))' }} />
     </div>
   )
 }

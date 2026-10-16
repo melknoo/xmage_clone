@@ -14,13 +14,24 @@ import java.util.Random;
  */
 public final class DeckResolver {
 
+    /** Herkunft eigener Decks: lokale Bibliothek oder (Desktop-App mit Online-Konto) die des Kontos. */
+    public interface DeckSource {
+        /** @return Name und Decktext v2, leer wenn das Deck dem Nutzer nicht gehoert */
+        Optional<Owned> load(long userId, long id) throws Exception;
+    }
+
+    public record Owned(String name, String text) {
+    }
+
     private final DeckStore deckStore;
     private final SampleDeckCatalog samples;
     private final Random random = new Random();
+    private final DeckSource local;
 
     public DeckResolver(DeckStore deckStore, SampleDeckCatalog samples) {
         this.deckStore = deckStore;
         this.samples = samples;
+        this.local = (userId, id) -> deckStore.get(userId, id).flatMap(d -> deckStore.getDck(userId, id).map(t -> new Owned(d.name(), t)));
     }
 
     /** Deck-id, falls es ein gespeichertes Deck des Nutzers ist (fuer Meisterschaft/Statistik). */
@@ -32,13 +43,17 @@ public final class DeckResolver {
      * @param usedSamples schon vergebene Sample-Decks dieses Spiels (null = nicht mitzaehlen)
      */
     public LoadedDeck resolve(long userId, JsonNode spec, List<String> usedSamples) throws Exception {
+        return resolve(userId, spec, usedSamples, local);
+    }
+
+    /** @param own Herkunft fuer {@code {type:"user"}} (lokal oder Online-Konto) */
+    public LoadedDeck resolve(long userId, JsonNode spec, List<String> usedSamples, DeckSource own) throws Exception {
         String type = spec == null ? "random" : spec.path("type").asText("random");
         switch (type) {
             case "user" -> {
                 long id = spec.path("id").asLong();
-                DeckStore.StoredDeck d = deckStore.get(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
-                String text = deckStore.getDck(userId, id).orElseThrow();
-                return DeckLoader.fromText(text, d.name(), "user:" + id);
+                Owned d = own.load(userId, id).orElseThrow(() -> new IllegalArgumentException("Deck " + id + " nicht gefunden"));
+                return DeckLoader.fromText(d.text(), d.name(), "user:" + id);
             }
             case "sample" -> {
                 String id = spec.path("id").asText();

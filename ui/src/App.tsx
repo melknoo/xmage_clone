@@ -6,6 +6,7 @@ import { Toaster } from './components/Toaster'
 import { useCatalogStore } from './decks/catalog'
 import { GameScreen } from './game/GameScreen'
 import { screenFade } from './lib/motion'
+import { AccountGate } from './screens/AccountGate'
 import { AccountScreen } from './screens/AccountScreen'
 import { AdminScreen } from './screens/AdminScreen'
 import { BudgetScreen } from './screens/BudgetScreen'
@@ -20,10 +21,10 @@ import { BootScreen, type BootPhase } from './shell/BootScreen'
 import { ConnectionBarSlot } from './shell/ConnectionBarSlot'
 import { NavRail } from './shell/NavRail'
 import { InviteCard } from './social/InviteCard'
-import { takeHashParam, takeInviteFromUrl, useAuth } from './store/auth'
+import { accountGated, accountKeyOf, takeHashParam, takeInviteFromUrl, useAuth } from './store/auth'
 import { onConnectionRecovered, useConn } from './store/conn'
 import { useGame } from './store/game'
-import { useNav } from './store/nav'
+import { setSetupAccount, useNav } from './store/nav'
 import { useSocial } from './store/social'
 import { useTable } from './store/table'
 import { pushToast } from './store/ui'
@@ -64,6 +65,17 @@ async function resumeSession(stopped: () => boolean) {
   if (!stopped()) await resumeTable(stopped)
 }
 
+// Desktop-App: anderes Konto (angemeldet, offline, gewechselt) = andere Decks/ids -> Deck-Katalog und gemerktes Setup
+// umschalten. Synchron beim Store-Update (vor dem naechsten Render), damit nie kurz die Decks des alten Kontos erscheinen.
+let accountKey = 'local'
+useAuth.subscribe((s) => {
+  const key = accountKeyOf(s.account)
+  if (key === accountKey) return
+  accountKey = key
+  setSetupAccount(key)
+  useCatalogStore.getState().reset()
+})
+
 /** Social-Snapshot: eigener Tisch (Feld kommt von O1; undefined = noch nicht bekannt/unterstuetzt) */
 function selectMyTableId(s: unknown): string | null | undefined {
   const m = (s as { loaded?: boolean; myTable?: { id: string } | null }).myTable
@@ -78,6 +90,8 @@ export function App() {
   const mode = useAuth((s) => s.mode)
   const budgetLimited = useAuth((s) => s.budgetLimited)
   const resetToken = useAuth((s) => s.resetToken)
+  const account = useAuth((s) => s.account)
+  const accountState = account?.state ?? null
   const version = useConn((s) => s.version)
   /** wait: Engine/Server noch nicht erreichbar · account: erreichbar, Anmeldung/Spiel/Tisch wird geprueft */
   const [engine, setEngine] = useState<EngineState>('wait')
@@ -96,6 +110,13 @@ export function App() {
       useCatalogStore.getState().reset()
     } else social.stop()
   }, [socialOn, authStatus])
+
+  // Desktop-App: Konto wird geprueft (fly startet evtl. kalt) - nachfragen, bis es feststeht
+  useEffect(() => {
+    if (accountState !== 'CHECKING') return
+    const h = window.setInterval(() => void useAuth.getState().refreshAccount(), 800)
+    return () => window.clearInterval(h)
+  }, [accountState])
 
   // Verbindungsleiste erst nach dem Boot (vorher zeigt der Boot-Screen den Zustand)
   useEffect(() => {
@@ -199,6 +220,10 @@ export function App() {
     body = <BootScreen phase={phase} mode={local ? 'local' : 'server'} version={version ?? undefined} onRetry={() => retryBoot.current()} />
   } else if (authStatus === 'login' || resetToken) {
     body = <LoginScreen />
+  } else if (mode === 'local' && account && accountState === 'CHECKING' && !inGame) {
+    body = <BootScreen phase="online" mode="local" version={version ?? undefined} />
+  } else if (mode === 'local' && accountGated(account) && account && !inGame) {
+    body = <AccountGate account={account} />
   } else if (mode === 'server' && budgetLimited && !(screen === 'game' && gameId)) {
     body = <BudgetScreen />
   } else if (screen === 'game' && gameId) {

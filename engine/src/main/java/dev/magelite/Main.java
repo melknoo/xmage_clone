@@ -1,8 +1,16 @@
 package dev.magelite;
 
+import dev.magelite.account.AccountDecks;
+import dev.magelite.account.AccountGames;
+import dev.magelite.account.AccountLink;
+import dev.magelite.account.AccountProxy;
+import dev.magelite.account.AccountReporter;
+import dev.magelite.account.AccountRoutes;
+import dev.magelite.account.AccountStore;
 import dev.magelite.admin.AdminRoutes;
 import dev.magelite.admin.AdminService;
 import dev.magelite.admin.UptimeBudget;
+import dev.magelite.api.AccountGate;
 import dev.magelite.api.Auth;
 import dev.magelite.api.DownloadRoutes;
 import dev.magelite.api.HttpServer;
@@ -37,6 +45,7 @@ import dev.magelite.relay.RemoteGameSpec;
 import dev.magelite.relay.RemoteGames;
 import dev.magelite.stats.Db;
 import dev.magelite.stats.GameRecorder;
+import dev.magelite.stats.GameReportRoutes;
 import dev.magelite.stats.ProfileService;
 import dev.magelite.stats.StatsRoutes;
 import org.apache.log4j.Logger;
@@ -59,7 +68,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Engine-Host. Wird von Electron gestartet (oder per {@code gradlew run} im Dev-Modus), auf fly im Server-Modus.
  * <p>
- * Args: {@code --port=0 --data=<dir> --forge=<dir> --ui=<dist> --parent-pid=<pid> --dev [--seed-db=<magelite.db>]}
+ * Args: {@code --port=0 --data=<dir> --forge=<dir> --ui=<dist> --parent-pid=<pid> --dev [--seed-db=<magelite.db>] [--account]}
+ * ({@code --account}: Desktop-App mit Online-Konto, siehe {@link AccountLink}).
  * Server-Modus: {@code --server --host=0.0.0.0 --max-games=1 --idle-exit-min=10 --anon-exit-min=3}; Owner-Konto aus
  * {@code MAGELITE_OWNER_CODE} / {@code MAGELITE_OWNER_NAME}; Monatsbudget {@code MAGELITE_BUDGET_HOURS} (Standard 100,
  * Test: {@code --budget-min}), Preis fuer die Anzeige {@code MAGELITE_PRICE_PER_HOUR}.
@@ -146,17 +156,24 @@ public final class Main {
             auth.setBudget(budget);
         }
         HttpServer httpServer = new HttpServer(cfg, auth, games, deckStore, samples);
+        // Desktop-App: angemeldet zeigt sie die Daten des Online-Kontos (Electron meldet die Session)
+        boolean accountMode = !server && opt.containsKey("account");
+        AccountLink account = new AccountLink(accountMode);
+        AccountGate gate = accountMode ? new AccountProxy(account) : AccountGate.LOCAL;
+        httpServer.setAccountGate(gate);
         accounts.setOnRevoke(httpServer::closeSessionsOf);
         AuthRoutes authRoutes = new AuthRoutes(cfg, auth, accounts);
         httpServer.addModule(authRoutes);
         SignupService signup = server ? signupService(opt, data, dev, accounts, budget) : null;
         httpServer.addModule(new SignupRoutes(cfg, auth, accounts, signup));
         httpServer.addModule(new ImageService(data.resolve("cache").resolve("images")));
-        DeckRoutes deckRoutes = new DeckRoutes(deckStore);
+        DeckRoutes deckRoutes = new DeckRoutes(deckStore, gate);
         httpServer.addModule(deckRoutes);
         deckRoutes.backfillBrackets();
-        httpServer.addModule(new StatsRoutes(db, profile));
+        httpServer.addModule(new StatsRoutes(db, profile, gate));
         HostLinkClient hostLink = null;
+        Runnable beforeIdleExit = () -> {
+        };
         if (server) {
             // Host-Link: Engines von Gastgebern haengen sich an (/ws/host); ihre Spiele laufen dort, fly reicht nur durch
             HostLinks hostLinks = new HostLinks(auth, cfg, httpServer::touch);
@@ -165,6 +182,9 @@ public final class Main {
             httpServer.setRemoteGames(remoteGames);
             httpServer.addModule(hostLinks);
             authRoutes.setHostLinked(hostLinks::has);
+            // Solo-Spiele der Desktop-App (liefen auf dem PC des Nutzers) aufs Konto buchen
+            httpServer.addModule(new GameReportRoutes(recorder, deckStore));
+            beforeIdleExit = () -> hostLinks.closeAll(HostLinks.CLOSE_IDLE, "idle");
             // Lobby/Tische: nur online sinnvoll (lokal startet man direkt)
             DeckResolver deckResolver = new DeckResolver(deckStore, samples);
             TableManager tableManager = new TableManager(games, deckResolver);
@@ -190,6 +210,23 @@ public final class Main {
             // Host-Link: diese Engine haengt sich an einen Server (Electron meldet das Session-Cookie)
             hostLink = new HostLinkClient(games);
             httpServer.addModule(new HostLinkRoutes(hostLink));
+            if (accountMode) {
+                AccountStore accountStore = new AccountStore(db);
+                AccountReporter reporter = new AccountReporter(account, accountStore);
+                httpServer.setAccountGames(new AccountGames(account, new AccountDecks(account), reporter));
+                httpServer.addModule(new AccountRoutes(account, accountStore, reporter, deckStore, hostLink));
+                authRoutes.setAccountStatus(account::status);
+                // Host-Link nutzt die Session des Kontos, verbindet aber erst bei Bedarf (Lobby, /api/account/wake)
+                HostLinkClient link = hostLink;
+                account.onChange(l -> {
+                    switch (l.state()) {
+                        case OK -> link.setCredentials(l.server(), l.session());
+                        case NONE, EXPIRED -> link.disconnect();
+                        default -> {
+                        }
+                    }
+                });
+            }
         }
         int port = httpServer.start();
 
@@ -221,7 +258,7 @@ public final class Main {
             Optional.ofNullable(opt.get("parent-pid")).map(Long::parseLong).ifPresent(Main::watchParent);
         }
         if (idleExitMin > 0 || budget != null) {
-            watchIdle(httpServer, games, idleExitMin, anonExitMin, budget);
+            watchIdle(httpServer, games, idleExitMin, anonExitMin, budget, beforeIdleExit);
         }
 
         Map<String, Object> ready = new LinkedHashMap<>();
@@ -334,7 +371,8 @@ public final class Main {
      * Verwaiste Spiele (Tab geschlossen, Spiel wartet auf den Menschen) werden nach {@code minutes} ohne verbundenen
      * Client abgebrochen, sonst hielte das Spiel die Maschine ewig wach. Jede Minute Laufzeit geht ins Monatsbudget.
      */
-    private static void watchIdle(HttpServer server, GameRegistry games, int minutes, int anonMinutes, UptimeBudget budget) {
+    private static void watchIdle(HttpServer server, GameRegistry games, int minutes, int anonMinutes, UptimeBudget budget,
+                                  Runnable beforeExit) {
         ScheduledExecutorService ses = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "idle-watchdog");
             t.setDaemon(true);
@@ -369,6 +407,11 @@ public final class Main {
             Logger.getLogger(Main.class).info((anonOnly ? "Seit dem Start keine angemeldete Anfrage" : "Leerlauf seit " + (idle / 60_000) + " min")
                     + ", kein Spiel - Engine stoppt (" + server.openSockets() + " offene Verbindungen)");
             server.closeAllSessions();
+            try {
+                beforeExit.run();
+            } catch (RuntimeException e) {
+                Logger.getLogger(Main.class).warn("Vor dem Leerlauf-Exit: " + e);
+            }
             System.exit(0);
         }, 1, 1, TimeUnit.MINUTES);
     }

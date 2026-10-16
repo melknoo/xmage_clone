@@ -264,7 +264,15 @@ public final class RemoteGames implements HostLinks.Listener {
         if (g == null || g.hostUserId != hostUserId || g.finished) {
             return;
         }
-        for (GameRecorder.SeatResult seat : result.seats()) {
+        for (GameRecorder.SeatResult reported : result.seats()) {
+            // nur Sitze, die fly selbst vergeben hat; Deck-id aus der eigenen Spec (nie vom Host uebernehmen)
+            RemoteGameSpec.Seat known = g.spec.seats().stream()
+                    .filter(s -> s.human() && s.userId() == reported.userId()).findFirst().orElse(null);
+            if (known == null) {
+                LOG.warn("Relay-Spiel " + g.id + ": unbekannter Sitz " + reported.userId() + " im Ergebnis - ignoriert");
+                continue;
+            }
+            GameRecorder.SeatResult seat = reported.forUser(reported.userId(), reported.name(), known.deckId());
             GameRecorder.Reward reward = null;
             try {
                 reward = recorder.record(result, seat);

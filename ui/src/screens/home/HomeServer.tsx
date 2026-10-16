@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '../../components/ui'
 import { useDeckCatalog } from '../../decks/catalog'
 import { Icon, type IconName } from '../../lib/icons'
-import { openLocalApp } from '../../lib/localApp'
+import { openLocalApp, soloRunsLocally } from '../../lib/localApp'
 import { SeatedStrip } from '../../social/SeatedStrip'
 import { SocialSidebar } from '../../social/SocialSidebar'
 import { useMarkLobbyRead } from '../../social/useMarkLobbyRead'
@@ -48,12 +48,14 @@ export function HomeServer() {
   const lobbySub =
     tables === null ? 'Tische eröffnen und beitreten' : tables === 0 ? 'Kein offener Tisch' : [plural(tables, 'Tisch', 'Tische'), online !== null ? `${online} Spieler online` : null].filter(Boolean).join(' · ')
   const soloDeck = lastSetup ? describe(lastSetup.deck)?.name : undefined
-  const publicTier = me?.tier === 'public'
-  const soloSub = publicTier
-    ? 'Läuft in der MageLite-App auf deinem PC'
-    : lastSetup && soloDeck
-      ? `${soloDeck} · gegen ${plural(lastSetup.bots.length, 'Bot', 'Bots')}`
-      : 'Deck und Gegner wählen'
+  const publicTier = soloRunsLocally(me?.tier)
+  const soloSub = window.mageliteDesktop
+    ? 'Läuft in der App auf diesem PC – mit deinen Decks'
+    : publicTier
+      ? 'Läuft in der MageLite-App auf deinem PC'
+      : lastSetup && soloDeck
+        ? `${soloDeck} · gegen ${plural(lastSetup.bots.length, 'Bot', 'Bots')}`
+        : 'Deck und Gegner wählen'
 
   return (
     <div className="flex h-full min-h-0" data-testid="home-server">

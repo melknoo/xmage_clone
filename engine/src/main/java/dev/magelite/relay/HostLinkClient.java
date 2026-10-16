@@ -1,6 +1,7 @@
 package dev.magelite.relay;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import dev.magelite.account.ServerCalls;
 import dev.magelite.api.GameMessages;
 import dev.magelite.api.Json;
 import dev.magelite.deck.DeckLoader;
@@ -123,25 +124,41 @@ public final class HostLinkClient {
      * @param session Session-Token (Cookie {@code ml_sess}) des Gastgebers auf diesem Server
      */
     public void connect(String server, String session) {
-        String base = server == null ? "" : server.strip().replaceAll("/+$", "");
-        URI u = URI.create(base);
-        if (u.getScheme() == null || !(u.getScheme().equals("http") || u.getScheme().equals("https")) || u.getHost() == null) {
-            throw new IllegalArgumentException("Server-URL: http(s)://host[:port]");
-        }
+        setCredentials(server, session);
+        wake();
+    }
+
+    /**
+     * Zugangsdaten setzen, ohne zu verbinden (Desktop-App mit Konto-Modus: der Link ruht, bis die Lobby geoeffnet wird
+     * - sonst hielte jede offene App fly wach). Laeuft er schon mit anderen Daten, verbindet er neu.
+     */
+    public void setCredentials(String server, String session) {
+        String base = dev.magelite.account.ServerCalls.normalizeServer(server);
         if (session == null || session.isBlank()) {
             throw new IllegalArgumentException("Session fehlt");
         }
         synchronized (lock) {
-            boolean same = enabled && base.equals(this.server) && session.equals(this.session);
+            boolean same = base.equals(this.server) && session.equals(this.session);
             this.server = base;
             this.session = session;
+            if (enabled && !same) {
+                remoteCache = null;
+                dropConnection();
+            }
+        }
+    }
+
+    /** Verbinden (falls Zugangsdaten da sind und der Link ruht). */
+    public void wake() {
+        synchronized (lock) {
+            if (server == null || session == null) {
+                return;
+            }
             this.enabled = true;
             this.lastError = null;
             if (loop == null || !loop.isAlive()) {
                 loop = daemon(this::runLoop, "host-link");
                 loop.start();
-            } else if (!same) {
-                dropConnection();
             }
         }
     }
@@ -155,6 +172,8 @@ public final class HostLinkClient {
     public void disconnect() {
         synchronized (lock) {
             enabled = false;
+            session = null;
+            remoteCache = null;
             dropConnection();
         }
         for (Hosted h : hosted.values()) {
@@ -226,18 +245,15 @@ public final class HostLinkClient {
         return r;
     }
 
-    /** GET am Server mit der Session; null bei 404/Fehler. */
+    /** GET am Server mit der Session (passiv: Statusabfragen halten fly nicht wach); null bei 404/Fehler. */
     private JsonNode serverGet(String path) throws Exception {
-        java.net.http.HttpResponse<String> res = HttpClient.newHttpClient().send(
-                java.net.http.HttpRequest.newBuilder(URI.create(server + path)).timeout(Duration.ofSeconds(8))
-                        .header("Cookie", "ml_sess=" + session).GET().build(),
-                java.net.http.HttpResponse.BodyHandlers.ofString());
+        java.net.http.HttpResponse<String> res = ServerCalls.json(server, session, "GET", path, null, true, Duration.ofSeconds(8));
         return res.statusCode() == 200 ? Json.MAPPER.readTree(res.body()) : null;
     }
 
     /** Eigenen Tisch auf dem Server verlassen/schliessen (lokale App: "Tisch schliessen"). @return Fehlertext oder null */
     public String leaveTable() {
-        if (!enabled || server == null || session == null) {
+        if (server == null || session == null) {
             return "Nicht mit dem Server verbunden";
         }
         try {
@@ -246,11 +262,8 @@ public final class HostLinkClient {
                 remoteCache = null;
                 return null;
             }
-            java.net.http.HttpResponse<String> res = HttpClient.newHttpClient().send(
-                    java.net.http.HttpRequest.newBuilder(URI.create(server + "/api/tables/" + t.path("id").asText() + "/leave"))
-                            .timeout(Duration.ofSeconds(8)).header("Cookie", "ml_sess=" + session)
-                            .POST(java.net.http.HttpRequest.BodyPublishers.noBody()).build(),
-                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            java.net.http.HttpResponse<String> res = ServerCalls.json(server, session, "POST",
+                    "/api/tables/" + t.path("id").asText() + "/leave", null, false, Duration.ofSeconds(8));
             remoteCache = null;
             if (res.statusCode() != 200) {
                 JsonNode b = Json.MAPPER.readTree(res.body());
@@ -359,8 +372,13 @@ public final class HostLinkClient {
             } else if (statusCode == 4426) {
                 lastError = "Der Server nutzt eine andere Engine – MageLite auf diesem Rechner aktualisieren";
                 enabled = false;
-            } else if (statusCode == 4000) {
-                lastError = "Von einer neueren Verbindung ersetzt";
+            } else if (statusCode == HostLinks.CLOSE_IDLE || statusCode == 4000) {
+                // Server geht schlafen bzw. eine andere App (Test-App, zweiter PC) hat uebernommen: ruhen statt sofort
+                // neu verbinden (das weckte fly gleich wieder); naechstes Mal bei Bedarf (wake)
+                lastError = statusCode == 4000 ? "Von einer neueren Verbindung ersetzt" : null;
+                if (hosted.isEmpty()) {
+                    enabled = false;
+                }
             } else {
                 lastError = "Verbindung geschlossen (" + statusCode + (reason == null || reason.isBlank() ? "" : " " + reason) + ")";
             }

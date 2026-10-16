@@ -436,6 +436,11 @@ export interface GameOver {
   durationMs: number
   reward?: Reward
   error?: string
+  /**
+   * Desktop-App mit Online-Konto: pending = der Server bucht gerade (gameOver kommt mit reward noch einmal),
+   * queued = Server nicht erreichbar, die Buchung wird nachgeholt
+   */
+  rewardStatus?: 'pending' | 'queued'
 }
 
 /** Herzschlag der Engine (1/s): was gerade passiert, CPU-Last in % eines Kerns (-1 = unbekannt). */

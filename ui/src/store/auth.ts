@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { api, ApiError, setBudgetHandler, setUnauthorizedHandler } from '../api/client'
+import { api, ApiError, setAccountHandler, setBudgetHandler, setUnauthorizedHandler } from '../api/client'
 
 export interface Me {
   id: number
@@ -36,6 +36,34 @@ export interface AuthOptions {
 
 export type ServerMode = 'local' | 'server'
 
+/**
+ * Online-Konto der Desktop-App (lokale Engine mit --account; sonst fehlt das Feld bzw. DISABLED).
+ * CHECKING: Session wird geprueft · NONE/EXPIRED: Login zeigen · UNREACHABLE: Server weg · LIMITED: Budget aufgebraucht
+ * (nur offline) · OK: Kontodaten · OFFLINE: bewusst lokale Daten.
+ */
+export type AccountState = 'DISABLED' | 'CHECKING' | 'NONE' | 'EXPIRED' | 'UNREACHABLE' | 'LIMITED' | 'OK' | 'OFFLINE'
+
+export interface AccountStatus {
+  state: AccountState
+  server?: string | null
+  user?: { id: number; name: string; tier: 'friend' | 'public' | string } | null
+  error?: string | null
+  /** LIMITED: Ende der Sperre (ms) */
+  resetsAt?: number | null
+  /** Spielberichte, die noch auf den Server warten (nur GET /api/account) */
+  queued?: number
+}
+
+/** Zustaende, in denen die App statt der Shell das Konto-Gate zeigt */
+export function accountGated(a: AccountStatus | null): boolean {
+  return !!a && a.state !== 'DISABLED' && a.state !== 'OK' && a.state !== 'OFFLINE'
+}
+
+/** Schluessel fuer kontobezogene Caches (letztes Setup, Profil): 'local' oder Server|Konto-id */
+export function accountKeyOf(a: AccountStatus | null): string {
+  return a?.state === 'OK' && a.user ? `${a.server ?? ''}|${a.user.id}` : 'local'
+}
+
 export interface MeResponse {
   mode: ServerMode
   user: Me
@@ -45,6 +73,8 @@ export interface MeResponse {
   hostLink?: boolean
   /** Server-Modus mit Monatsbudget: limited = mein (oeffentliches) Konto ist bis resetsAt gesperrt */
   budget?: { limited: boolean; resetsAt: number }
+  /** Desktop-App: Stand des Online-Kontos (fehlt ohne Konto-Modus) */
+  account?: AccountStatus
 }
 
 interface AuthStore {
@@ -53,6 +83,10 @@ interface AuthStore {
   me: Me | null
   /** Host-Link aktiv (Stand des letzten /api/me) */
   hostLink: boolean
+  /** Desktop-App: Online-Konto (null = kein Konto-Modus) */
+  account: AccountStatus | null
+  /** GET /api/account (Desktop-App) */
+  refreshAccount: () => Promise<AccountStatus | null>
   /** 'login': Server-Modus ohne gueltiges Cookie */
   status: 'unknown' | 'ok' | 'login'
   error: string | null
@@ -115,11 +149,19 @@ export const useAuth = create<AuthStore>((set, get) => {
   setBudgetHandler(() => {
     if (get().me?.tier === 'public') set({ budgetLimited: true })
   })
+  // Kontodaten nicht verfuegbar (abgelaufen, Server weg ...): Zustand sofort uebernehmen, dann genau nachfragen
+  setAccountHandler((state) => {
+    const cur = get().account
+    if (!cur || cur.state === state) return
+    set({ account: { ...cur, state: state as AccountState } })
+    void get().refreshAccount()
+  })
   const apply = (r: MeResponse) =>
     set({
       mode: r.mode,
       me: { ...r.user, session: r.session ?? null },
       hostLink: r.hostLink === true,
+      account: r.account ?? null,
       status: 'ok',
       error: null,
       unverifiedEmail: null,
@@ -143,6 +185,7 @@ export const useAuth = create<AuthStore>((set, get) => {
     mode: null,
     me: null,
     hostLink: false,
+    account: null,
     status: 'unknown',
     error: null,
     busy: false,
@@ -215,6 +258,17 @@ export const useAuth = create<AuthStore>((set, get) => {
       }
     },
 
+    refreshAccount: async () => {
+      if (!get().account) return null
+      try {
+        const a = await api.get<AccountStatus>('/api/account')
+        set({ account: a })
+        return a
+      } catch {
+        return get().account
+      }
+    },
+
     loadOptions: async () => {
       try {
         set({ options: await api.get<AuthOptions>('/api/auth/options') })
@@ -269,7 +323,10 @@ export const useAuth = create<AuthStore>((set, get) => {
       window.location.reload()
     },
 
-    markLoggedOut: () => set({ status: 'login', me: null }),
+    // nur Server-Modus: lokal (Token) gibt es keinen Login-Screen
+    markLoggedOut: () => {
+      if (get().mode === 'server') set({ status: 'login', me: null })
+    },
   }
 })
 

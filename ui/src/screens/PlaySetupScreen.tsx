@@ -2,8 +2,10 @@ import { AnimatePresence } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { DeckSpec, Tempo } from '../api/types'
-import { useDeckCatalog } from '../decks/catalog'
+import { Button } from '../components/ui'
+import { useCatalogStore, useDeckCatalog } from '../decks/catalog'
 import { DeckPicker } from '../decks/DeckPicker'
+import { Icon } from '../lib/icons'
 import { tempoLabel } from '../lib/tempo'
 import { useHotkey } from '../lib/useHotkey'
 import { useGame } from '../store/game'
@@ -23,7 +25,7 @@ const pickOne = <T,>(xs: T[]): T | undefined => xs[Math.floor(Math.random() * xs
 
 /** Spiel-Setup gegen drei Bots (lokal "Spielen", im Server-Modus "Allein üben"). */
 export function PlaySetupScreen() {
-  const { decks, samples, loaded, describe } = useDeckCatalog()
+  const { decks, samples, loaded, error: catalogError, describe } = useDeckCatalog()
   const lastSetup = useNav((s) => s.lastSetup)
   const setLastSetup = useNav((s) => s.setLastSetup)
   const go = useNav((s) => s.go)
@@ -41,13 +43,15 @@ export function PlaySetupScreen() {
 
   // Standarddeck: gemerktes Setup -> neuestes eigenes Deck -> "Peer Through Time"
   const fallback = useMemo<DeckSpec | null>(() => {
+    // eigene Decks unbekannt (noch nicht geladen / Server weg): kein Ersatzdeck vorschlagen
+    if (!loaded) return null
     if (decks.length) {
       const newest = decks.reduce((a, b) => (b.createdAt > a.createdAt ? b : a))
       return { type: 'user', id: newest.id }
     }
     const s = samples.find((x) => x.name === DEFAULT_SAMPLE) ?? samples[0]
     return s ? { type: 'sample', id: s.id } : null
-  }, [decks, samples])
+  }, [decks, samples, loaded])
   const myDeck: DeckSpec | null = chosen && (!loaded || describe(chosen)) ? chosen : fallback
   const me = describe(myDeck)
   const myStored = myDeck?.type === 'user' ? decks.find((d) => d.id === myDeck.id) : undefined
@@ -119,6 +123,15 @@ export function PlaySetupScreen() {
                 Dein Deck
               </span>
               <MyDeckCard info={me} mastery={myStored ? deckMastery(myStored) : null} onChange={() => setPicker({ target: 'me' })} onRandom={randomMine} />
+              {catalogError && (
+                <div className="flex items-center gap-3 text-[13px] leading-[1.4] text-fg-3" role="alert" data-testid="catalog-error">
+                  <Icon name="warning" size={15} className="flex-none text-attack" />
+                  <span className="min-w-0 flex-1">Deine Decks konnten nicht geladen werden: {catalogError}</span>
+                  <Button variant="ghost" size="xs" icon="rotate" onClick={() => void useCatalogStore.getState().refresh()}>
+                    Erneut laden
+                  </Button>
+                </div>
+              )}
             </section>
 
             <section className="flex flex-col gap-3">
